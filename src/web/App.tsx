@@ -6,6 +6,7 @@ import { AppShell } from './layouts/AppShell';
 import { selectionForProject } from './lib/locale-selection';
 import { sectionFromHash, type SectionId } from './lib/sections';
 import { ProjectPage } from './pages/ProjectPage';
+import { ExportPage } from './pages/ExportPage';
 import { SectionPage } from './pages/SectionPage';
 
 interface Health {
@@ -106,7 +107,16 @@ export function App() {
           />
         </div>
       ) : null}
-      {load.kind === 'ready' && section !== 'project' ? (
+      {load.kind === 'ready' && section === 'export' ? (
+        <ExportPage
+          project={load.project}
+          locales={load.catalogue.locales}
+          selection={selection}
+          onSelectionChange={setSelection}
+          focusHeading={navigated}
+        />
+      ) : null}
+      {load.kind === 'ready' && section !== 'project' && section !== 'export' ? (
         <SectionPage
           key={section}
           section={section}

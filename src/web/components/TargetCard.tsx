@@ -2,6 +2,7 @@ import { useId, useState } from 'react';
 import type { CatalogueDevice } from '../api';
 import { en } from '../i18n/en';
 import { FieldError } from './FieldError';
+import { RequiredBadge } from './RequiredBadge';
 
 interface Props {
   title: string;
@@ -42,7 +43,7 @@ export function TargetCard({ title, enabled, onEnabledChange, devices, selected,
           />
           <span className="flex flex-wrap items-center gap-2">
             <span>{device.name}</span>
-            {device.required ? <span className="badge badge-sm badge-outline">{en.target.required}</span> : null}
+            {device.required ? <RequiredBadge /> : null}
           </span>
         </label>
         {device.condition ? <p className="ml-9 text-sm text-base-content/70">{device.condition}</p> : null}

@@ -35,6 +35,11 @@ export function isAllSelected(selection: readonly string[], offered: readonly st
   return offered.length > 0 && offered.every((id) => selection.includes(id));
 }
 
+/** Catalogue locales that belong to the project, in catalogue order: the options of a section's locale bar. */
+export function projectLocaleOptions<T extends { id: string }>(catalogue: readonly T[], projectLocales: readonly string[]): T[] {
+  return catalogue.filter((locale) => projectLocales.includes(locale.id));
+}
+
 /**
  * Source locale after the selected locales changed: unchanged while it is still selected,
  * otherwise the first selected locale.
