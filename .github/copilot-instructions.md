@@ -34,7 +34,7 @@ Do not repeat these rules in other files; link here instead.
 | Server | `src/server/` — Hono on `@hono/node-server`, JSON API under `/api`, serves `dist/web` |
 | CLI | `src/cli/` — `app-media-creator` starts the server and opens the browser |
 | UI | `src/web/` — Vite + React + Tailwind 4 + DaisyUI 5 |
-| Image rendering | Server side (satori → resvg → sharp), never in the browser, so UI, CLI and skills give identical pixels |
+| Image rendering | Server side (SVG → sharp; text as paths via opentype.js and the bundled Inter font), never in the browser, so UI, CLI and skills give identical pixels |
 | Video | ffmpeg (system binary, `FFMPEG_PATH`); promo engines HyperFrames/brag and hype-reel via skills |
 | AI | Default: job folder + Claude Code skill run by the user; optional `ANTHROPIC_API_KEY`. Never spawn `claude -p` from the server |
 | Tests | Vitest (`tests/unit/`), Playwright + axe (`tests/e2e/`) |
@@ -89,8 +89,9 @@ Details: `.claude/rules/components.md`.
 - `src/core/specs/` is the single source of sizes, formats and limits. Every entry carries `verified: true|false`
   and a source URL. Never hard-code a store size elsewhere.
 - Every generated file is validated against its spec (dimensions, alpha, format, file size, duration, fps, audio).
-- No Apple bezels, badges or other third-party artwork in the repo. Generic frames live in `frames/`;
-  users put official bezels into `frames/user/` (gitignored).
+- No Apple bezels, badges or other third-party artwork in the repo. Generic frames are drawn in code
+  (`src/core/screenshots/frames.ts`); users put official bezels into `frames/user/` (gitignored,
+  `<kind>.png` + `<kind>.json` with the screen rectangle).
 - Google Play screenshots default to "no device frame" and warn when overlay text exceeds 20 % of the image.
 - AI copy follows the rules in `.claude/research/2026-11-18_strategy-and-copy-rules.md` and the project's `claims.json`.
 
@@ -101,7 +102,7 @@ Details: `.claude/rules/components.md`.
 - UI: mobile first (375 px), DaisyUI theme variables only, no hex colours, axe without serious/critical issues.
 - No third-party network requests from the UI at runtime. No telemetry.
 - Third-party code only with a compatible licence (MIT, Apache-2.0, BSD, ISC) and an entry in `THIRD_PARTY_NOTICES.md`.
-  Not allowed: Remotion, unlicensed repos, AGPL.
+  Not allowed: Remotion, unlicensed repos, AGPL. Fonts (not code) may use the SIL OFL 1.1, also with a notice.
 
 ## 9. Secrets
 
