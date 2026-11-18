@@ -70,3 +70,14 @@
 - Shared helpers: `generators/logo.ts` (newest logo, GeneratorError), `generators/outputs.ts` (fixedSizes, squareSize,
   assertValidOutputs). Routes pass values; generators validate.
 - Bash heredocs with apostrophes failed twice in the Bash tool; write multi-line scripts as files instead.
+
+## #7 Logo pack: Google Play icon and Android adaptive icons — done (PR #41)
+
+- `google/shared/icon/play-icon.png` (512, 32-bit, opaque); `google/shared/android-res/mipmap-*/` adaptive layers
+  (logo box 66/√2 dp, floor) + legacy icons; `mipmap-anydpi-v26/ic_launcher.xml`.
+- Output paths support one `subfolder`; writes never follow linked folders; `rasterizeLogo` once per run.
+- Codex finding on PR #40 (bounded SVG decode) folded into #7.
+- vitest `testTimeout` raised to 20 s (generator tests under parallel load).
+- Follow-up for Expo icon export filed (Backlog, P2/S).
+- Haluk renamed project 10 and deleted project 11. Asked how Codex feedback is handled; offered to reply on PR
+  threads and to check all PRs merged since the last run (not yet in the skill).

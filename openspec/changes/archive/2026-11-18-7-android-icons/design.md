@@ -18,12 +18,14 @@ monochrome}` (108–432 px) and `google.launcher-icon` (48–192 px). `outputPat
    because Play asks for a 32-bit PNG; fully opaque.
 4. **Foreground safe zone:** the safe zone is a 66 dp circle; the logo box is 66/√2 ≈ 46.7 dp (rounded down to whole
    pixels), so even a square logo's corners stay inside it.
-5. **Monochrome:** the logo's alpha channel filled with one colour (white), via sharp `extractChannel('alpha')` joined
-   to a white RGB canvas. Logos without transparency become a full square; the checklist cannot detect that, so the
-   docs mention it.
+5. **Monochrome:** the logo's coverage filled with one colour (white), via sharp `extractChannel('alpha')` joined to a
+   white RGB canvas. For logos without transparency the colour of the first covered pixel (the logo's top-left corner)
+   counts as background and is cut out.
 6. **Legacy icon:** the logo (70 % box) on the background colour, full square.
-7. **Bounded SVG decode (Codex on PR #40):** `loadLogo` decodes SVGs at the density for a 512 px box instead of the
-   intrinsic size; raster logos are still decoded fully (their size is limited by the 10 MB upload and sharp's pixel limit).
+7. **Bounded SVG decode (Codex on PR #40):** `loadLogo` decodes SVGs at the density for a 1024 px box instead of the
+   intrinsic size and rejects canvases that stay above 8192 px even at 1 dpi; raster logos are still decoded fully
+   (their size is limited by the 10 MB upload and sharp's pixel limit). The Android generator rasterizes the logo once
+   at 512 px and renders every density from that raster.
 
 ## Risks / Trade-offs
 
