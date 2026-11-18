@@ -2,7 +2,7 @@
 import { existsSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { describe, expect, test } from 'vitest';
-import { outputPath, readManifest, registerOutput } from '../../src/core/export/index.js';
+import { cleanOutputName, outputPath, readManifest, registerOutput } from '../../src/core/export/index.js';
 import { getSpec } from '../../src/core/specs/index.js';
 import { pngBytes, workspaceFactory } from '../factories/workspace.js';
 
@@ -134,5 +134,17 @@ describe('registerOutput writes the file and records it in the manifest', () => 
       ),
     );
     expect((await readManifest(workspace)).entries).toHaveLength(5);
+  });
+});
+
+describe('cleanOutputName keeps generated names stable', () => {
+  test('keeps dots inside a name and gives the same result when applied twice', () => {
+    expect(cleanOutputName('Home.Dark')).toBe('home.dark');
+    expect(cleanOutputName(cleanOutputName('Ekran Görüntüsü.v2'))).toBe('ekran-goruntusu.v2');
+  });
+
+  test('drops folders, leading dots and falls back to "file"', () => {
+    expect(cleanOutputName('../../secret')).toBe('secret');
+    expect(cleanOutputName('...')).toBe('file');
   });
 });

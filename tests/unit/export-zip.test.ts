@@ -1,5 +1,5 @@
 // conventions: RULE-TESTING-3301
-import { mkdirSync, readFileSync, symlinkSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { unzipSync, strFromU8 } from 'fflate';
 import { describe, expect, test } from 'vitest';
@@ -93,6 +93,30 @@ describe('createExport writes a ZIP for the selected locales', () => {
     );
     const result = await createExport(workspace, { locales: 'de-DE', measure });
     expect(zipNames(result.file)).toEqual(['CHECKLIST.md']);
+  });
+
+  test('keeps a file named home.dark through the manifest and into the ZIP', async () => {
+    const workspace = await workspaceFactory();
+    await registerOutput(workspace, {
+      specId: 'apple.screenshot.iphone-6.3',
+      locale: 'de-DE',
+      order: 1,
+      name: 'home.dark',
+      extension: 'png',
+      bytes: await pngBytes(),
+    });
+    const result = await createExport(workspace, { locales: 'de-DE', measure });
+    expect(zipNames(result.file)).toContain('apple/de-DE/iphone-6.3/01-home.dark.png');
+    expect(result.checklist.problems).toEqual([]);
+  });
+
+  test('ends with an error and leaves no ZIP when the exports folder cannot be written', async () => {
+    const workspace = await workspaceFactory();
+    await seed(workspace);
+    rmSync(workspace.exportsDir, { recursive: true });
+    writeFileSync(workspace.exportsDir, 'not a folder');
+    await expect(createExport(workspace, { locales: 'de-DE', measure })).rejects.toThrow();
+    expect(readFileSync(workspace.exportsDir, 'utf8')).toBe('not a folder');
   });
 
   test('skips a registered file that was deleted and still writes a valid ZIP', async () => {

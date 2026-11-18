@@ -3,7 +3,6 @@ import { lstat, mkdir, readFile, realpath, rename, rm, writeFile } from 'node:fs
 import path from 'node:path';
 import { getLocale, isLocaleId, type LocaleId } from '../locales/index.js';
 import { getSpec, type SpecEntry } from '../specs/index.js';
-import { safeBaseName } from '../workspace/inputs.js';
 import type { Workspace } from '../workspace/workspace.js';
 
 /** One generated file, registered by the generator that wrote it. */
@@ -29,6 +28,24 @@ export interface Manifest {
 }
 
 const MANIFEST_FILE = 'manifest.json';
+
+/**
+ * Cleans a generated file's base name: lower case, only `[a-z0-9._-]`, no leading or trailing dots or dashes,
+ * at most 80 characters. Unlike the upload cleaning it strips nothing as an extension, so it is idempotent and
+ * dotted names such as `home.dark` keep their full name.
+ */
+export function cleanOutputName(name: string): string {
+  const base = name.replace(/\\/g, '/').split('/').pop() ?? '';
+  const cleaned = base
+    .normalize('NFKD')
+    .replace(/[̀-ͯ]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9._-]+/g, '-')
+    .replace(/^[.-]+|[-.]+$/g, '')
+    .slice(0, 80)
+    .replace(/[-.]+$/g, '');
+  return cleaned || 'file';
+}
 
 export type FileLocation = 'own' | 'missing' | 'foreign';
 
@@ -78,7 +95,7 @@ export interface OutputPathOptions {
  * Throws when a localized asset has no locale or a shared asset gets one.
  */
 export function outputPath(spec: SpecEntry, options: OutputPathOptions): string {
-  const name = safeBaseName(options.name);
+  const name = cleanOutputName(options.name);
   const extension = options.extension.replace(/^\./, '').toLowerCase();
   if (!/^[a-z0-9]{2,4}$/.test(extension)) throw new Error(`Invalid file extension: ${options.extension}`);
   if (!Number.isInteger(options.order) || options.order < 1 || options.order > 99) {
@@ -173,7 +190,7 @@ export function registerOutput(workspace: Workspace, options: RegisterOptions): 
       specId: spec.id,
       ...(locale ? { locale } : {}),
       order: options.order,
-      name: safeBaseName(options.name),
+      name: cleanOutputName(options.name),
       path: relative,
       fallbackInput: options.fallbackInput ?? false,
     };

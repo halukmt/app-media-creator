@@ -95,18 +95,30 @@ export async function createExport(workspace: Workspace, options: ExportOptions 
   );
 
   const out = createWriteStream(file);
+  // Record a stream failure the moment it happens; the loop below checks it after every awaited step.
+  let streamError: Error | undefined;
+  out.on('error', (error) => {
+    streamError ??= error;
+  });
   const finished = once(out, 'finish');
+  // Handled by the final await; this keeps an early failure from becoming an unhandled rejection.
+  finished.catch(() => undefined);
   const entries: string[] = [];
   try {
+    const failIfBroken = () => {
+      if (streamError) throw streamError;
+    };
     const zip = new Zip((error, chunk, final) => {
       if (error) {
         out.destroy(error);
         return;
       }
+      if (streamError) return;
       out.write(chunk);
       if (final) out.end();
     });
     const drain = async () => {
+      failIfBroken();
       if (out.writableNeedDrain) await once(out, 'drain');
     };
 
@@ -119,6 +131,7 @@ export async function createExport(workspace: Workspace, options: ExportOptions 
       const source = path.join(workspace.outputDir, entry.path);
       // Missing files are reported in the checklist; skip them (and links) before a ZIP entry is opened.
       if ((await locateOutputFile(source, workspace.outputDir)) !== 'own') continue;
+      failIfBroken();
       const part = new ZipPassThrough(entry.path);
       zip.add(part);
       for await (const chunk of createReadStream(source)) {
@@ -128,6 +141,7 @@ export async function createExport(workspace: Workspace, options: ExportOptions 
       part.push(new Uint8Array(0), true);
       entries.push(entry.path);
     }
+    failIfBroken();
     zip.end();
     await finished;
   } catch (error) {
