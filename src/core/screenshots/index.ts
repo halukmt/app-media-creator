@@ -1,4 +1,6 @@
 export * from './backgrounds.js';
+export * from './device.js';
+export * from './framed.js';
 export * from './fonts.js';
 export * from './frames.js';
 export * from './layouts.js';

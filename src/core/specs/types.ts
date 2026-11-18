@@ -12,7 +12,9 @@ export type AssetGroup =
   | 'banner'
   | 'favicon'
   | 'share'
-  | 'social';
+  | 'social'
+  /** App screenshots in a device frame for websites (no store requirement). */
+  | 'mockup';
 
 /** `document` covers files of an asset set that are not media, e.g. a web app manifest or an HTML snippet. */
 export type MediaKind = 'image' | 'video' | 'document';

@@ -2,7 +2,7 @@
 import { existsSync, readdirSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { describe, expect, test } from 'vitest';
-import { InputError, detectFormat, listInputs, safeBaseName, saveInput } from '../../src/core/workspace/index.js';
+import { InputError, detectFormat, listInputs, originalInputName, safeBaseName, saveInput } from '../../src/core/workspace/index.js';
 import { isoBytes, mp4Bytes, pngBytes, svgBytes, workspaceFactory } from '../factories/workspace.js';
 
 describe('saveInput stores checked uploads in the workspace', () => {
@@ -124,5 +124,15 @@ describe('safeBaseName cleans user file names', () => {
   test('strips Windows paths and falls back to "file" for empty names', () => {
     expect(safeBaseName('C:\\Users\\me\\..\\shot.png')).toBe('shot');
     expect(safeBaseName('...png')).toBe('file');
+  });
+});
+
+describe('originalInputName recovers the uploaded file name', () => {
+  test('drops the upload prefix and the extension', () => {
+    expect(originalInputName('inputs/screenshots/de-DE/1795045789534-9f5bda-start.png')).toBe('start');
+  });
+
+  test('leaves a name without the upload prefix unchanged', () => {
+    expect(originalInputName('inputs/logo/logo.svg')).toBe('logo');
   });
 });

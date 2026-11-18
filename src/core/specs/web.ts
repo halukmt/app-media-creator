@@ -150,6 +150,26 @@ export const WEB_SPECS: readonly SpecEntry[] = [
     sourceUrl: FAVICON,
     notes: 'The link and meta tags to paste into the <head> of every page; written by this tool, no store limits.',
   },
+  ...(['png', 'webp'] as const).map(
+    (format): SpecEntry => ({
+      id: format === 'png' ? 'web.framed-screenshot' : 'web.framed-screenshot-webp',
+      target: 'web',
+      group: 'mockup',
+      folder: 'framed-screenshots',
+      name: `Framed screenshot for websites (${format.toUpperCase()})`,
+      kind: 'image',
+      required: false,
+      dimensions: { kind: 'range', minSide: 100, maxSide: 4096, orientation: 'any' },
+      // 1x box: the device (with frame) is 400 px wide; 2x doubles it. Height follows the screenshot.
+      defaultSize: { width: 400, height: 868 },
+      formats: [format],
+      alpha: 'required',
+      localized: true,
+      verified: true,
+      sourceUrl: RESEARCH,
+      notes: 'An app screenshot in a device frame on transparency, for websites; written by this tool, no store limits. Folders 1x and 2x.',
+    }),
+  ),
   {
     id: 'web.og-image',
     target: 'web',

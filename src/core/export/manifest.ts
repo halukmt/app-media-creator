@@ -199,7 +199,7 @@ let queue: Promise<unknown> = Promise.resolve();
  * Writes generated files into the output folder and records them in the manifest, as one batch:
  * every path is checked first (a path that belongs to another asset rejects the whole batch before anything is
  * written), then all files are written and the manifest is updated once.
- * A file for the same set position (spec, locale, order) replaces the previous one, even under a new name.
+ * A file for the same set position (spec, locale, subfolder, order) replaces the previous one, even under a new name.
  * Batches run one after another.
  */
 export function registerOutputs(workspace: Workspace, list: readonly RegisterOptions[]): Promise<OutputEntry[]> {
@@ -259,8 +259,10 @@ export function registerOutputs(workspace: Workspace, list: readonly RegisterOpt
         await Promise.all(staged.slice(index).map((s) => rm(s.tmp, { force: true })));
         throw error;
       }
+      // The subfolder is part of the position: 1x / 2x or density folders hold parallel sets.
       const samePosition = (e: OutputEntry) =>
-        e.path === entry.path || (e.specId === entry.specId && e.locale === entry.locale && e.order === entry.order);
+        e.path === entry.path ||
+        (e.specId === entry.specId && e.locale === entry.locale && e.subfolder === entry.subfolder && e.order === entry.order);
       for (const old of entries.filter(samePosition)) {
         if (old.path !== entry.path) {
           const oldFile = path.join(workspace.outputDir, old.path);

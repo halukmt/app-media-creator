@@ -72,6 +72,19 @@ describe('registerOutput writes the file and records it in the manifest', () => 
     expect(existsSync(path.join(workspace.outputDir, old.path))).toBe(false);
   });
 
+  test('keeps the same set position in two subfolders side by side', async () => {
+    const workspace = await workspaceFactory();
+    const base = { specId: 'web.framed-screenshot', locale: 'de-DE', order: 1, name: 'start', extension: 'png', bytes: await pngBytes(200, 400) };
+    await registerOutputs(workspace, [
+      { ...base, subfolder: '1x' },
+      { ...base, subfolder: '2x' },
+    ]);
+    expect((await readManifest(workspace)).entries.map((e) => e.path)).toEqual([
+      'web/de-DE/framed-screenshots/1x/01-start.png',
+      'web/de-DE/framed-screenshots/2x/01-start.png',
+    ]);
+  });
+
   test('drops manifest entries whose path leaves the output layout and reports them', async () => {
     const workspace = await workspaceFactory();
     writeFileSync(
