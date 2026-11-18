@@ -1,4 +1,5 @@
 import { useId } from 'react';
+import { FieldError } from './FieldError';
 
 interface Props {
   label: string;
@@ -53,11 +54,7 @@ export function TextField({ label, value, onChange, hint, error, multiline = fal
           {hint}
         </p>
       ) : null}
-      {error ? (
-        <p id={errorId} className="border-l-4 border-error pl-2 text-sm font-medium">
-          {error}
-        </p>
-      ) : null}
+      {error ? <FieldError id={errorId}>{error}</FieldError> : null}
     </fieldset>
   );
 }

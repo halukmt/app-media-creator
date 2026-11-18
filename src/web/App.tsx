@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { fetchCatalogue, fetchProject, type Catalogue, type ProjectSettings } from './api';
+import { ApiError, fetchCatalogue, fetchProject, type Catalogue, type ProjectSettings } from './api';
 import { StatusAlert } from './components/StatusAlert';
 import { en } from './i18n/en';
 import { AppShell } from './layouts/AppShell';
@@ -12,7 +12,10 @@ interface Health {
   version: string;
 }
 
-type Load = { kind: 'loading' } | { kind: 'failed' } | { kind: 'ready'; catalogue: Catalogue; project: ProjectSettings };
+type Load =
+  | { kind: 'loading' }
+  | { kind: 'failed'; messages: string[] }
+  | { kind: 'ready'; catalogue: Catalogue; project: ProjectSettings };
 
 function useSection(): [SectionId, boolean] {
   const [section, setSection] = useState<SectionId>(() => sectionFromHash(window.location.hash));
@@ -49,7 +52,8 @@ export function App() {
         setLoad({ kind: 'ready', catalogue, project });
         setSelection((current) => selectionForProject(current, project.locales));
       })
-      .catch(() => setLoad({ kind: 'failed' }));
+      // Server messages (e.g. which fields of project.json are invalid) are shown; a network error has none.
+      .catch((error: unknown) => setLoad({ kind: 'failed', messages: error instanceof ApiError ? error.messages : [] }));
   }, []);
 
   useEffect(() => {
@@ -77,14 +81,30 @@ export function App() {
       ) : null}
       {load.kind === 'failed' ? (
         <div className="flex flex-col items-start gap-3">
-          <StatusAlert tone="error" title={en.app.loadFailed} />
+          <StatusAlert tone="error" title={load.messages.length > 0 ? en.app.loadRejected : en.app.loadFailed}>
+            {load.messages.length > 0 ? (
+              <ul className="list-disc pl-5">
+                {load.messages.map((message) => (
+                  <li key={message}>{message}</li>
+                ))}
+              </ul>
+            ) : null}
+          </StatusAlert>
           <button type="button" className="btn min-h-11" onClick={reload}>
             {en.app.retry}
           </button>
         </div>
       ) : null}
-      {load.kind === 'ready' && section === 'project' ? (
-        <ProjectPage catalogue={load.catalogue} project={load.project} onSaved={onSaved} focusHeading={navigated} />
+      {load.kind === 'ready' ? (
+        // Stays mounted while other sections are shown, so unsaved edits survive navigation.
+        <div hidden={section !== 'project'}>
+          <ProjectPage
+            catalogue={load.catalogue}
+            project={load.project}
+            onSaved={onSaved}
+            focusHeading={navigated && section === 'project'}
+          />
+        </div>
       ) : null}
       {load.kind === 'ready' && section !== 'project' ? (
         <SectionPage

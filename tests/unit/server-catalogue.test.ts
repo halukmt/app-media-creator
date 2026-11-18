@@ -3,6 +3,7 @@ import { describe, expect, test } from 'vitest';
 import { createApp } from '../../src/server/app.js';
 import type { Catalogue } from '../../src/server/catalogue-routes.js';
 import { packageInfoFactory } from '../factories/package-info.js';
+import { allLocaleIds } from '../factories/web.js';
 
 describe('GET /api/catalogue gives the UI its choices', () => {
   const app = createApp({ webRoot: 'does-not-exist', packageInfo: packageInfoFactory() });
@@ -15,7 +16,7 @@ describe('GET /api/catalogue gives the UI its choices', () => {
 
   test('lists the 6 locales with native names', async () => {
     const { locales } = await catalogue();
-    expect(locales.map((locale) => locale.id)).toEqual(['de-DE', 'en-US', 'es-ES', 'it-IT', 'fr-FR', 'tr-TR']);
+    expect(locales.map((locale) => locale.id)).toEqual(allLocaleIds());
     expect(locales.find((locale) => locale.id === 'tr-TR')?.nativeName).toBe('Türkçe');
   });
 

@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { en } from '../i18n/en';
 import { SECTION_IDS, sectionHref, type SectionId } from '../lib/sections';
 
@@ -17,17 +17,27 @@ const DRAWER_ID = 'app-drawer';
  */
 export function AppShell({ current, status, children }: Props) {
   const [open, setOpen] = useState(false);
+  const menuButton = useRef<HTMLButtonElement>(null);
+  const sidebar = useRef<HTMLDivElement>(null);
 
-  // Close the drawer after navigating and on Escape.
+  /** Closes the drawer; without a navigation, focus returns to the menu button that opened it. */
+  const close = useCallback((returnFocus: boolean) => {
+    setOpen(false);
+    if (returnFocus) menuButton.current?.focus();
+  }, []);
+
+  // Close after navigating (the new page heading takes focus) and on Escape.
   useEffect(() => setOpen(false), [current]);
   useEffect(() => {
     if (!open) return undefined;
+    // Opened: move focus into the menu, onto the current section.
+    sidebar.current?.querySelector<HTMLElement>('[aria-current="page"]')?.focus();
     const onKey = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') setOpen(false);
+      if (event.key === 'Escape') close(true);
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [open]);
+  }, [open, close]);
 
   return (
     <>
@@ -47,9 +57,11 @@ export function AppShell({ current, status, children }: Props) {
           aria-hidden="true"
           tabIndex={-1}
         />
-        <div className="drawer-content flex min-h-screen min-w-0 flex-col bg-base-200">
+        {/* While the drawer is open on small screens, the page behind it is inert (not focusable or clickable). */}
+        <div className="drawer-content flex min-h-screen min-w-0 flex-col bg-base-200" inert={open}>
           <header className="navbar sticky top-0 z-10 gap-2 bg-base-100 shadow-sm lg:hidden">
             <button
+              ref={menuButton}
               type="button"
               className="btn btn-square btn-ghost min-h-11 min-w-11"
               aria-label={en.app.openMenu}
@@ -73,9 +85,9 @@ export function AppShell({ current, status, children }: Props) {
             className="drawer-overlay"
             aria-label={en.app.closeMenu}
             tabIndex={open ? 0 : -1}
-            onClick={() => setOpen(false)}
+            onClick={() => close(true)}
           />
-          <div id="app-sidebar" className="flex min-h-full w-72 flex-col bg-base-100">
+          <div id="app-sidebar" ref={sidebar} className="flex h-full w-72 flex-col overflow-y-auto bg-base-100">
             <div className="flex min-h-16 items-center px-6 text-lg font-semibold">{en.app.name}</div>
             <nav aria-label={en.app.navLabel} className="flex-1">
               <ul className="menu w-full gap-1 px-3">
@@ -83,8 +95,10 @@ export function AppShell({ current, status, children }: Props) {
                   <li key={id}>
                     <a
                       href={sectionHref(id)}
-                      className={`min-h-11 ${id === current ? 'menu-active' : ''}`}
+                      className={`min-h-11 content-center ${id === current ? 'menu-active' : ''}`}
                       aria-current={id === current ? 'page' : undefined}
+                      // Also closes the drawer when the current section is chosen again (no hash change).
+                      onClick={() => setOpen(false)}
                     >
                       {en.sections[id].title}
                     </a>
@@ -93,7 +107,7 @@ export function AppShell({ current, status, children }: Props) {
               </ul>
             </nav>
             {status ? (
-              <p className="px-6 py-4 text-sm text-base-content/70" data-testid="server-status">
+              <p className="shrink-0 px-6 py-4 text-sm text-base-content/70" data-testid="server-status">
                 {status}
               </p>
             ) : null}

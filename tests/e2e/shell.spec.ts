@@ -49,17 +49,18 @@ test.describe('The app shell navigates between sections', () => {
     await expect(page.getByRole('group', { name: /Languages for this section/ })).toBeVisible();
   });
 
+  // One test per section and width keeps each test short and lets them run in parallel.
   for (const width of viewportWidths()) {
-    test(`has no accessibility violations or horizontal scrolling at ${width} px in every section`, async ({ page }) => {
-      await page.setViewportSize({ width, height: 900 });
-      for (const [id, title] of sectionTitles()) {
+    for (const [id, title] of sectionTitles()) {
+      test(`shows ${title} at ${width} px without accessibility violations or horizontal scrolling`, async ({ page }) => {
+        await page.setViewportSize({ width, height: 900 });
         await page.goto(`/#/${id}`);
         await expect(page.getByRole('heading', { level: 1, name: title })).toBeVisible();
         expect(await blockingViolations(page)).toEqual([]);
         const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
         expect(overflow).toBeLessThanOrEqual(0);
         await page.screenshot({ path: `test-results/screenshots/${id}-${width}.png`, fullPage: true });
-      }
-    });
+      });
+    }
   }
 });

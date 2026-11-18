@@ -16,6 +16,7 @@ export const en = {
     navLabel: 'Sections',
     loading: 'Loading project…',
     loadFailed: 'The project could not be loaded. Is app-media-creator still running in your project folder?',
+    loadRejected: 'The project settings could not be read. Fix these entries in project.json:',
     retry: 'Try again',
     serverConnected: (version: string) => `Server ${version} connected`,
   },

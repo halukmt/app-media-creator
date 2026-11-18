@@ -1,6 +1,7 @@
 import { useId, useState } from 'react';
 import type { CatalogueDevice } from '../api';
 import { en } from '../i18n/en';
+import { FieldError } from './FieldError';
 
 interface Props {
   title: string;
@@ -32,7 +33,7 @@ export function TargetCard({ title, enabled, onEnabledChange, devices, selected,
   function deviceRow(device: CatalogueDevice) {
     return (
       <li key={device.id}>
-        <label className="flex min-h-11 cursor-pointer items-center gap-3 py-1">
+        <label className="flex min-h-11 cursor-pointer items-center gap-3 py-1 text-sm">
           <input
             type="checkbox"
             className="checkbox"
@@ -52,14 +53,14 @@ export function TargetCard({ title, enabled, onEnabledChange, devices, selected,
   return (
     <section className="card card-border bg-base-100" aria-labelledby={`${id}-title`}>
       <div className="card-body gap-3 p-4 sm:p-6">
-        <h3 id={`${id}-title`} className="card-title text-lg">
+        <h3 id={`${id}-title`} className="card-title text-base">
           {title}
         </h3>
         <label className="flex min-h-11 cursor-pointer items-center gap-3">
           <input
             type="checkbox"
             role="switch"
-            className="toggle"
+            className="toggle toggle-success"
             checked={enabled}
             onChange={(event) => onEnabledChange(event.target.checked)}
           />
@@ -82,11 +83,7 @@ export function TargetCard({ title, enabled, onEnabledChange, devices, selected,
                 </div>
               </details>
             ) : null}
-            {error ? (
-              <p id={`${id}-error`} className="border-l-4 border-error pl-2 text-sm font-medium">
-                {error}
-              </p>
-            ) : null}
+            {error ? <FieldError id={`${id}-error`}>{error}</FieldError> : null}
           </fieldset>
         )}
       </div>

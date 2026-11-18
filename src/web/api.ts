@@ -50,12 +50,13 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(path, init);
   const body: unknown = await response.json().catch(() => null);
   if (!response.ok) {
-    const data = (body ?? {}) as { errors?: unknown; error?: unknown };
-    const messages = Array.isArray(data.errors)
-      ? data.errors.map(String)
-      : typeof data.error === 'string'
-        ? [data.error]
-        : [];
+    // Validation errors come as `errors`; other failures as `error`, an invalid project.json adds `problems`.
+    const data = (body ?? {}) as { errors?: unknown; error?: unknown; problems?: unknown };
+    const messages = [
+      ...(Array.isArray(data.errors) ? data.errors.map(String) : []),
+      ...(typeof data.error === 'string' ? [data.error] : []),
+      ...(Array.isArray(data.problems) ? data.problems.map(String) : []),
+    ];
     throw new ApiError(response.status, messages);
   }
   return body as T;

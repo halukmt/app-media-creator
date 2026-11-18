@@ -14,7 +14,7 @@ interface Props {
 export function EmptyState({ title, children, neededBy, actions }: Props) {
   const titleId = useId();
   return (
-    <section className="card card-dash bg-base-100" aria-labelledby={titleId}>
+    <section className="card card-dash border-base-300 bg-base-100" aria-labelledby={titleId}>
       <div className="card-body gap-3 p-4 sm:p-6">
         <h2 id={titleId} className="card-title">
           {title}

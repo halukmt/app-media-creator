@@ -29,6 +29,18 @@ test.describe('The Project screen edits the workspace settings', () => {
     expect(stored.targets.google.enabled).toBe(false);
   });
 
+  test('keeps unsaved edits when the user visits another section and comes back', async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await page.goto('/#/project');
+    await page.getByLabel('App name').fill('Draft name');
+    const nav = page.getByRole('navigation', { name: 'Sections' });
+    await nav.getByRole('link', { name: 'Logo' }).click();
+    await expect(page.getByRole('heading', { level: 1, name: 'Logo' })).toBeVisible();
+    await nav.getByRole('link', { name: 'Project' }).click();
+    await expect(page.getByLabel('App name')).toHaveValue('Draft name');
+    await expect(page.getByText('Unsaved changes')).toBeVisible();
+  });
+
   test('shows the error next to an empty app name and keeps the empty value', async ({ page, request }) => {
     await page.goto('/#/project');
     const name = page.getByLabel('App name');

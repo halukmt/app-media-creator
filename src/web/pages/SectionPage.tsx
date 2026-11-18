@@ -46,7 +46,7 @@ export function SectionPage({ section, project, locales, selection, onSelectionC
           neededBy={neededBy}
           actions={
             neededBy.length === 0 || section === 'store-texts' ? (
-              <a href={sectionHref('project')} className="btn min-h-11">
+              <a href={sectionHref('project')} className="btn btn-primary min-h-11">
                 {en.empty.toProject}
               </a>
             ) : undefined
