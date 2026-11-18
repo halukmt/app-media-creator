@@ -19,6 +19,7 @@ entries left under `[Unreleased]` is rejected by `npm run check:release`.
 - Web icon set from the logo: favicon.ico, icon.svg with dark mode, apple-touch-icon, manifest and maskable icons, site.webmanifest and a head snippet, all in one folder. (#8)
 - App Store icon set from the logo: 1024 icon on a background colour, dark and tinted appearances, Icon Composer layers, and a logo palette for background suggestions. (#6)
 - Google Play icon and Android launcher resources from the logo: adaptive layers (foreground, background, monochrome) and legacy icons in all densities plus ic_launcher.xml, ready for app/src/main/res. (#7)
+- App shell: sidebar with Project, Logo, Screenshots, Video, Store texts and Export; a Project screen for stores, device models, languages and claims; one shared language selector (one, several or all languages); empty states that say what to upload and which stores need it. (#4)
 
 ### Fixed
 

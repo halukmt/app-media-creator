@@ -67,3 +67,24 @@ page sections, `h3` for target cards, errors via `aria-describedby` / `aria-inva
 
 | Source | Finding | Severity | Decision | Status |
 |---|---|---|---|---|
+| axe | `alert-soft` error text fails contrast (2.65:1) | serious | Solid alerts (`*-content` colours) | fixed |
+| code-review | A finishing save overwrites edits typed during the request | major | Fields disabled while saving (`fieldset disabled`) | fixed |
+| code-review | Project draft lost when visiting another section | major | Project page stays mounted (hidden) while other sections show; e2e test | fixed |
+| code-review | Field errors stay after the field is fixed | minor | Any edit clears the last result | fixed |
+| code-review | "All languages" gets disabled under keyboard focus | minor | Stays enabled; choosing it again is a no-op | fixed |
+| code-review | Drawer stays open when the current section is tapped | minor | Links close the drawer on click | fixed |
+| code-review | Invalid `project.json` shown as "server not running" | minor | Load error shows the server's `problems` list | fixed |
+| code-review | Web types copied from core instead of `import type` | minor | Kept: a type import makes the web tsconfig check core files that need Node types | won't fix |
+| code-review | Field error markup in three components | minor | New `FieldError` component (inventory) | fixed |
+| code-review | Locale literals in catalogue test | minor | `allLocaleIds()` factory | fixed |
+| code-review | Separate `saved` state duplicates the `project` prop | minor | Dirty check against `toForm(project)` | fixed |
+| design-critic | Focus ring invisible on selected locale chips | critical | `outline-base-content` | fixed |
+| design-critic | Drawer focus handling | major | Focus moves into the menu on open, back to the menu button on Escape / overlay; page `inert` while open | fixed |
+| design-critic | Locale bar heavier than the task | major | Outline chips, selected = active fill + border + check mark; "All languages" on its own row | fixed |
+| design-critic | Toggle on/off hard to tell apart | major | `toggle-success` | fixed |
+| design-critic | Save button and unsaved badge off-screen on phones | major | Sticky save bar | fixed |
+| design-critic | Device names 12 px | major | `text-sm` | fixed |
+| design-critic | Locale bar on Logo although icons are text-free | major | Kept: share images per locale (#9) are generated in the Logo section | won't fix |
+| design-critic | Sidebar footer cut off; menu text not centred; heading sizes; invisible dashed border; inventory alert class; weak only action | minor | `h-full overflow-y-auto`, `content-center`, h2 `text-xl` / h3 `text-base`, `border-base-300`, inventory updated, `btn-primary` | fixed |
+| design-critic | Nested live regions; focus lost on save; failed save does not point to the field | minor | Mounted `role` wrappers, alerts without own role; `aria-disabled` button; focus first invalid field | fixed |
+| security-review | No findings (static GET route behind `localOnly`, server messages rendered as text, hash checked against a fixed list) | — | — | — |
