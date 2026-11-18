@@ -1,14 +1,10 @@
-import { lstat } from 'node:fs/promises';
-import path from 'node:path';
 import sharp from 'sharp';
 import { registerOutputs, type OutputEntry, type RegisterOptions } from '../export/manifest.js';
-import { getSpec, inspectImageBytes, validateMedia, type Size } from '../specs/index.js';
-import { listInputs } from '../workspace/inputs.js';
+import { getSpec, type Size } from '../specs/index.js';
 import { readProject, type Workspace } from '../workspace/workspace.js';
-import { encodeIco, isHexColor, loadLogo, renderLogoSquare, svgDensity, type HexColor, type LogoSource } from './render.js';
-
-/** The request cannot be served (e.g. no logo uploaded, unreadable logo). */
-export class GeneratorError extends Error {}
+import { GeneratorError, loadNewestLogo } from './logo.js';
+import { assertValidOutputs, fixedSizes } from './outputs.js';
+import { encodeIco, isHexColor, renderLogoSquare, type HexColor, type LogoSource } from './render.js';
 
 export interface WebIconOptions {
   /** Background of icons that must be opaque, and of icon.svg in light mode. Default white. */
@@ -23,29 +19,6 @@ export interface WebIconOptions {
 const TOUCH_ARTWORK_RATIO = 140 / 180;
 /** Margin around the logo of transparent manifest icons. */
 const MANIFEST_MARGIN = 0.06;
-
-/** Fixed sizes of a catalogue entry, smallest first. The catalogue is the only source of sizes. */
-function fixedSizes(specId: string): Size[] {
-  const rule = getSpec(specId).dimensions;
-  if (rule.kind !== 'fixed') throw new Error(`${specId} has no fixed sizes`);
-  return [...rule.sizes].sort((a, b) => a.width - b.width);
-}
-
-/** Absolute path of the most recently changed uploaded logo. */
-export async function newestLogo(workspace: Workspace): Promise<string> {
-  const logos = (await listInputs(workspace)).filter((input) => input.kind === 'logo');
-  if (logos.length === 0) throw new GeneratorError('Upload a logo first');
-  const dated = [];
-  for (const logo of logos) {
-    const absolute = path.join(workspace.root, logo.path);
-    const info = await lstat(absolute);
-    // Only regular files: a link planted in a cloned workspace must not pull in a file from elsewhere.
-    if (info.isFile()) dated.push({ absolute, modified: info.mtimeMs });
-  }
-  if (dated.length === 0) throw new GeneratorError('Upload a logo first');
-  dated.sort((a, b) => a.modified - b.modified || a.absolute.localeCompare(b.absolute));
-  return dated.at(-1)!.absolute;
-}
 
 /** icon.svg: rounded background that switches colour in dark mode, logo embedded as an image (never as markup). */
 async function iconSvg(logo: LogoSource, light: HexColor, dark: HexColor): Promise<Buffer> {
@@ -97,18 +70,6 @@ function headSnippet(theme: HexColor, icoSize: Size): Buffer {
   );
 }
 
-/** Checks every generated image against its catalogue entry before anything is written. */
-async function assertValid(files: RegisterOptions[]): Promise<void> {
-  for (const file of files) {
-    const spec = getSpec(file.specId);
-    if (spec.kind === 'document') continue;
-    const violations = validateMedia(spec, await inspectImageBytes(file.bytes, `${file.name}.${file.extension}`));
-    if (violations.length > 0) {
-      throw new Error(`Generated ${file.name}.${file.extension} violates ${spec.id}: ${violations.map((v) => v.message).join('; ')}`);
-    }
-  }
-}
-
 /**
  * Generates the favicon and web app icon set from the newest uploaded logo into `web/shared/favicons/`.
  * All files are rendered and validated first and then registered together, so a failure leaves the previous set
@@ -123,15 +84,7 @@ export async function generateWebIcons(workspace: Workspace, options: WebIconOpt
   const theme = options.themeColor ?? background;
   const project = await readProject(workspace);
 
-  let logo: LogoSource;
-  try {
-    logo = await loadLogo(await newestLogo(workspace));
-  } catch (error) {
-    if (error instanceof GeneratorError) throw error;
-    throw new GeneratorError('The uploaded logo cannot be read; upload it again as PNG, JPEG, WebP or SVG');
-  }
-  // Fail early with a clear message when an SVG would need an extreme resolution.
-  if (logo.isSvg) svgDensity(logo, 512);
+  const logo = await loadNewestLogo(workspace);
 
   const icoSizes = fixedSizes('web.favicon-ico');
   const [touch] = fixedSizes('web.apple-touch-icon');
@@ -181,6 +134,6 @@ export async function generateWebIcons(workspace: Workspace, options: WebIconOpt
     { specId: 'web.head-snippet', name: 'head', extension: 'html', bytes: headSnippet(theme, icoSizes.at(-1)!), order: 1 },
   ];
 
-  await assertValid(files);
+  await assertValidOutputs(files);
   return registerOutputs(workspace, files);
 }

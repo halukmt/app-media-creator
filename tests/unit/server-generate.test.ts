@@ -50,3 +50,33 @@ describe('The generate API builds the web icons', () => {
     expect(response.status).toBe(403);
   });
 });
+
+describe('The generate API builds the App Store icons and offers the logo palette', () => {
+  const base = 'http://localhost:4790/api';
+
+  test('generates the App Store icons with a background and logo scale', async () => {
+    const app = await appFactory(true);
+    const response = await app.request(`${base}/generate/app-store-icons`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ background: '#0079dd', logoScale: 0.6 }),
+    });
+    expect(response.status).toBe(201);
+    expect(((await response.json()) as unknown[]).length).toBe(5);
+  });
+
+  test('rejects a logo scale that is not a number and a missing logo', async () => {
+    const withLogo = await appFactory(true);
+    const bad = await withLogo.request(`${base}/generate/app-store-icons`, { method: 'POST', body: JSON.stringify({ logoScale: 'big' }) });
+    expect(bad.status).toBe(400);
+    const noLogo = await (await appFactory(false)).request(`${base}/generate/app-store-icons`, { method: 'POST' });
+    expect(await noLogo.json()).toEqual({ error: 'Upload a logo first' });
+  });
+
+  test('returns the palette of the uploaded logo', async () => {
+    const response = await (await appFactory(true)).request(`${base}/logo/palette`);
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as { colors: string[] };
+    expect(body.colors[0]).toMatch(/^#[0-9a-f]{6}$/);
+  });
+});
