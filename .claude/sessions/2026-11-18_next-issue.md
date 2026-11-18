@@ -25,3 +25,14 @@
   - Security note on #10 and #14: serve uploaded SVGs with CSP sandbox / nosniff or rasterize them.
   - Large videos are still buffered in memory; streaming to disk belongs to #20.
 - Next candidates: #5 (export), then #6/#7/#8 (logo packs) and #4 (app shell).
+
+## #5 Export: validation checklist and ZIP builder — done (PR #33)
+
+- `src/core/export/`: `outputPath` / `registerOutput` / `readManifest` (strict layout, invalid entries reported),
+  `buildChecklist` / `checklistMarkdown`, `createExport` (streaming fflate ZIP, symlinks and foreign files refused).
+- API: `GET /api/export/checklist?locales=…`, `POST /api/export`. Workspace gets `exports/`.
+- Generators must use `registerOutput()`; folder segment = device for screenshots, spec id tail otherwise.
+- Export UI split off as #32 (Ready, depends on #4).
+- `THIRD_PARTY_NOTICES.md` added (runtime dependencies).
+- Haluk asked to consider MustafaNatur/blueprint (comment on #6): Swift, macOS + Xcode only, MIT → idea only
+  (preview / production icon variants), own cross-platform implementation; new issue for it.
