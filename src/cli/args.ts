@@ -1,11 +1,16 @@
+import { DEFAULT_WORKSPACE_DIR } from '../core/workspace/workspace.js';
+
 export interface CliOptions {
   port: number;
   open: boolean;
   help: boolean;
   version: boolean;
+  /** Workspace folder, relative to the current directory or absolute. */
+  workspace: string;
 }
 
 export const DEFAULT_PORT = 4790;
+export const DEFAULT_WORKSPACE = DEFAULT_WORKSPACE_DIR;
 
 /** Parses command-line arguments. Throws on unknown flags or an invalid port. */
 export function parseArgs(argv: readonly string[], env: Record<string, string | undefined> = {}): CliOptions {
@@ -14,6 +19,7 @@ export function parseArgs(argv: readonly string[], env: Record<string, string | 
     open: true,
     help: false,
     version: false,
+    workspace: DEFAULT_WORKSPACE,
   };
 
   for (let i = 0; i < argv.length; i += 1) {
@@ -24,6 +30,14 @@ export function parseArgs(argv: readonly string[], env: Record<string, string | 
         const value = argv[i + 1];
         if (value === undefined) throw new Error(`${arg} needs a value`);
         options.port = parsePort(value);
+        i += 1;
+        break;
+      }
+      case '--workspace':
+      case '-w': {
+        const value = argv[i + 1];
+        if (value === undefined || value.startsWith('-')) throw new Error(`${arg} needs a folder`);
+        options.workspace = value;
         i += 1;
         break;
       }
@@ -58,8 +72,9 @@ export const HELP_TEXT = `Usage: app-media-creator [options]
 Starts the local app-media-creator UI in your browser.
 
 Options:
-  -p, --port <number>  Port of the local server (default ${DEFAULT_PORT}, or AMC_PORT)
-      --no-open        Do not open the browser
-  -v, --version        Print the version
-  -h, --help           Print this help
+  -p, --port <number>    Port of the local server (default ${DEFAULT_PORT}, or AMC_PORT)
+  -w, --workspace <dir>  Workspace folder for settings, inputs and output (default ${DEFAULT_WORKSPACE})
+      --no-open          Do not open the browser
+  -v, --version          Print the version
+  -h, --help             Print this help
 `;
