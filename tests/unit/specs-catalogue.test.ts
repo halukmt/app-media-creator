@@ -1,6 +1,6 @@
 // conventions: RULE-TESTING-3301
 import { describe, expect, test } from 'vitest';
-import { SPECS, getSpec, listSpecs } from '../../src/core/specs/index.js';
+import { SPECS, getSpec, listSpecs, matchesDimensions } from '../../src/core/specs/index.js';
 
 describe('The spec catalogue covers every store and web media asset', () => {
   test('returns the required 6.3-inch iPhone screenshot with its sizes and rules', () => {
@@ -114,5 +114,21 @@ describe('Android launcher resources share one folder', () => {
     for (const id of ['google.adaptive-icon.foreground', 'google.adaptive-icon.background', 'google.adaptive-icon.monochrome', 'google.launcher-icon']) {
       expect(getSpec(id).folder, id).toBe('android-res');
     }
+  });
+});
+
+describe('Default render sizes of range specs', () => {
+  test('lie inside the size rule of their own spec', () => {
+    const withDefault = SPECS.filter((spec) => spec.defaultSize);
+    expect(withDefault.map((spec) => spec.id)).toEqual(
+      expect.arrayContaining(['google.screenshot.phone', 'google.screenshot.tablet-7', 'google.screenshot.tablet-10']),
+    );
+    for (const spec of withDefault) {
+      expect(matchesDimensions(spec.dimensions, spec.defaultSize!.width, spec.defaultSize!.height), spec.id).toBe(true);
+    }
+  });
+
+  test('are only set where the store allows a range of sizes', () => {
+    expect(SPECS.filter((spec) => spec.defaultSize && spec.dimensions.kind !== 'range')).toEqual([]);
   });
 });

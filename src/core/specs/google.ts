@@ -29,6 +29,8 @@ const SCREENSHOT_BASE = {
   localized: true,
   verified: true,
   sourceUrl: LISTING,
+  maxTextShare: 0.2,
+  discouragesFrames: true,
 } as const;
 
 function adaptiveLayer(layer: 'foreground' | 'background' | 'monochrome'): SpecEntry {
@@ -88,6 +90,7 @@ export const GOOGLE_SPECS: readonly SpecEntry[] = [
     id: 'google.screenshot.phone',
     name: 'Phone screenshots',
     required: true,
+    defaultSize: { width: 1080, height: 1920 },
     dimensions: { kind: 'range', minSide: 320, maxSide: 3840, aspect: { maxRatio: 2 }, orientation: 'any' },
     minCount: 2,
     maxCount: 8,
@@ -99,6 +102,7 @@ export const GOOGLE_SPECS: readonly SpecEntry[] = [
     name: '7" tablet screenshots',
     required: false,
     condition: 'Needed for large-screen featuring.',
+    defaultSize: { width: 1080, height: 1920 },
     dimensions: { kind: 'range', minSide: 1080, maxSide: 7680, aspect: { ratio: 16 / 9, tolerance: 0.01 }, orientation: 'any' },
     minCount: 4,
     maxCount: 8,
@@ -109,6 +113,7 @@ export const GOOGLE_SPECS: readonly SpecEntry[] = [
     name: '10" tablet screenshots',
     required: false,
     condition: 'Needed for large-screen featuring.',
+    defaultSize: { width: 1440, height: 2560 },
     dimensions: { kind: 'range', minSide: 1080, maxSide: 7680, aspect: { ratio: 16 / 9, tolerance: 0.01 }, orientation: 'any' },
     minCount: 4,
     maxCount: 8,

@@ -109,6 +109,15 @@ export interface SpecEntry {
   video?: VideoLimits;
   /** Area that must hold the key art (Apple creative assets, YouTube banner). */
   safeArea?: Rect;
+  /**
+   * Pixel size the tool renders for a range rule (the store allows many sizes). Must satisfy `dimensions`;
+   * fixed rules use their first size instead.
+   */
+  defaultSize?: Size;
+  /** Largest share of the image that overlay text may cover (Google Play screenshots: under 20 %). */
+  maxTextShare?: number;
+  /** The store discourages device frames around screenshots (Google Play). */
+  discouragesFrames?: boolean;
   /** Output folder name instead of the default derived from the id (assets that ship together share a folder). */
   folder?: string;
   /** True when a separate file is generated per media locale. */
