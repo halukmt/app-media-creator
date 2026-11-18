@@ -43,6 +43,8 @@ function describeRule(rule: DimensionRule): string {
     }
     case 'vector':
       return 'vector';
+    case 'none':
+      return 'no pixel size';
   }
 }
 
@@ -50,6 +52,7 @@ function describeRule(rule: DimensionRule): string {
 export function matchesDimensions(rule: DimensionRule, width: number, height: number): boolean {
   switch (rule.kind) {
     case 'vector':
+    case 'none':
       return true;
     case 'fixed':
       return rule.sizes.some(

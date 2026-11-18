@@ -81,3 +81,14 @@ describe('listSpecs filters the catalogue', () => {
     expect(listSpecs({ target: 'web', group: 'preview' })).toEqual([]);
   });
 });
+
+describe('Document entries describe files that are not media', () => {
+  test('describes the web app manifest as a JSON document without pixel size, in the favicons folder', () => {
+    expect(getSpec('web.webmanifest')).toMatchObject({ kind: 'document', formats: ['json'], dimensions: { kind: 'none' }, folder: 'favicons' });
+  });
+
+  test('keeps all favicon files in one folder', () => {
+    const folders = new Set(listSpecs({ target: 'web', group: 'favicon' }).map((e) => e.folder));
+    expect([...folders]).toEqual(['favicons']);
+  });
+});

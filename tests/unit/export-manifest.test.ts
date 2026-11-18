@@ -2,7 +2,7 @@
 import { existsSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { describe, expect, test } from 'vitest';
-import { cleanOutputName, outputPath, readManifest, registerOutput } from '../../src/core/export/index.js';
+import { cleanOutputName, outputPath, readManifest, registerOutput, registerOutputs } from '../../src/core/export/index.js';
 import { getSpec } from '../../src/core/specs/index.js';
 import { pngBytes, workspaceFactory } from '../factories/workspace.js';
 
@@ -146,5 +146,34 @@ describe('cleanOutputName keeps generated names stable', () => {
   test('drops folders, leading dots and falls back to "file"', () => {
     expect(cleanOutputName('../../secret')).toBe('secret');
     expect(cleanOutputName('...')).toBe('file');
+  });
+});
+
+describe('registerOutputs writes a batch only when every path is free', () => {
+  test('writes nothing when one file of the batch belongs to another asset', async () => {
+    const workspace = await workspaceFactory();
+    await registerOutput(workspace, { specId: 'web.favicon-ico', order: 1, name: 'taken', extension: 'png', bytes: await pngBytes(10, 10) });
+    const bytes = await pngBytes();
+    await expect(
+      registerOutputs(workspace, [
+        { specId: 'web.manifest-icon', order: 1, name: 'fresh', extension: 'png', bytes },
+        { specId: 'web.apple-touch-icon', order: 1, name: 'taken', extension: 'png', bytes },
+      ]),
+    ).rejects.toThrow('already registered for web.favicon-ico');
+    expect(existsSync(path.join(workspace.outputDir, 'web/shared/favicons/fresh.png'))).toBe(false);
+    expect((await readManifest(workspace)).entries).toHaveLength(1);
+  });
+});
+
+describe('registerOutput keeps paths unique per asset', () => {
+  test('rejects a path that already belongs to another asset and keeps the existing file', async () => {
+    const { readFileSync } = await import('node:fs');
+    const workspace = await workspaceFactory();
+    const first = await registerOutput(workspace, { specId: 'web.favicon-ico', order: 1, name: 'icon', extension: 'png', bytes: await pngBytes(10, 10) });
+    const before = readFileSync(path.join(workspace.outputDir, first.path));
+    await expect(
+      registerOutput(workspace, { specId: 'web.apple-touch-icon', order: 1, name: 'icon', extension: 'png', bytes: await pngBytes(20, 20) }),
+    ).rejects.toThrow('web/shared/favicons/icon.png is already registered for web.favicon-ico');
+    expect(readFileSync(path.join(workspace.outputDir, first.path))).toEqual(before);
   });
 });
