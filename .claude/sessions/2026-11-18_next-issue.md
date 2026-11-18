@@ -36,3 +36,10 @@
 - `THIRD_PARTY_NOTICES.md` added (runtime dependencies).
 - Haluk asked to consider MustafaNatur/blueprint (comment on #6): Swift, macOS + Xcode only, MIT → idea only
   (preview / production icon variants), own cross-platform implementation; new issue for it.
+
+## #35 Review findings from #33 — done (PR #36)
+
+- Codex findings on PR #33 filed as #35 and taken right away (Ready, P1/XS) instead of Backlog, because the logo
+  generators (#6–#8) register variant names next.
+- `cleanOutputName()` (idempotent, keeps dots) replaces `safeBaseName()` for outputs; ZIP stream errors are handled.
+- Main spec `export` updated (requirement "ZIP export by locale").

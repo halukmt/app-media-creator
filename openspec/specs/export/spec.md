@@ -70,7 +70,9 @@ The system SHALL export a ZIP that contains the registered files of the selected
 output folder layout, plus a `CHECKLIST.md` at the root. The selection SHALL accept one locale, several locales or
 "all" of the project's locales and SHALL reject locales the project does not use. Files of disabled targets SHALL
 not be exported. Only files that lie inside the output folder and match the output layout SHALL be exported; other
-manifest entries and links to files elsewhere SHALL be left out and reported in the checklist.
+manifest entries and links to files elsewhere SHALL be left out and reported in the checklist. Every file registered
+by a generator SHALL stay exportable, whatever characters its name contains. When writing the ZIP fails, the export
+SHALL end with an error and SHALL leave no partial ZIP behind.
 
 #### Scenario: Exporting one locale
 - **WHEN** a ZIP is exported for `de-DE` while files exist for `de-DE` and `tr-TR`
@@ -91,3 +93,11 @@ manifest entries and links to files elsewhere SHALL be left out and reported in 
 #### Scenario: Rejecting a locale outside the project
 - **WHEN** a ZIP is requested for `fr-FR` while the project uses only `de-DE` and `en-US`
 - **THEN** the request is rejected with a message naming `fr-FR`
+
+#### Scenario: Name with dots
+- **WHEN** a screenshot named `home.dark` is registered and a ZIP is exported
+- **THEN** the ZIP contains `apple/de-DE/iphone-6.3/01-home.dark.png`
+
+#### Scenario: Writing the ZIP fails
+- **WHEN** the exports folder cannot be written
+- **THEN** the export ends with an error, the tool keeps running and no partial ZIP remains
