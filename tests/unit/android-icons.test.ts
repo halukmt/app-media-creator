@@ -33,7 +33,10 @@ describe('generateAndroidIcons builds the Play icon and the launcher resources',
     expect([metadata.width, metadata.height, metadata.channels]).toEqual([512, 512, 4]);
     const { data } = await rgba(file);
     expect([...data.subarray(0, 4)]).toEqual([0x00, 0x79, 0xdd, 255]);
-    for (let i = 3; i < data.length; i += 4) expect(data[i]).toBe(255);
+    // One assertion over all alpha values; an expect per pixel (262 144 calls) timed out under parallel load.
+    let minAlpha = 255;
+    for (let i = 3; i < data.length; i += 4) minAlpha = Math.min(minAlpha, data[i] ?? 0);
+    expect(minAlpha).toBe(255);
   });
 
   test('writes every density folder with the sizes of the catalogue and a valid file each', async () => {
