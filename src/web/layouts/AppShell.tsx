@@ -51,6 +51,8 @@ export function AppShell({ current, status, children }: Props) {
       returnFocus.current = false;
       return undefined;
     }
+    // A close request while already closed (double Escape) leaves no render behind; start every open clean.
+    returnFocus.current = false;
     // Opened: move focus into the menu, onto the current section.
     sidebar.current?.querySelector<HTMLElement>('[aria-current="page"]')?.focus();
     const onKey = (event: KeyboardEvent) => {

@@ -20,3 +20,4 @@ No new components; the reuse map of #4 applies.
 
 | Source | Finding | Severity | Decision | Status |
 |---|---|---|---|---|
+| code-review | Focus-return flag stays set after a close request while already closed; a later navigation close would steal focus from the page heading | minor | Flag reset on every open | fixed |
