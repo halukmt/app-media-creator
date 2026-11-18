@@ -11,7 +11,8 @@ import {
 } from '../../src/web/lib/locale-selection.js';
 import { fieldError, groupProjectErrors } from '../../src/web/lib/errors.js';
 import { sectionFromHash, sectionHref, targetsNeeding } from '../../src/web/lib/sections.js';
-import { allLocaleIds, enabledTargets } from '../factories/web.js';
+import { downloadFileName, isWorseStatus, sortByStatus, summarizeChecklist } from '../../src/web/lib/export.js';
+import { allLocaleIds, checklistFactory, enabledTargets } from '../factories/web.js';
 
 describe('Section routing follows the location hash', () => {
   test('reads the section from a hash', () => {
@@ -96,6 +97,34 @@ describe('The source language follows the selected languages', () => {
 
   test('moves to the first selected language when it is deselected', () => {
     expect(sourceLocaleFor('en-US', ['de-DE', 'tr-TR'])).toBe('de-DE');
+  });
+});
+
+describe('The Export section summarizes the checklist', () => {
+  test('counts items per status and generated files', () => {
+    expect(summarizeChecklist(checklistFactory())).toEqual({ ok: 1, warning: 1, error: 1, files: 3 });
+  });
+
+  test('lists errors first, then warnings, then ok items, keeping their order', () => {
+    const items = checklistFactory().targets.flatMap((target) => target.items);
+    expect(sortByStatus(items).map((item) => item.status)).toEqual(['error', 'warning', 'ok']);
+  });
+
+  test('notices when the files got worse while the ZIP was built', () => {
+    expect(isWorseStatus('error', 'warning')).toBe(true);
+    expect(isWorseStatus('ok', 'warning')).toBe(false);
+    expect(isWorseStatus(null, 'ok')).toBe(false);
+    expect(isWorseStatus('unknown', 'ok')).toBe(false);
+  });
+
+  test('takes the download name from the server header', () => {
+    expect(downloadFileName('attachment; filename="Demo-all-2026.zip"', 'export.zip')).toBe('Demo-all-2026.zip');
+  });
+
+  test('never uses a path from the header and falls back without one', () => {
+    expect(downloadFileName('attachment; filename="../../evil.zip"', 'export.zip')).toBe('evil.zip');
+    expect(downloadFileName('attachment; filename=".."', 'export.zip')).toBe('export.zip');
+    expect(downloadFileName(null, 'export.zip')).toBe('export.zip');
   });
 });
 

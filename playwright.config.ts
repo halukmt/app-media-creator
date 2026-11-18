@@ -14,7 +14,13 @@ export default defineConfig({
     baseURL: `http://127.0.0.1:${port}`,
     trace: 'retain-on-failure',
   },
-  projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'] } }],
+  // project.spec changes the shared project settings and export.spec relies on them: run export after settings,
+  // everything else in parallel.
+  projects: [
+    { name: 'chromium', use: { ...devices['Desktop Chrome'] }, testIgnore: /(project|export)\.spec\.ts/ },
+    { name: 'settings', use: { ...devices['Desktop Chrome'] }, testMatch: /project\.spec\.ts/ },
+    { name: 'export', use: { ...devices['Desktop Chrome'] }, testMatch: /export\.spec\.ts/, dependencies: ['settings'] },
+  ],
   webServer: {
     command: `npm run build && node dist/cli/index.js --port ${port} --no-open --workspace ${workspace}`,
     url: `http://127.0.0.1:${port}/api/health`,

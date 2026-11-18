@@ -1,31 +1,39 @@
 // conventions: RULE-TESTING-3301
-import { expect, test } from '@playwright/test';
+import { readFileSync } from 'node:fs';
+import AxeBuilder from '@axe-core/playwright';
+import { expect, test, type Page } from '@playwright/test';
 import { unzipSync } from 'fflate';
-import sharp from 'sharp';
 import { registerOutput } from '../../src/core/export/index.js';
 import { openWorkspace } from '../../src/core/workspace/index.js';
+import { viewportWidths } from '../factories/web.js';
+import { pngBytes } from '../factories/workspace.js';
 
 // Same folder the Playwright web server starts the CLI with (playwright.config.ts).
 const WORKSPACE = 'test-results/e2e-workspace';
 
-async function png(width: number, height: number): Promise<Uint8Array> {
-  return Uint8Array.from(await sharp({ create: { width, height, channels: 3, background: '#2255aa' } }).png().toBuffer());
+/** Keeps only German in the locale bar of the current section by deselecting the other five languages. */
+async function selectGermanOnly(page: Page) {
+  const bar = page.getByRole('group', { name: /Languages for this section/ });
+  for (const name of ['English (US)', 'Spanish', 'Italian', 'French', 'Turkish']) {
+    await bar.locator('label', { hasText: name }).click();
+  }
+  await expect(bar.getByRole('checkbox', { checked: true })).toHaveCount(1);
 }
 
-test.describe('The export API of the running tool', () => {
+test.describe('The export of the running tool', () => {
   // One worker seeds the shared workspace; parallel workers would race on output/manifest.json.
   test.describe.configure({ mode: 'serial' });
 
   test.beforeAll(async () => {
     const workspace = await openWorkspace(WORKSPACE);
-    await registerOutput(workspace, { specId: 'apple.icon', order: 1, name: 'app-icon', extension: 'png', bytes: await png(1024, 1024) });
-    const shot = await png(1206, 2622);
+    await registerOutput(workspace, { specId: 'apple.icon', order: 1, name: 'app-icon', extension: 'png', bytes: await pngBytes(1024, 1024) });
+    const shot = await pngBytes(1206, 2622);
     for (const locale of ['de-DE', 'tr-TR']) {
       await registerOutput(workspace, { specId: 'apple.screenshot.iphone-6.3', locale, order: 1, name: 'start', extension: 'png', bytes: shot });
     }
   });
 
-  test('downloads a ZIP for de-DE with the store folder layout', async ({ request }) => {
+  test('downloads a ZIP for de-DE with the store folder layout through the API', async ({ request }) => {
     const response = await request.post('/api/export', { data: { locales: ['de-DE'] } });
     expect(response.status()).toBe(200);
     expect(response.headers()['content-type']).toBe('application/zip');
@@ -36,7 +44,7 @@ test.describe('The export API of the running tool', () => {
     expect(names.some((name) => name.includes('/tr-TR/'))).toBe(false);
   });
 
-  test('reports the valid de-DE screenshot set as ok in the checklist', async ({ request }) => {
+  test('reports the valid de-DE screenshot set as ok in the checklist API', async ({ request }) => {
     const response = await request.get('/api/export/checklist?locales=de-DE');
     const checklist = (await response.json()) as { targets: { items: { specId: string; locale?: string; status: string }[] }[] };
     const item = checklist.targets.flatMap((t) => t.items).find((i) => i.specId === 'apple.screenshot.iphone-6.3' && i.locale === 'de-DE');
@@ -47,4 +55,66 @@ test.describe('The export API of the running tool', () => {
     const response = await request.post('/api/export', { data: { locales: ['pt-BR'] } });
     expect(response.status()).toBe(400);
   });
+
+  test('shows the checklist per store for the selected language', async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await page.goto('/#/export');
+    await selectGermanOnly(page);
+
+    const apple = page.getByRole('region', { name: 'Apple App Store' });
+    await apple.getByText(/items OK/).click();
+    const screenshotSet = apple.getByRole('listitem').filter({ hasText: 'iPhone 6.3"' });
+    await expect(screenshotSet).toContainText('German · 1 file');
+    await expect(screenshotSet).toContainText('OK');
+    await expect(apple).not.toContainText('Turkish');
+
+    const google = page.getByRole('region', { name: 'Google Play' });
+    const playIcon = google.getByRole('listitem').filter({ hasText: 'Google Play app icon' }).first();
+    await expect(playIcon).toContainText('Error');
+    await expect(playIcon).toContainText('required but missing');
+  });
+
+  test('asks before downloading an incomplete ZIP and downloads nothing on Cancel', async ({ page }) => {
+    let downloads = 0;
+    page.on('download', () => (downloads += 1));
+    await page.goto('/#/export');
+    await expect(page.getByText('Required files are missing or invalid.')).toBeVisible();
+    const button = page.getByRole('button', { name: 'Download ZIP' });
+    await button.click();
+    const dialog = page.getByRole('dialog', { name: 'Download with errors?' });
+    await expect(dialog).toBeVisible();
+    await dialog.getByRole('button', { name: 'Cancel' }).click();
+    await expect(dialog).toBeHidden();
+    await expect(button).toBeFocused();
+    expect(downloads).toBe(0);
+  });
+
+  test('downloads the ZIP for the selected language after confirming', async ({ page }) => {
+    await page.goto('/#/export');
+    await selectGermanOnly(page);
+    await expect(page.getByText('Required files are missing or invalid.')).toBeVisible();
+    await page.getByRole('button', { name: 'Download ZIP' }).click();
+    const downloading = page.waitForEvent('download');
+    await page.getByRole('dialog').getByRole('button', { name: 'Download anyway' }).click();
+    const download = await downloading;
+    expect(download.suggestedFilename()).toMatch(/\.zip$/);
+
+    const names = Object.keys(unzipSync(new Uint8Array(readFileSync(await download.path()))));
+    expect(names).toEqual(expect.arrayContaining(['CHECKLIST.md', 'apple/de-DE/iphone-6.3/01-start.png']));
+    expect(names.some((name) => name.includes('/tr-TR/'))).toBe(false);
+    await expect(page.getByRole('status').filter({ hasText: 'downloaded' })).toBeVisible();
+  });
+
+  for (const width of viewportWidths()) {
+    test(`shows the Export section with data at ${width} px without accessibility violations`, async ({ page }) => {
+      await page.setViewportSize({ width, height: 900 });
+      await page.goto('/#/export');
+      await expect(page.getByRole('region', { name: 'Apple App Store' })).toBeVisible();
+      const results = await new AxeBuilder({ page }).analyze();
+      expect(results.violations.filter((v) => v.impact === 'serious' || v.impact === 'critical')).toEqual([]);
+      const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+      expect(overflow).toBeLessThanOrEqual(0);
+      await page.screenshot({ path: `test-results/screenshots/export-data-${width}.png`, fullPage: true });
+    });
+  }
 });

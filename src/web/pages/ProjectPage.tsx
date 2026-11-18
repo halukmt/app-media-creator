@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import { ApiError, saveProject, type Catalogue, type ProjectSettings, type TargetSettings } from '../api';
+import { BusyButton } from '../components/BusyButton';
 import { LocaleSelector } from '../components/LocaleSelector';
 import { PageHeader } from '../components/PageHeader';
 import { StatusAlert } from '../components/StatusAlert';
@@ -212,10 +213,9 @@ export function ProjectPage({ catalogue, project, onSaved, focusHeading }: Props
             ) : null}
           </div>
           <div className="flex flex-wrap items-center gap-3">
-            <button type="submit" className="btn btn-primary min-h-11" aria-disabled={saving}>
-              {saving ? <span className="loading loading-spinner" aria-hidden="true" /> : null}
-              {saving ? en.project.saving : en.project.save}
-            </button>
+            <BusyButton type="submit" primary busy={saving} busyLabel={en.project.saving}>
+              {en.project.save}
+            </BusyButton>
             {dirty ? <span className="badge badge-outline">{en.project.unsaved}</span> : null}
           </div>
         </div>
