@@ -43,3 +43,14 @@
   generators (#6–#8) register variant names next.
 - `cleanOutputName()` (idempotent, keeps dots) replaces `safeBaseName()` for outputs; ZIP stream errors are handled.
 - Main spec `export` updated (requirement "ZIP export by locale").
+
+## #8 Logo pack: web favicons and manifest — done (PR #37)
+
+- Generator pattern for #6/#7/#9: `src/core/generators/render.ts` (`loadLogo`, `renderLogoSquare`, `svgDensity`,
+  `encodeIco`, `isHexColor`), sizes only from the catalogue (`fixedSizes`), validate buffers with
+  `inspectImageBytes` + `validateMedia`, then `registerOutputs` as one batch.
+- Catalogue: `folder` override, `document` kind (json/html/txt), `dimensions: none`; ICO measuring.
+- API `POST /api/generate/web-icons`; routes share `readOptionalJsonObject`.
+- Haluk denied a visual check script (wrote a temp script into scripts/); no real-logo preview yet → comes with #10.
+- Haluk created a second GitHub project (#11) with more workflows; recommended: keep #10 (skills use 10, has
+  "Released"), rename it, enable workflows in #10, delete #11 himself.
