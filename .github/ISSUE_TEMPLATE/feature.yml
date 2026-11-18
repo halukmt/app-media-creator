@@ -1,0 +1,55 @@
+name: Feature or improvement
+description: A new feature or an improvement of app-media-creator
+title: "[Feature] "
+labels: ["enhancement"]
+projects: ["halukmt/10"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Maintainers: after creating, set exactly one `size:*` and one `prio:*` label and fill the project fields Priority and Size.
+  - type: textarea
+    id: goal
+    attributes:
+      label: Goal
+      description: What should be achieved, and for whom?
+    validations:
+      required: true
+  - type: dropdown
+    id: targets
+    attributes:
+      label: Targets
+      multiple: true
+      options:
+        - Apple App Store
+        - Google Play
+        - Web / social
+        - Not target-specific
+  - type: dropdown
+    id: locales
+    attributes:
+      label: Locales
+      description: Which media languages does this cover?
+      multiple: true
+      options:
+        - All 6 (de-DE, en-US, es-ES, it-IT, fr-FR, tr-TR)
+        - de-DE
+        - en-US
+        - es-ES
+        - it-IT
+        - fr-FR
+        - tr-TR
+        - Not language-specific
+  - type: textarea
+    id: criteria
+    attributes:
+      label: Acceptance criteria
+      description: How do we know it is done? One line per criterion.
+      placeholder: "- [ ] ..."
+    validations:
+      required: true
+  - type: textarea
+    id: notes
+    attributes:
+      label: Notes and dependencies
+      description: Sources, specs, "Depends on #…", open questions

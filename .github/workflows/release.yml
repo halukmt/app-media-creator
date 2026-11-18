@@ -1,0 +1,72 @@
+name: Release
+
+# On every push to main (the /release merge commit): tag vX.Y.Z and create the GitHub release
+# with the CHANGELOG section. The /release skill prepares CHANGELOG and package.json on dev;
+# tags are never set by hand. npm publish is added in milestone M7.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash
+
+env:
+  NODE_VERSION: '24'
+
+jobs:
+  release:
+    name: Tag and GitHub release
+    if: github.ref_name == 'main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v7
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      # Before the first release (no dated version in the CHANGELOG) there is nothing to tag:
+      # skip instead of failing. Pushes to main before 0.1.0 are setup or history fixes.
+      - name: Determine version
+        id: version
+        run: |
+          if ! version=$(node scripts/check-release.mjs --version); then
+            echo "::notice::No released version in CHANGELOG yet, nothing to tag."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "skip=false" >> "$GITHUB_OUTPUT"
+          echo "tag=v$version" >> "$GITHUB_OUTPUT"
+          echo "Version: $version"
+
+      - name: Release check
+        if: steps.version.outputs.skip == 'false'
+        run: node scripts/check-release.mjs
+
+      - name: Create tag and release
+        if: steps.version.outputs.skip == 'false'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.version.outputs.tag }}
+        run: |
+          # A push without a new version (e.g. a re-run) must not fail or release twice.
+          if git rev-parse -q --verify "refs/tags/$TAG" >/dev/null; then
+            echo "::notice::Tag $TAG already exists, no new release."
+            exit 0
+          fi
+          node scripts/check-release.mjs --notes > "$RUNNER_TEMP/notes.md"
+          gh release create "$TAG" --target "$GITHUB_SHA" --title "$TAG" --notes-file "$RUNNER_TEMP/notes.md"
+          echo "::notice::Release $TAG created."

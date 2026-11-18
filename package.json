@@ -1,0 +1,70 @@
+{
+  "name": "app-media-creator",
+  "version": "0.0.0",
+  "description": "Generate every media asset for the App Store, Google Play and the web from a logo, screenshots and a video.",
+  "license": "MIT",
+  "author": "halukmt",
+  "type": "module",
+  "private": true,
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "bin": {
+    "app-media-creator": "dist/cli/index.js"
+  },
+  "files": [
+    "dist/",
+    "skills/",
+    "frames/",
+    "LICENSE",
+    "README.md",
+    "CHANGELOG.md"
+  ],
+  "keywords": [
+    "app-store",
+    "google-play",
+    "screenshots",
+    "app-icon",
+    "favicon",
+    "app-preview",
+    "aso",
+    "claude-code"
+  ],
+  "scripts": {
+    "dev": "node scripts/dev.mjs",
+    "dev:web": "vite",
+    "dev:server": "tsx watch src/cli/index.ts --no-open",
+    "build": "npm run build:web && npm run build:node",
+    "build:web": "vite build",
+    "build:node": "tsc -p tsconfig.node.json",
+    "start": "node dist/cli/index.js",
+    "check": "tsc -p tsconfig.node.json --noEmit && tsc -p tsconfig.web.json --noEmit && tsc -p tsconfig.test.json",
+    "check:inventory": "node scripts/check-inventory.mjs",
+    "check:release": "node scripts/check-release.mjs",
+    "check:all": "node scripts/check-all.mjs",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:e2e": "playwright test"
+  },
+  "dependencies": {
+    "@hono/node-server": "^2.1.9",
+    "hono": "^4.13.19"
+  },
+  "devDependencies": {
+    "@axe-core/playwright": "^4.14.0",
+    "@playwright/test": "^1.65.1",
+    "@tailwindcss/vite": "^4.3.5",
+    "@types/node": "^26.6.6",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^6.3.0",
+    "daisyui": "^5.8.1",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
+    "tailwindcss": "^4.3.5",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.8",
+    "vitest": "^5.1.1"
+  }
+}

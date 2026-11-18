@@ -1,0 +1,36 @@
+name: Bug
+description: Something in app-media-creator does not work as expected
+title: "[Bug] "
+labels: ["bug"]
+projects: ["halukmt/10"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Maintainers: after creating, set exactly one `size:*` and one `prio:*` label and fill the project fields Priority and Size.
+  - type: input
+    id: area
+    attributes:
+      label: Area
+      placeholder: Logo / Screenshots / Video / Store texts / Export / CLI
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: "1. ...\n2. ..."
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected and actual result
+      description: For media issues include target, device, locale and the expected size or limit.
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: Environment
+      placeholder: app-media-creator 0.1.0, Node 22, Windows 11, Chrome

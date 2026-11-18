@@ -1,0 +1,41 @@
+schema: spec-driven
+
+# Project context, shown when creating artifacts and during apply.
+# Canonical project rules live in .github/copilot-instructions.md (imported by CLAUDE.md).
+# Keep this block short and do not duplicate those rules here.
+context: |
+  Language: English. All artifacts are written in English.
+  Project: app-media-creator, a local tool that turns a logo, screenshots and a video (or a URL / repo)
+  into App Store, Google Play and web/social media assets in 6 locales (de-DE, en-US, es-ES, it-IT, fr-FR, tr-TR).
+  Stack: Node 22+ ESM, TypeScript strict, Hono server, Vite + React + Tailwind 4 + DaisyUI 5 UI,
+  server-side rendering (satori, resvg, sharp), ffmpeg for video, Vitest + Playwright.
+  Every change belongs to exactly one GitHub issue. The folder name starts with the issue number.
+  Rules: .github/copilot-instructions.md and .claude/rules/*.md. Store specs: src/core/specs/ and
+  .claude/research/2026-11-18_store-media-specs.md.
+
+rules:
+  proposal:
+    - 'Starts with the line "Issue: #<n>" and takes goal and acceptance criteria from the issue'
+    - At most 2 pages, with a section "Not in this change"
+    - States which targets (App Store, Google Play, web) and which locales the change covers
+  specs:
+    - Every requirement has at least one WHEN/THEN scenario that a Vitest or Playwright test can cover
+    - Describe behaviour only, no framework, library or component names
+    - Media requirements name the exact output (size, format, limits) and reference the spec catalogue entry
+  design:
+    - For UI work, design.md contains the reuse map of the component-architect
+    - New components are listed with a one-line reason (and rejected alternative) in src/web/components/INVENTORY.md before the file is created
+    - A section "Review log" as a table (source, finding, severity, decision, status) collects all findings from design-critic, code-review and security-review
+  tasks:
+    - Every task states how its completion is verified
+    - The last task group is always the verification loop (build, check, check:all, test, test:e2e, code-review, design-critic for UI, security-review for server or file handling)
+
+operations:
+  apply:
+    guidance:
+      - Mobile first, build and check at 375 px
+      - Localized output must be tested at least for de-DE and tr-TR
+      - Never push to main, never add third-party network requests to the UI
+  archive:
+    guidance:
+      - Summarize open items for Haluk (task-haluk sub-issues), unverified specs and real store upload tests still to do
