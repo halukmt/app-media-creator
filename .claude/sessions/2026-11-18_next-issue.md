@@ -62,3 +62,11 @@
 - `autoOrient()` in all logo render paths; `loadLogo` reports the displayed size.
 - Haluk enabled all 7 built-in workflows on project 10 and will delete project 11. Checked: "Pull request linked"
   did not override the loop's "In review" status on #38; PRs are not auto-added to the board.
+
+## #6 Logo pack: App Store icon set — done (PR #40)
+
+- `apple/shared/icon/` (app-icon, app-icon-dark, app-icon-tinted) and `apple/shared/icon-composer/` (background, foreground).
+- Logo box 40–80 % (default 70 %); palette endpoint for background suggestions (UI #10).
+- Shared helpers: `generators/logo.ts` (newest logo, GeneratorError), `generators/outputs.ts` (fixedSizes, squareSize,
+  assertValidOutputs). Routes pass values; generators validate.
+- Bash heredocs with apostrophes failed twice in the Bash tool; write multi-line scripts as files instead.
