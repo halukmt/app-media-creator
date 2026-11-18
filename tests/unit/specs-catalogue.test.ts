@@ -107,3 +107,12 @@ describe('App icon appearances and Icon Composer layers', () => {
     for (const id of ['apple.icon-dark', 'apple.icon-tinted']) expect(getSpec(id)).toMatchObject({ alpha: 'allowed', verified: false, required: false });
   });
 });
+
+describe('Android launcher resources share one folder', () => {
+  test('describes ic_launcher.xml as an XML document in android-res', () => {
+    expect(getSpec('google.adaptive-icon.xml')).toMatchObject({ kind: 'document', formats: ['xml'], folder: 'android-res' });
+    for (const id of ['google.adaptive-icon.foreground', 'google.adaptive-icon.background', 'google.adaptive-icon.monochrome', 'google.launcher-icon']) {
+      expect(getSpec(id).folder, id).toBe('android-res');
+    }
+  });
+});

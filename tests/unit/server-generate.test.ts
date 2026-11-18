@@ -80,3 +80,17 @@ describe('The generate API builds the App Store icons and offers the logo palett
     expect(body.colors[0]).toMatch(/^#[0-9a-f]{6}$/);
   });
 });
+
+describe('The generate API builds the Android icons', () => {
+  test('generates the Play icon and the launcher resources', async () => {
+    const app = await appFactory(true);
+    const response = await app.request('http://localhost:4790/api/generate/android-icons', { method: 'POST', body: JSON.stringify({ background: '#222222' }) });
+    expect(response.status).toBe(201);
+    expect(((await response.json()) as unknown[]).length).toBe(22);
+  });
+
+  test('asks for a logo with 400 when none was uploaded', async () => {
+    const response = await (await appFactory(false)).request('http://localhost:4790/api/generate/android-icons', { method: 'POST' });
+    expect(response.status).toBe(400);
+  });
+});

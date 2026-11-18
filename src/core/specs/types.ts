@@ -29,7 +29,8 @@ export type MediaFormat =
   | 'm4v'
   | 'json'
   | 'html'
-  | 'txt';
+  | 'txt'
+  | 'xml';
 
 /** Whether a file may, must or must not have an alpha channel. */
 export type AlphaRule = 'forbidden' | 'allowed' | 'required';

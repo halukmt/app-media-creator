@@ -14,6 +14,8 @@ export interface OutputEntry {
   order: number;
   /** Safe base name without extension. */
   name: string;
+  /** Optional folder below the asset folder, e.g. an Android density folder `mipmap-hdpi`. */
+  subfolder?: string;
   /** Path relative to the output folder, with forward slashes. */
   path: string;
   /** True when the file was made from the source-language input because the locale had none. */
@@ -48,6 +50,15 @@ export function cleanOutputName(name: string): string {
 }
 
 export type FileLocation = 'own' | 'missing' | 'foreign';
+
+/** Throws when a folder resolves (through links) to a place outside the output folder. */
+async function assertRealFolderInside(folder: string, outputDir: string): Promise<void> {
+  const [real, root] = await Promise.all([realpath(folder), realpath(outputDir)]);
+  const relative = path.relative(root, real);
+  if (relative.startsWith('..') || path.isAbsolute(relative)) {
+    throw new Error(`${path.relative(outputDir, folder)} links outside the output folder`);
+  }
+}
 
 /**
  * Where a registered file really is: 'own' for a regular file inside the output folder, 'missing' when absent,
@@ -88,7 +99,11 @@ export interface OutputPathOptions {
   order: number;
   name: string;
   extension: string;
+  /** One extra folder level below the asset folder: lower-case letters, digits and dashes. */
+  subfolder?: string;
 }
+
+const SUBFOLDER = /^[a-z0-9][a-z0-9-]{0,40}$/;
 
 /**
  * Path of a generated file relative to the output folder.
@@ -102,14 +117,18 @@ export function outputPath(spec: SpecEntry, options: OutputPathOptions): string 
   if (!Number.isInteger(options.order) || options.order < 1 || options.order > 99) {
     throw new Error(`Order must be between 1 and 99, got ${options.order}`);
   }
+  if (options.subfolder !== undefined && !SUBFOLDER.test(options.subfolder)) {
+    throw new Error(`Invalid subfolder: ${options.subfolder}`);
+  }
+  const sub = options.subfolder ? `/${options.subfolder}` : '';
   if (spec.localized) {
     if (!options.locale) throw new Error(`${spec.id} is localized and needs a locale`);
     const locale = getLocale(options.locale).id;
     const nn = String(options.order).padStart(2, '0');
-    return `${spec.target}/${locale}/${segmentFor(spec)}/${nn}-${name}.${extension}`;
+    return `${spec.target}/${locale}/${segmentFor(spec)}${sub}/${nn}-${name}.${extension}`;
   }
   if (options.locale) throw new Error(`${spec.id} is shared and must not have a locale`);
-  return `${spec.target}/shared/${segmentFor(spec)}/${name}.${extension}`;
+  return `${spec.target}/shared/${segmentFor(spec)}${sub}/${name}.${extension}`;
 }
 
 /**
@@ -124,12 +143,14 @@ function checkEntry(raw: unknown): OutputEntry | string {
   try {
     const spec = getSpec(entry.specId);
     if (entry.locale !== undefined && !isLocaleId(entry.locale)) return `${entry.path}: unsupported locale`;
+    if (entry.subfolder !== undefined && typeof entry.subfolder !== 'string') return `${entry.path}: subfolder must be text`;
     const extension = path.posix.extname(entry.path).slice(1);
     const expected = outputPath(spec, {
       ...(entry.locale ? { locale: entry.locale } : {}),
       order: Number(entry.order),
       name: entry.name,
       extension,
+      ...(entry.subfolder !== undefined ? { subfolder: entry.subfolder } : {}),
     });
     if (expected !== entry.path) return `${entry.path}: does not match the output layout (expected ${expected})`;
     return {
@@ -137,6 +158,7 @@ function checkEntry(raw: unknown): OutputEntry | string {
       ...(entry.locale ? { locale: entry.locale } : {}),
       order: Number(entry.order),
       name: entry.name,
+      ...(entry.subfolder !== undefined ? { subfolder: entry.subfolder } : {}),
       path: entry.path,
       fallbackInput: entry.fallbackInput === true,
     };
@@ -192,6 +214,7 @@ export function registerOutputs(workspace: Workspace, list: readonly RegisterOpt
         ...(locale ? { locale } : {}),
         order: options.order,
         name: cleanOutputName(options.name),
+        ...(options.subfolder !== undefined ? { subfolder: options.subfolder } : {}),
         path: relative,
         fallbackInput: options.fallbackInput ?? false,
       };
@@ -213,6 +236,7 @@ export function registerOutputs(workspace: Workspace, list: readonly RegisterOpt
       for (const { entry, bytes } of planned) {
         const target = path.join(workspace.outputDir, entry.path);
         await mkdir(path.dirname(target), { recursive: true });
+        await assertRealFolderInside(path.dirname(target), workspace.outputDir);
         // A target that exists but is not a regular file would only fail at rename time, after others were replaced.
         const existing = await lstat(target).catch(() => undefined);
         if (existing && !existing.isFile()) throw new Error(`${entry.path} exists and is not a file`);
@@ -238,7 +262,11 @@ export function registerOutputs(workspace: Workspace, list: readonly RegisterOpt
       const samePosition = (e: OutputEntry) =>
         e.path === entry.path || (e.specId === entry.specId && e.locale === entry.locale && e.order === entry.order);
       for (const old of entries.filter(samePosition)) {
-        if (old.path !== entry.path) await rm(path.join(workspace.outputDir, old.path), { force: true });
+        if (old.path !== entry.path) {
+          const oldFile = path.join(workspace.outputDir, old.path);
+          // Only delete files that really lie inside the output folder (no links to elsewhere).
+          if ((await locateOutputFile(oldFile, workspace.outputDir)) === 'own') await rm(oldFile, { force: true });
+        }
       }
       entries = [...entries.filter((e) => !samePosition(e)), entry];
     }
