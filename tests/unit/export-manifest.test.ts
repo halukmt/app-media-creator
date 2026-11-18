@@ -177,3 +177,24 @@ describe('registerOutput keeps paths unique per asset', () => {
     expect(readFileSync(path.join(workspace.outputDir, first.path))).toEqual(before);
   });
 });
+
+describe('registerOutputs is all or nothing', () => {
+  test('leaves the previous file and the manifest unchanged when a later target cannot be written', async () => {
+    const { mkdirSync, readFileSync, readdirSync } = await import('node:fs');
+    const workspace = await workspaceFactory();
+    const first = await registerOutput(workspace, { specId: 'web.manifest-icon', order: 1, name: 'one', extension: 'png', bytes: await pngBytes(10, 10) });
+    const before = readFileSync(path.join(workspace.outputDir, first.path));
+    const manifestBefore = readFileSync(path.join(workspace.outputDir, 'manifest.json'), 'utf8');
+    // The second target exists as a folder, so it can never become a file.
+    mkdirSync(path.join(workspace.outputDir, 'web/shared/favicons/two.png'), { recursive: true });
+    await expect(
+      registerOutputs(workspace, [
+        { specId: 'web.manifest-icon', order: 1, name: 'one', extension: 'png', bytes: await pngBytes(30, 30) },
+        { specId: 'web.manifest-icon', order: 2, name: 'two', extension: 'png', bytes: await pngBytes(30, 30) },
+      ]),
+    ).rejects.toThrow('web/shared/favicons/two.png exists and is not a file');
+    expect(readFileSync(path.join(workspace.outputDir, first.path))).toEqual(before);
+    expect(readFileSync(path.join(workspace.outputDir, 'manifest.json'), 'utf8')).toBe(manifestBefore);
+    expect(readdirSync(path.join(workspace.outputDir, 'web/shared/favicons')).filter((n) => n.endsWith('.tmp'))).toEqual([]);
+  });
+});

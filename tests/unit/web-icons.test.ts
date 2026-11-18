@@ -125,6 +125,24 @@ describe('generateWebIcons builds the favicon set from the logo', () => {
     await expect(generateWebIcons(workspace)).rejects.toBeInstanceOf(GeneratorError);
   });
 
+  test('renders a JPEG logo rotated by EXIF upright', async () => {
+    // Stored 120×40 (landscape) with orientation 6, so it is displayed 40×120 (portrait).
+    const jpeg = Uint8Array.from(
+      await sharp({ create: { width: 120, height: 40, channels: 3, background: '#cc2200' } })
+        .jpeg()
+        .withMetadata({ orientation: 6 })
+        .toBuffer(),
+    );
+    const workspace = await withLogo(jpeg, 'logo.jpg');
+    await generateWebIcons(workspace, { background: '#ffffff' });
+    // In the 180 px touch icon the 140 px logo box holds a portrait logo: red at the top centre, white at the far left.
+    const touch = sharp(path.join(folder(workspace), 'apple-touch-icon.png'));
+    const pixel = async (left: number, top: number) =>
+      [...(await touch.clone().extract({ left, top, width: 1, height: 1 }).raw().toBuffer())];
+    expect(await pixel(90, 30)).toEqual([0xcc, 0x22, 0x00]);
+    expect(await pixel(30, 90)).toEqual([0xff, 0xff, 0xff]);
+  });
+
   test('asks for a logo when none was uploaded', async () => {
     const workspace = await workspaceFactory();
     await expect(generateWebIcons(workspace)).rejects.toThrow(new GeneratorError('Upload a logo first'));
