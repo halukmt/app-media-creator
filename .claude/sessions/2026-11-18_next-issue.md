@@ -109,3 +109,13 @@
 - Playwright projects: `export` depends on `settings` (project.spec), `chromium` runs the rest in parallel.
 - Follow-up idea, not filed: stream the ZIP download instead of a Blob once video exports exist.
 - Codex on PR #45: no review yet at the start of this run; check at the next start.
+
+## #11 Screenshot card renderer — done (PR #49)
+
+- `src/core/screenshots/`: SVG → sharp; text as paths via opentype.js + Inter (@fontsource, OFL), glyph by glyph
+  (opentype.js 2 throws on Inter's ccmp table → no ligatures, no kerning). satori/resvg rejected: MPL-2.0.
+  Rules §3/§7/§8 updated (stack line, frames in code, OFL fonts allowed).
+- Catalogue: `defaultSize` (range specs), `maxTextShare`, `discouragesFrames`; `cardDefaultsForSpec`.
+- Renderer validates its input (`CardInputError`), ready for an HTTP route in #12/#14. Landscape cards rejected for now.
+- Golden images in `tests/golden/` (295×640, 3 layouts × de-DE/tr-TR), same result on Windows and Linux CI.
+- Codex on PR #46: race between download result and selection change → #48 (Backlog, P2/XS).
