@@ -13,3 +13,4 @@ entries left under `[Unreleased]` is rejected by `npm run check:release`.
 ### Added
 
 - Project setup: package scaffold, OpenSpec, GitHub issue workflow, Claude Code skills `next-issue` and `release`, CI. (#1)
+- Spec catalogue for all App Store, Google Play and web media assets, locale catalogue for the 6 media languages, and validation of generated images against their spec. (#2)
