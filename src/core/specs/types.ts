@@ -116,6 +116,8 @@ export interface SpecEntry {
    * fixed rules use their first size instead.
    */
   defaultSize?: Size;
+  /** Device width in pixels at 1x for framed website screenshots; 2x doubles it. */
+  baseWidth?: number;
   /** Largest share of the image that overlay text may cover (Google Play screenshots: under 20 %). */
   maxTextShare?: number;
   /** The store discourages device frames around screenshots (Google Play). */

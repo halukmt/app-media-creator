@@ -14,7 +14,7 @@ these per language, with transparency so they sit on any page background, in 1x 
 - A generator that writes, for every selected language with its own uploaded screenshots, PNG and WebP in `1x` and
   `2x` into `web/<locale>/framed-screenshots/<scale>x/NN-<name>.<ext>`. Languages without own screenshots are skipped.
 - Catalogue entries `web.framed-screenshot` (PNG) and `web.framed-screenshot-webp` (WebP): web target, new group
-  `mockup`, alpha required, device width 400 px at 1x (default size), tool-defined with no store limits.
+  `mockup`, alpha required, device width 400 px at 1x (new field `baseWidth`), tool-defined with no store limits.
 - The output manifest treats the subfolder as part of a set position, so `1x` and `2x` files live side by side.
 - API: `POST /api/generate/framed-screenshots` with optional `frame`, `shadow` and `locales`.
 - Shared device drawing moved out of the card renderer; the generic frame's shadow can be switched off. The workspace

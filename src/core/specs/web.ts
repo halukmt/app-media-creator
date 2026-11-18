@@ -160,8 +160,8 @@ export const WEB_SPECS: readonly SpecEntry[] = [
       kind: 'image',
       required: false,
       dimensions: { kind: 'range', minSide: 100, maxSide: 4096, orientation: 'any' },
-      // 1x box: the device (with frame) is 400 px wide; 2x doubles it. Height follows the screenshot.
-      defaultSize: { width: 400, height: 868 },
+      // The device (with frame) is 400 px wide at 1x; the height follows the screenshot.
+      baseWidth: 400,
       formats: [format],
       alpha: 'required',
       localized: true,

@@ -1,5 +1,6 @@
 // conventions: RULE-TESTING-3301
-import { mkdirSync, readFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import path from 'node:path';
 import sharp from 'sharp';
 import { describe, expect, test } from 'vitest';
@@ -49,7 +50,7 @@ describe('renderFramedScreenshot draws a device on transparency', () => {
   test('rejects an unknown frame and a width out of range', async () => {
     const screenshot = await appScreenshot(100, 200);
     await expect(renderFramedScreenshot({ screenshot, frame: 'watch' as 'iphone', deviceWidth: 400 })).rejects.toThrow(/Unknown frame/);
-    await expect(renderFramedScreenshot({ screenshot, frame: 'iphone', deviceWidth: 10 })).rejects.toThrow(/Device width/);
+    await expect(renderFramedScreenshot({ screenshot, frame: 'iphone', deviceWidth: 0 })).rejects.toThrow(/Device width/);
   });
 });
 
@@ -98,6 +99,52 @@ describe('generateFramedScreenshots writes website screenshots per locale', () =
   test('asks for screenshots when the selected locales have none', async () => {
     const workspace = await workspaceFactory();
     await expect(generateFramedScreenshots(workspace, { locales: 'fr-FR' })).rejects.toThrow('Upload screenshots for fr-FR first');
+  });
+
+  test('removes the files of a deleted screenshot when generating again', async () => {
+    const workspace = await workspaceWithScreenshots();
+    const second = await saveInput(workspace, 'en-US', { kind: 'screenshot', locale: 'de-DE', originalName: 'teams.png', bytes: await appScreenshot(590, 1278) });
+    await generateFramedScreenshots(workspace, { locales: 'de-DE' });
+    expect((await readManifest(workspace)).entries).toHaveLength(8);
+
+    rmSync(path.join(workspace.root, second.path));
+    await generateFramedScreenshots(workspace, { locales: 'de-DE' });
+    const paths = (await readManifest(workspace)).entries.map((e) => e.path);
+    expect(paths).toHaveLength(4);
+    expect(paths.some((p) => p.includes('teams'))).toBe(false);
+    expect(existsSync(path.join(workspace.outputDir, 'web/de-DE/framed-screenshots/1x/02-teams.png'))).toBe(false);
+  });
+
+  test('names the file when a screenshot is too tall for the website sizes', async () => {
+    const workspace = await workspaceFactory();
+    await saveInput(workspace, 'en-US', { kind: 'screenshot', locale: 'de-DE', originalName: 'page.png', bytes: await appScreenshot(400, 6000) });
+    await expect(generateFramedScreenshots(workspace, { locales: 'de-DE' })).rejects.toThrow(/page\.png: The framed image would be \d+×\d+ px; allowed are 100 to 4096 px/);
+  });
+
+  test('reports a broken user bezel as a generator error that names it', async () => {
+    const workspace = await workspaceWithScreenshots();
+    mkdirSync(workspace.userFramesDir, { recursive: true });
+    writeFileSync(path.join(workspace.userFramesDir, 'iphone.png'), await sharp({ create: { width: 10, height: 20, channels: 4, background: '#000' } }).png().toBuffer());
+    writeFileSync(path.join(workspace.userFramesDir, 'iphone.json'), '{ broken');
+    await expect(generateFramedScreenshots(workspace)).rejects.toThrow(/frames\/user\/iphone: .*not valid JSON/);
+  });
+});
+
+describe('A user bezel gets the same shadow as the generic frames', () => {
+  test('draws a shadow below the bezel inside the margin', async () => {
+    const dir = mkdtempSync(path.join(tmpdir(), 'amc-frames-'));
+    const bezel = await sharp({ create: { width: 100, height: 200, channels: 4, background: '#202020' } })
+      .composite([{ input: { create: { width: 80, height: 180, channels: 4, background: { r: 0, g: 0, b: 0, alpha: 0 } } }, left: 10, top: 10, blend: 'dest-out' }])
+      .png()
+      .toBuffer();
+    writeFileSync(path.join(dir, 'ipad.png'), bezel);
+    writeFileSync(path.join(dir, 'ipad.json'), JSON.stringify({ width: 100, height: 200, screen: { x: 10, y: 10, width: 80, height: 180 } }));
+    const png = await renderFramedScreenshot({ screenshot: await appScreenshot(160, 360), frame: 'ipad', deviceWidth: 400, userFramesDir: dir });
+    const { width, height } = await inspectImageBytes(png);
+    // Just below the bezel's bottom edge, in the middle: the shadow, partly transparent.
+    const below = await alphaAt(png, Math.round(width / 2), height - Math.round((height - 800) / 2) + 6);
+    expect(below).toBeGreaterThan(0);
+    expect(below).toBeLessThan(255);
   });
 });
 

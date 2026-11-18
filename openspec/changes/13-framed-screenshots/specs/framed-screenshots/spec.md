@@ -21,7 +21,7 @@ device so the shadow is not cut; without a shadow the image SHALL be exactly the
 
 ### Requirement: Website screenshots per language
 The system SHALL generate, for every selected language that has its own uploaded screenshots, one PNG and one WebP per
-screenshot in `1x` (device 400 px wide, from `web.framed-screenshot`) and `2x`, into
+screenshot in `1x` (device 400 px wide, the `baseWidth` of `web.framed-screenshot`) and `2x`, into
 `web/<locale>/framed-screenshots/<scale>x/NN-<name>.<ext>`, valid for `web.framed-screenshot` and
 `web.framed-screenshot-webp`. Selected languages without own screenshots SHALL be skipped; when none of the selected
 languages has screenshots, the request SHALL be rejected with a message to upload screenshots.
@@ -33,6 +33,14 @@ languages has screenshots, the request SHALL be rejected with a message to uploa
 #### Scenario: 2x size
 - **WHEN** website screenshots are generated for German
 - **THEN** the `2x` PNG is twice as wide as the `1x` PNG (±1 px) and both keep their alpha channel
+
+#### Scenario: Deleted screenshot
+- **WHEN** German had the screenshots `start.png` and `teams.png`, `teams.png` is deleted and website screenshots are generated again for German
+- **THEN** only the four files of `start.png` remain for German and the files of `teams.png` are gone
+
+#### Scenario: Screenshot too tall
+- **WHEN** a German screenshot is so tall that the framed image would exceed 4096 px
+- **THEN** the request is rejected with a message that names the file and the allowed sizes
 
 #### Scenario: No screenshots
 - **WHEN** website screenshots are requested for French and French has no screenshots

@@ -1,5 +1,5 @@
 import sharp from 'sharp';
-import { frameBox, frameSvg, screenWidthFor, svgNumber as n, type FrameKind, type UserFrame } from './frames.js';
+import { SHADOW, frameBox, frameSvg, screenWidthFor, svgNumber as n, type FrameKind, type UserFrame } from './frames.js';
 
 /** Thrown for screenshot input that cannot be rendered (bad layout, colour, size, screenshot format …). */
 export class CardInputError extends Error {}
@@ -47,18 +47,24 @@ export interface DeviceOptions {
 /** SVG of a device with the screenshot on its screen: the user's bezel if given, otherwise the generic frame. */
 export async function deviceSvg(options: DeviceOptions): Promise<{ svg: string; height: number }> {
   const { kind, userFrame, box, screenAspect, screenshot } = options;
+  const withShadow = options.shadow ?? true;
   if (userFrame) {
     const scale = box.width / userFrame.width;
     const s = userFrame.screen;
     const image = await screenImage(screenshot, box.x + s.x * scale, box.y + s.y * scale, s.width * scale, s.height * scale);
+    // The same drop shadow as the generic frames, cast by the bezel's own shape (its alpha channel).
+    const shadow = withShadow
+      ? `<defs><filter id="bezel-shadow" x="-20%" y="-20%" width="140%" height="140%"><feDropShadow dx="0" ` +
+        `dy="${n(box.width * SHADOW.offset)}" stdDeviation="${n(box.width * SHADOW.blur)}" flood-color="#000" flood-opacity="0.3"/></filter></defs>`
+      : '';
     const bezel =
       `<image x="${n(box.x)}" y="${n(box.y)}" width="${n(box.width)}" height="${n(userFrame.height * scale)}" preserveAspectRatio="none" ` +
-      `href="data:image/png;base64,${userFrame.png.toString('base64')}"/>`;
-    return { svg: image + bezel, height: userFrame.height * scale };
+      `${withShadow ? 'filter="url(#bezel-shadow)" ' : ''}href="data:image/png;base64,${userFrame.png.toString('base64')}"/>`;
+    return { svg: shadow + image + bezel, height: userFrame.height * scale };
   }
   const screenWidth = screenWidthFor(kind, box.width);
   const frame = frameBox(kind, screenWidth, screenWidth * screenAspect);
   const s = frame.screen;
   const image = await screenImage(screenshot, box.x + s.x, box.y + s.y, s.width, s.height);
-  return { svg: frameSvg(kind, box.x, box.y, frame, image, 'device', options.shadow ?? true), height: frame.outerHeight };
+  return { svg: frameSvg(kind, box.x, box.y, frame, image, 'device', withShadow), height: frame.outerHeight };
 }
