@@ -24,7 +24,10 @@ export async function loadLogo(filePath: string): Promise<LogoSource> {
   const bytes = await readFile(filePath);
   const metadata = await sharp(bytes).metadata();
   if (!metadata.width || !metadata.height) throw new Error('The logo has no readable size');
-  return { bytes, isSvg: metadata.format === 'svg', width: metadata.width, height: metadata.height };
+  // Displayed size: JPEGs with an EXIF orientation store their pixels rotated.
+  const width = metadata.autoOrient?.width ?? metadata.width;
+  const height = metadata.autoOrient?.height ?? metadata.height;
+  return { bytes, isSvg: metadata.format === 'svg', width, height };
 }
 
 /** Density that rasterizes an SVG just large enough for `box` pixels (sharp's SVG base density is 72 dpi). */
@@ -51,6 +54,7 @@ export async function renderLogoSquare(logo: LogoSource, options: SquareOptions)
   // Rasterize SVG slightly above the box size, so edges stay sharp without huge intermediate images.
   const input = logo.isSvg ? sharp(logo.bytes, { density: svgDensity(logo, logoBox) }) : sharp(logo.bytes);
   const fitted = await input
+    .autoOrient()
     .resize(logoBox, logoBox, { fit: 'contain', background: { r: 0, g: 0, b: 0, alpha: 0 } })
     .png()
     .toBuffer();

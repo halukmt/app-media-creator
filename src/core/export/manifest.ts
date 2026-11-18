@@ -207,11 +207,34 @@ export function registerOutputs(workspace: Workspace, list: readonly RegisterOpt
       paths.set(entry.path, entry.specId);
     }
 
+    // Stage: write every file under a temporary name first. If one write fails, nothing has been replaced yet.
+    const staged: { tmp: string; target: string }[] = [];
+    try {
+      for (const { entry, bytes } of planned) {
+        const target = path.join(workspace.outputDir, entry.path);
+        await mkdir(path.dirname(target), { recursive: true });
+        // A target that exists but is not a regular file would only fail at rename time, after others were replaced.
+        const existing = await lstat(target).catch(() => undefined);
+        if (existing && !existing.isFile()) throw new Error(`${entry.path} exists and is not a file`);
+        const tmp = `${target}.${randomBytes(4).toString('hex')}.tmp`;
+        staged.push({ tmp, target });
+        await writeFile(tmp, bytes);
+      }
+    } catch (error) {
+      await Promise.all(staged.map(({ tmp }) => rm(tmp, { force: true })));
+      throw error;
+    }
+
     let entries = manifest.entries;
-    for (const { entry, bytes } of planned) {
-      const target = path.join(workspace.outputDir, entry.path);
-      await mkdir(path.dirname(target), { recursive: true });
-      await writeFile(target, bytes);
+    for (const [index, { entry }] of planned.entries()) {
+      const { tmp, target } = staged[index]!;
+      try {
+        await rename(tmp, target);
+      } catch (error) {
+        // Very unlikely after successful writes; at least leave no temporary files behind.
+        await Promise.all(staged.slice(index).map((s) => rm(s.tmp, { force: true })));
+        throw error;
+      }
       const samePosition = (e: OutputEntry) =>
         e.path === entry.path || (e.specId === entry.specId && e.locale === entry.locale && e.order === entry.order);
       for (const old of entries.filter(samePosition)) {

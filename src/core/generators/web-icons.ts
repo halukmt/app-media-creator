@@ -51,7 +51,7 @@ export async function newestLogo(workspace: Workspace): Promise<string> {
 async function iconSvg(logo: LogoSource, light: HexColor, dark: HexColor): Promise<Buffer> {
   const data = logo.isSvg
     ? `data:image/svg+xml;base64,${logo.bytes.toString('base64')}`
-    : `data:image/png;base64,${(await sharp(logo.bytes).resize(400, 400, { fit: 'contain', background: { r: 0, g: 0, b: 0, alpha: 0 } }).png().toBuffer()).toString('base64')}`;
+    : `data:image/png;base64,${(await sharp(logo.bytes).autoOrient().resize(400, 400, { fit: 'contain', background: { r: 0, g: 0, b: 0, alpha: 0 } }).png().toBuffer()).toString('base64')}`;
   const svg = [
     '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">',
     `<style>.bg{fill:${light}}@media (prefers-color-scheme: dark){.bg{fill:${dark}}}</style>`,
