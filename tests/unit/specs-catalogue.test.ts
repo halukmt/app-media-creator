@@ -92,3 +92,18 @@ describe('Document entries describe files that are not media', () => {
     expect([...folders]).toEqual(['favicons']);
   });
 });
+
+describe('App icon appearances and Icon Composer layers', () => {
+  test('describes the Icon Composer background layer as an opaque 1024 PNG', () => {
+    expect(getSpec('apple.icon-layer-background')).toMatchObject({
+      formats: ['png'],
+      alpha: 'forbidden',
+      folder: 'icon-composer',
+      dimensions: { kind: 'fixed', sizes: [{ width: 1024, height: 1024 }] },
+    });
+  });
+
+  test('allows transparency for the dark and tinted appearances and marks them unverified', () => {
+    for (const id of ['apple.icon-dark', 'apple.icon-tinted']) expect(getSpec(id)).toMatchObject({ alpha: 'allowed', verified: false, required: false });
+  });
+});

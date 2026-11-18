@@ -19,11 +19,15 @@ export interface LogoSource {
   height: number;
 }
 
-/** Reads a logo file; SVG is detected by content, not by extension. Throws for unreadable images. */
+/**
+ * Reads a logo file; SVG is detected by content, not by extension. Decodes it once completely, so a truncated or
+ * corrupt file fails here and not later in a generator. Throws for unreadable images.
+ */
 export async function loadLogo(filePath: string): Promise<LogoSource> {
   const bytes = await readFile(filePath);
   const metadata = await sharp(bytes).metadata();
   if (!metadata.width || !metadata.height) throw new Error('The logo has no readable size');
+  await sharp(bytes).stats();
   // Displayed size: JPEGs with an EXIF orientation store their pixels rotated.
   const width = metadata.autoOrient?.width ?? metadata.width;
   const height = metadata.autoOrient?.height ?? metadata.height;
@@ -43,6 +47,8 @@ export interface SquareOptions {
   logoBox: number;
   /** Flat background colour, or undefined for a transparent background. */
   background?: HexColor;
+  /** Render the logo in grey tones (transparency is kept). */
+  grayscale?: boolean;
 }
 
 /**
@@ -50,14 +56,12 @@ export interface SquareOptions {
  * on a flat colour (no alpha channel in the output) or on transparency.
  */
 export async function renderLogoSquare(logo: LogoSource, options: SquareOptions): Promise<Buffer> {
-  const { size, logoBox, background } = options;
+  const { size, logoBox, background, grayscale } = options;
   // Rasterize SVG slightly above the box size, so edges stay sharp without huge intermediate images.
   const input = logo.isSvg ? sharp(logo.bytes, { density: svgDensity(logo, logoBox) }) : sharp(logo.bytes);
-  const fitted = await input
-    .autoOrient()
-    .resize(logoBox, logoBox, { fit: 'contain', background: { r: 0, g: 0, b: 0, alpha: 0 } })
-    .png()
-    .toBuffer();
+  let pipeline = input.autoOrient().resize(logoBox, logoBox, { fit: 'contain', background: { r: 0, g: 0, b: 0, alpha: 0 } });
+  if (grayscale) pipeline = pipeline.greyscale();
+  const fitted = await pipeline.png().toBuffer();
   const offset = Math.round((size - logoBox) / 2);
   const canvas = sharp({
     create: {
@@ -91,4 +95,37 @@ export function encodeIco(images: { size: number; png: Buffer }[]): Buffer {
     offset += png.length;
   });
   return Buffer.concat([header, directory, ...images.map((image) => image.png)]);
+}
+
+/**
+ * Up to five main colours of the logo, most frequent first, as suggestions for background colours.
+ * Transparent pixels are ignored; colours are grouped in steps of 16 per channel and reported as the group average.
+ */
+export async function logoPalette(logo: LogoSource, count = 5): Promise<HexColor[]> {
+  const input = logo.isSvg ? sharp(logo.bytes, { density: svgDensity(logo, 64) }) : sharp(logo.bytes);
+  const { data, info } = await input
+    .autoOrient()
+    .resize(64, 64, { fit: 'inside' })
+    // Greyscale logos stay in the b-w colour space otherwise; the loop below expects RGBA.
+    .toColourspace('srgb')
+    .ensureAlpha()
+    .raw()
+    .toBuffer({ resolveWithObject: true });
+  const buckets = new Map<number, { n: number; r: number; g: number; b: number }>();
+  for (let i = 0; i < data.length; i += info.channels) {
+    const [r, g, b, a] = [data[i]!, data[i + 1]!, data[i + 2]!, data[i + 3]!];
+    if (a < 128) continue;
+    const key = ((r >> 4) << 8) | ((g >> 4) << 4) | (b >> 4);
+    const bucket = buckets.get(key) ?? { n: 0, r: 0, g: 0, b: 0 };
+    bucket.n += 1;
+    bucket.r += r;
+    bucket.g += g;
+    bucket.b += b;
+    buckets.set(key, bucket);
+  }
+  const hex = (v: number) => Math.round(v).toString(16).padStart(2, '0');
+  return [...buckets.values()]
+    .sort((x, y) => y.n - x.n)
+    .slice(0, count)
+    .map((c) => `#${hex(c.r / c.n)}${hex(c.g / c.n)}${hex(c.b / c.n)}` as HexColor);
 }
