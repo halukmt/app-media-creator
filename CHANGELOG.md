@@ -15,3 +15,4 @@ entries left under `[Unreleased]` is rejected by `npm run check:release`.
 - Project setup: package scaffold, OpenSpec, GitHub issue workflow, Claude Code skills `next-issue` and `release`, CI. (#1)
 - Spec catalogue for all App Store, Google Play and web media assets, locale catalogue for the 6 media languages, and validation of generated images against their spec. (#2)
 - Workspace folder (`.app-media/` or `--workspace`) with project settings, input uploads per locale checked by file content, and a local API that rejects requests from other websites. (#3)
+- Output manifest with a store-ready folder layout, export checklist per target and locale, and ZIP export for one, several or all locales. (#5)

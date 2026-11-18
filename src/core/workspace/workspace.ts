@@ -6,7 +6,7 @@ import { defaultProject, validateProject, type ProjectSettings, type ProjectVali
 
 export const DEFAULT_WORKSPACE_DIR = '.app-media';
 const PROJECT_FILE = 'project.json';
-const FOLDERS = ['inputs', 'jobs', 'output'] as const;
+const FOLDERS = ['inputs', 'jobs', 'output', 'exports'] as const;
 const MAX_NAME_LENGTH = 100;
 
 export interface Workspace {
@@ -15,6 +15,8 @@ export interface Workspace {
   inputsDir: string;
   jobsDir: string;
   outputDir: string;
+  /** ZIP files created by the export. */
+  exportsDir: string;
   projectFile: string;
 }
 
@@ -35,7 +37,7 @@ function defaultName(root: string): string {
 }
 
 /**
- * Opens the workspace folder and creates `project.json`, `inputs/`, `jobs/` and `output/` when missing.
+ * Opens the workspace folder and creates `project.json`, `inputs/`, `jobs/`, `output/` and `exports/` when missing.
  * Existing content is never changed.
  */
 export async function openWorkspace(dir: string): Promise<Workspace> {
@@ -45,6 +47,7 @@ export async function openWorkspace(dir: string): Promise<Workspace> {
     inputsDir: path.join(root, 'inputs'),
     jobsDir: path.join(root, 'jobs'),
     outputDir: path.join(root, 'output'),
+    exportsDir: path.join(root, 'exports'),
     projectFile: path.join(root, PROJECT_FILE),
   };
   for (const folder of FOLDERS) await mkdir(path.join(root, folder), { recursive: true });

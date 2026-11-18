@@ -5,6 +5,7 @@ import { serveStatic } from '@hono/node-server/serve-static';
 import type { PackageInfo } from '../core/package-info.js';
 import type { Workspace } from '../core/workspace/index.js';
 import { localOnly } from './protection.js';
+import { exportRoutes } from './export-routes.js';
 import { workspaceRoutes } from './workspace-routes.js';
 
 export interface AppOptions {
@@ -25,7 +26,10 @@ export function createApp({ webRoot, packageInfo, workspace }: AppOptions): Hono
     c.json({ status: 'ok', name: packageInfo.name, version: packageInfo.version }),
   );
 
-  if (workspace) app.route('/api', workspaceRoutes(workspace));
+  if (workspace) {
+    app.route('/api', workspaceRoutes(workspace));
+    app.route('/api', exportRoutes(workspace));
+  }
 
   app.all('/api/*', (c) => c.json({ error: 'Not found' }, 404));
 
