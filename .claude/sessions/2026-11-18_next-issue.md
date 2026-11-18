@@ -81,3 +81,16 @@
 - Follow-up for Expo icon export filed (Backlog, P2/S).
 - Haluk renamed project 10 and deleted project 11. Asked how Codex feedback is handled; offered to reply on PR
   threads and to check all PRs merged since the last run (not yet in the skill).
+
+## #4 App shell with sections and locale selector — done (PR #43)
+
+- First UI: `layouts/AppShell` (drawer, hash routing `#/<section>`), `pages/ProjectPage`, generic `pages/SectionPage`
+  (locale bar + empty state for the five not-yet-built sections; later issues replace the empty state).
+- Components (inventory): EmptyState, FieldError, LocaleSelector, PageHeader, StatusAlert, TargetCard, TextField.
+  Pure helpers in `src/web/lib/` (sections, locale selection, claim lines, error grouping), UI text in `src/web/i18n/en.ts`.
+- `GET /api/catalogue` (locales + device models); the UI mirrors API types in `src/web/api.ts` (no `import type` from
+  core: the web tsconfig would then check core files that need Node types).
+- Learnings: `alert-soft` fails axe contrast (use solid alerts); sr-only inputs inside button labels need label clicks in
+  Playwright; Playwright wipes `test-results/` on every run; one e2e test per section and width (long tests time out
+  under parallel load); the Play icon unit test asserted per pixel and timed out — now one assertion.
+- Codex on PR #41: no findings.
