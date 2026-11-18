@@ -6,6 +6,7 @@ import sharp from 'sharp';
 import { describe, expect, test } from 'vitest';
 import {
   CARD_LAYOUTS,
+  CardInputError,
   backgroundSvg,
   backgroundsFromPalette,
   balancedWrap,
@@ -14,10 +15,12 @@ import {
   cardSizeForSpec,
   fitText,
   frameForSpec,
+  loadUserFrame,
   renderScreenshotCard,
   textColorFor,
   wrapText,
   type CardLayout,
+  type FrameKind,
   type Measure,
 } from '../../src/core/screenshots/index.js';
 import { getSpec, inspectImageBytes, validateMedia } from '../../src/core/specs/index.js';
@@ -41,6 +44,15 @@ describe('Card text is wrapped and fitted into its box', () => {
     expect(result.brokenWord).toBe(true);
     expect(result.lines.every((line) => mono(line, 10) <= 60)).toBe(true);
     expect(result.lines.join('').replaceAll('-', '')).toBe('Donaudampfschiff');
+  });
+
+  test('keeps words joined by a no-break space on one line', () => {
+    expect(wrapText('Prêt ? Allez', 60, 10, mono).lines).toEqual(['Prêt ?', 'Allez']);
+  });
+
+  test('hyphenates by code point and never splits a surrogate pair', () => {
+    const lines = wrapText('😀😀😀😀😀😀😀😀', 40, 10, mono).lines;
+    expect(lines.join('')).not.toMatch(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])/);
   });
 
   test('shrinks the text until it fits instead of breaking a word', () => {
@@ -153,6 +165,16 @@ describe('Device frames match the screenshot specs', () => {
     for (let i = 0; i < data.length; i += info.channels) if (data[i]! > 240 && data[i + 1]! < 20 && data[i + 2]! > 240) magenta += 1;
     expect(magenta).toBeGreaterThan(1000);
   });
+
+  test('names the file when a user bezel description does not match its PNG', async () => {
+    const dir = mkdtempSync(path.join(tmpdir(), 'amc-frames-'));
+    writeFileSync(path.join(dir, 'ipad.png'), await sharp({ create: { width: 100, height: 140, channels: 4, background: '#ff00ff' } }).png().toBuffer());
+    writeFileSync(path.join(dir, 'ipad.json'), JSON.stringify({ width: 300, height: 420, screen: { x: 10, y: 10, width: 80, height: 120 } }));
+    await expect(loadUserFrame(dir, 'ipad')).rejects.toThrow(/frames\/user\/ipad\.json says 300×420/);
+    writeFileSync(path.join(dir, 'ipad.json'), '{ "width": 100, }');
+    await expect(loadUserFrame(dir, 'ipad')).rejects.toThrow(/ipad\.json is not valid JSON/);
+    expect(await loadUserFrame(dir, '../ipad' as FrameKind)).toBeNull();
+  });
 });
 
 describe('renderScreenshotCard renders store-ready PNGs', () => {
@@ -205,6 +227,29 @@ describe('renderScreenshotCard renders store-ready PNGs', () => {
   test('takes size, frame and text limit from the spec: Google Play without a frame and with the 20 % limit', () => {
     expect(cardDefaultsForSpec(getSpec('google.screenshot.phone'))).toEqual({ width: 1080, height: 1920, frame: 'none', maxTextShare: 0.2 });
     expect(cardDefaultsForSpec(getSpec('apple.screenshot.ipad-13'))).toEqual({ width: 2064, height: 2752, frame: 'ipad' });
+  });
+
+  test('draws decomposed Turkish letters (macOS NFD) like the precomposed ones', async () => {
+    const card = (headline: string) =>
+      renderScreenshotCard({ width: 300, height: 650, layout: 'text-top', headline, background: gradientBackground(), frame: 'none' });
+    const [nfc, nfd] = await Promise.all([card('şampiyonluğa'), card('şampiyonluğa'.normalize('NFD'))]);
+    expect(nfd.warnings).toEqual([]);
+    expect(nfd.png.equals(nfc.png)).toBe(true);
+  });
+
+  test('rejects input that does not belong into an SVG', async () => {
+    const base = { width: 300, height: 650, layout: 'text-top', headline: 'Hi', background: gradientBackground(), frame: 'iphone' } as const;
+    await expect(renderScreenshotCard({ ...base, background: { kind: 'solid', color: '#fff" onload="x' as `#${string}` } })).rejects.toBeInstanceOf(CardInputError);
+    await expect(renderScreenshotCard({ ...base, layout: 'sideways' as CardLayout })).rejects.toThrow(/Unknown layout/);
+    await expect(renderScreenshotCard({ ...base, width: 650, height: 300 })).rejects.toThrow(/Landscape/);
+    await expect(renderScreenshotCard({ ...base, width: 300.5 })).rejects.toThrow(/whole pixels/);
+  });
+
+  test('accepts only raster screenshots, not SVG', async () => {
+    const svg = new TextEncoder().encode('<svg xmlns="http://www.w3.org/2000/svg" width="10" height="20"><rect width="10" height="20"/></svg>');
+    await expect(
+      renderScreenshotCard({ width: 300, height: 650, layout: 'text-top', headline: 'Hi', background: gradientBackground(), frame: 'iphone', screenshot: svg }),
+    ).rejects.toThrow(/PNG, JPEG or WebP/);
   });
 
   test('rejects a range spec without a default size', () => {

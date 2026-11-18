@@ -47,18 +47,36 @@ function createCardFont(weight: FontWeight): CardFont {
   const primary = fonts[0] as Font;
   const tracking = TRACKING[weight];
 
+  // Glyph lookups and advances are cached per character: text fitting measures the same strings many times.
+  const glyphs = new Map<string, { font: Font; glyph: Glyph } | null>();
+  const advances = new Map<string, number>();
+
   function glyphOf(char: string): { font: Font; glyph: Glyph } | null {
+    if (glyphs.has(char)) return glyphs.get(char) ?? null;
+    let found: { font: Font; glyph: Glyph } | null = null;
     for (const font of fonts) {
       const index = font.charToGlyphIndex(char);
-      if (index > 0) return { font, glyph: font.glyphs.get(index) };
+      if (index > 0) {
+        found = { font, glyph: font.glyphs.get(index) };
+        break;
+      }
     }
-    return null;
+    glyphs.set(char, found);
+    return found;
   }
 
-  function advance(char: string, size: number): number {
-    const found = glyphOf(char) ?? { font: primary, glyph: primary.glyphs.get(0) };
-    return ((found.glyph.advanceWidth ?? 0) / found.font.unitsPerEm) * size + tracking * size;
+  /** Advance of a character in em (font size 1), including tracking. */
+  function advanceEm(char: string): number {
+    let em = advances.get(char);
+    if (em === undefined) {
+      const found = glyphOf(char) ?? { font: primary, glyph: primary.glyphs.get(0) };
+      em = (found.glyph.advanceWidth ?? 0) / found.font.unitsPerEm + tracking;
+      advances.set(char, em);
+    }
+    return em;
   }
+
+  const advance = (char: string, size: number) => advanceEm(char) * size;
 
   return {
     measure(text, size) {

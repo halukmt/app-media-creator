@@ -1,6 +1,7 @@
 import { existsSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
+import sharp from 'sharp';
 import { z } from 'zod';
 
 /**
@@ -98,7 +99,13 @@ export function outerAspect(kind: FrameKind, screenAspect: number): number {
   return box.outerHeight / box.outerWidth;
 }
 
-const n = (value: number) => value.toFixed(2);
+/** A number for SVG markup: always a plain decimal, so nothing but digits reaches an attribute. */
+export const svgNumber = (value: number) => (Number.isFinite(value) ? value.toFixed(2) : '0');
+const n = svgNumber;
+
+export function isFrameKind(value: unknown): value is FrameKind {
+  return typeof value === 'string' && (FRAME_KINDS as readonly string[]).includes(value);
+}
 
 /**
  * SVG for a device at (x, y) with the screen content drawn by `screen` (SVG elements placed at the screen rectangle).
@@ -151,22 +158,40 @@ export interface UserFrame {
   screen: { x: number; y: number; width: number; height: number };
 }
 
-const userFrameSchema = z.object({
-  width: z.number().positive(),
-  height: z.number().positive(),
-  screen: z.object({ x: z.number().min(0), y: z.number().min(0), width: z.number().positive(), height: z.number().positive() }),
-});
+const userFrameSchema = z
+  .object({
+    width: z.number().int().positive(),
+    height: z.number().int().positive(),
+    screen: z.object({ x: z.number().min(0), y: z.number().min(0), width: z.number().positive(), height: z.number().positive() }),
+  })
+  .refine((f) => f.screen.x + f.screen.width <= f.width && f.screen.y + f.screen.height <= f.height, {
+    message: 'the screen rectangle must lie inside width × height',
+  });
 
 /**
  * Loads `frames/user/<kind>.png` with its `<kind>.json` (`{ width, height, screen: { x, y, width, height } }` in PNG
- * pixels). Returns null when the user has not added one for this kind.
+ * pixels). Returns null when the user has not added one for this kind. Throws with the file name when the JSON is
+ * broken or does not match the PNG.
  */
 export async function loadUserFrame(dir: string, kind: FrameKind): Promise<UserFrame | null> {
-  if (kind === 'none') return null;
+  // `kind` becomes part of a file name: only the known kinds are ever looked up.
+  if (!isFrameKind(kind) || kind === 'none') return null;
   const png = path.join(dir, `${kind}.png`);
   const json = path.join(dir, `${kind}.json`);
   if (!existsSync(png) || !existsSync(json)) return null;
-  const parsed = userFrameSchema.safeParse(JSON.parse(await readFile(json, 'utf8')));
-  if (!parsed.success) throw new Error(`frames/user/${kind}.json is invalid: ${parsed.error.issues.map((i) => i.message).join('; ')}`);
-  return { png: await readFile(png), ...parsed.data };
+  const label = `frames/user/${kind}.json`;
+  let raw: unknown;
+  try {
+    raw = JSON.parse(await readFile(json, 'utf8'));
+  } catch (error) {
+    throw new Error(`${label} is not valid JSON: ${(error as Error).message}`);
+  }
+  const parsed = userFrameSchema.safeParse(raw);
+  if (!parsed.success) throw new Error(`${label} is invalid: ${parsed.error.issues.map((i) => i.message).join('; ')}`);
+  const bytes = await readFile(png);
+  const metadata = await sharp(bytes).metadata();
+  if (metadata.format !== 'png' || metadata.width !== parsed.data.width || metadata.height !== parsed.data.height) {
+    throw new Error(`${label} says ${parsed.data.width}×${parsed.data.height}, but ${kind}.png is not a PNG of that size`);
+  }
+  return { png: bytes, ...parsed.data };
 }

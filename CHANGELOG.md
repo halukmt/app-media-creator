@@ -21,6 +21,7 @@ entries left under `[Unreleased]` is rejected by `npm run check:release`.
 - Google Play icon and Android launcher resources from the logo: adaptive layers (foreground, background, monochrome) and legacy icons in all densities plus ic_launcher.xml, ready for app/src/main/res. (#7)
 - App shell: sidebar with Project, Logo, Screenshots, Video, Store texts and Export; a Project screen for stores, device models, languages and claims; one shared language selector (one, several or all languages); empty states that say what to upload and which stores need it. (#4)
 - Export section: overall status and ZIP download for the selected languages (with a confirmation while required files are missing), and a checklist per store grouped by asset with a status per language. (#32)
+- Screenshot card renderer: headline and subline above or below the app screenshot in a generic device frame (iPhone, iPhone Duo, iPad, Android phone and tablet, or your own bezel), three layouts, background presets and logo colours, text fitting for long German and Turkish words, opaque PNG at the exact store size. (#11)
 
 ### Fixed
 

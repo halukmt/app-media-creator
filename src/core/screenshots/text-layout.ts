@@ -15,7 +15,8 @@ export function wrapText(text: string, maxWidth: number, size: number, measure: 
   let brokenWord = false;
 
   for (const paragraph of text.split(/\r?\n/)) {
-    const words = paragraph.split(/\s+/).filter(Boolean);
+    // Only ordinary spaces and tabs break lines; no-break spaces (U+00A0, U+202F, e.g. French "Prêt ?") stay inside a word.
+    const words = paragraph.split(/[ \t\f\v]+/).filter(Boolean);
     if (words.length === 0) {
       lines.push('');
       continue;
@@ -33,15 +34,16 @@ export function wrapText(text: string, maxWidth: number, size: number, measure: 
         continue;
       }
       // The word alone is too wide: break it into pieces that fit, each but the last ending with a hyphen.
+      // Cut by code point, so a surrogate pair is never split (text is NFC-normalised by the renderer).
       brokenWord = true;
-      let rest = word;
-      while (measure(rest, size) > maxWidth && rest.length > 1) {
+      let rest = Array.from(word);
+      while (measure(rest.join(''), size) > maxWidth && rest.length > 1) {
         let cut = rest.length - 1;
-        while (cut > 1 && measure(`${rest.slice(0, cut)}-`, size) > maxWidth) cut -= 1;
-        lines.push(`${rest.slice(0, cut)}-`);
+        while (cut > 1 && measure(`${rest.slice(0, cut).join('')}-`, size) > maxWidth) cut -= 1;
+        lines.push(`${rest.slice(0, cut).join('')}-`);
         rest = rest.slice(cut);
       }
-      line = rest;
+      line = rest.join('');
     }
     lines.push(line);
   }
@@ -109,7 +111,7 @@ export function fitText(input: FitInput): FitResult {
   for (let scale = 1; scale >= input.minScale - 1e-9; scale -= 0.05) {
     const headlineSize = input.headlineSize * scale;
     const sublineSize = input.sublineSize * scale;
-    // Prefer shrinking over breaking a word: skip sizes where a word would have to be broken, unless it is the last try.
+    // Shrinking wins over hyphenating: a size that needs a broken word is only kept if nothing smaller avoids it.
     const head = balancedWrap(input.headline, input.width, headlineSize, input.measureHeadline);
     const sub = input.subline ? balancedWrap(input.subline, input.width, sublineSize, input.measureSubline) : { lines: [], brokenWord: false };
     const height =

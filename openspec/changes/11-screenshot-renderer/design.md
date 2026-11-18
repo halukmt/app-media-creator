@@ -49,3 +49,13 @@ No UI in this change, so no component reuse map.
 
 | Source | Finding | Severity | Decision | Status |
 |---|---|---|---|---|
+| code-review | No-break spaces split words (French "Prêt ?") | minor | Only ordinary spaces and tabs break lines; test | fixed |
+| code-review | Hyphenation could split a surrogate pair | minor | Cut by code point; test | fixed |
+| code-review | Decomposed (NFD) letters drawn as separate accents | minor | NFC before measuring and drawing; test | fixed |
+| code-review | Landscape specs (TV, automotive) produce broken cards | minor | Landscape cards rejected with a clear error until a landscape layout exists | fixed |
+| code-review | User frame JSON not checked against the PNG; bare SyntaxError | minor | Screen rectangle inside bounds, PNG size must match, errors name the file; test | fixed |
+| code-review | Per-card re-reading of user frame and double screenshot decode | minor | Kept: cheap compared to rendering; revisit with batch generation (#12) | won't fix now |
+| code-review | Many measure calls during fitting | minor | Glyph lookup and advance cached per character | fixed |
+| code-review | Duplicate number helper; unused path width | minor | Shared `svgNumber` | fixed |
+| code-review | Dead 3-digit hex branch | minor | Removed | fixed |
+| security-review | No exploitable findings; future HTTP callers need validation of background, size, layout, frame and screenshot format | — | Validation moved into `renderScreenshotCard` (`CardInputError`); `loadUserFrame` only accepts known kinds; screenshots must be PNG, JPEG or WebP; tests | fixed |

@@ -54,10 +54,9 @@ export function isBackground(value: unknown): value is Background {
   );
 }
 
+/** Channels of a `#rrggbb` colour (the only form `isHexColor` accepts). */
 function rgb(color: HexColor): [number, number, number] {
-  const hex = color.slice(1);
-  const full = hex.length === 3 ? [...hex].map((c) => c + c).join('') : hex.slice(0, 6);
-  return [0, 2, 4].map((i) => parseInt(full.slice(i, i + 2), 16)) as [number, number, number];
+  return [1, 3, 5].map((i) => parseInt(color.slice(i, i + 2), 16)) as [number, number, number];
 }
 
 /** Relative luminance (WCAG) of a colour, 0 (black) to 1 (white). */

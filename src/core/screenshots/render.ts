@@ -1,9 +1,21 @@
 import sharp from 'sharp';
 import type { Size, SpecEntry } from '../specs/index.js';
-import { backgroundSvg, textColorFor, type Background } from './backgrounds.js';
+import { backgroundSvg, isBackground, textColorFor, type Background } from './backgrounds.js';
 import { cardFont } from './fonts.js';
-import { DEFAULT_SCREEN_ASPECT, frameBox, frameForSpec, frameSvg, loadUserFrame, outerAspect, screenWidthFor, type FrameKind, type UserFrame } from './frames.js';
-import { LAYOUT_RATIOS, placeCard, type CardLayout } from './layouts.js';
+import {
+  DEFAULT_SCREEN_ASPECT,
+  frameBox,
+  frameForSpec,
+  frameSvg,
+  isFrameKind,
+  loadUserFrame,
+  outerAspect,
+  screenWidthFor,
+  svgNumber,
+  type FrameKind,
+  type UserFrame,
+} from './frames.js';
+import { LAYOUT_RATIOS, isCardLayout, placeCard, type CardLayout } from './layouts.js';
 import { fitText } from './text-layout.js';
 
 export interface CardInput {
@@ -43,7 +55,26 @@ const GAP = 0.3;
 const MIN_TEXT_SCALE = 0.5;
 const PLACEHOLDER = '#e5e5ea';
 
-const n = (value: number) => value.toFixed(2);
+const n = svgNumber;
+/** Largest card edge in pixels; store sizes stay far below. */
+const MAX_EDGE = 8192;
+const SCREENSHOT_FORMATS = new Set(['png', 'jpeg', 'webp']);
+
+/** Thrown for card input that cannot be rendered (bad layout, colour, size, screenshot format …). */
+export class CardInputError extends Error {}
+
+/** Checks every value that ends up in the SVG, so the function is safe to call with request data. */
+function assertCardInput(input: CardInput): void {
+  const edge = (value: number) => Number.isInteger(value) && value > 0 && value <= MAX_EDGE;
+  if (!edge(input.width) || !edge(input.height)) throw new CardInputError(`Card size must be whole pixels up to ${MAX_EDGE}`);
+  if (input.width >= input.height) throw new CardInputError('Landscape cards are not supported yet; use a portrait size');
+  if (!isCardLayout(input.layout)) throw new CardInputError(`Unknown layout: ${String(input.layout)}`);
+  if (!isFrameKind(input.frame)) throw new CardInputError(`Unknown frame: ${String(input.frame)}`);
+  if (!isBackground(input.background)) throw new CardInputError('The background must be a #rrggbb colour or a gradient of two');
+  if (typeof input.headline !== 'string' || (input.subline !== undefined && typeof input.subline !== 'string')) {
+    throw new CardInputError('Headline and subline must be text');
+  }
+}
 
 /** Size the card renderer uses for a screenshot spec: the first fixed size, or the catalogue's default size. */
 export function cardSizeForSpec(spec: SpecEntry): Size {
@@ -67,6 +98,8 @@ export function cardDefaultsForSpec(spec: SpecEntry): { width: number; height: n
 async function screenshotInfo(bytes: Uint8Array | undefined): Promise<{ width: number; height: number } | null> {
   if (!bytes) return null;
   const metadata = await sharp(bytes).metadata();
+  // Raster formats only: an SVG "screenshot" would be parsed by librsvg with its own references.
+  if (!SCREENSHOT_FORMATS.has(metadata.format ?? '')) throw new CardInputError('The screenshot must be a PNG, JPEG or WebP image');
   const width = metadata.autoOrient?.width ?? metadata.width;
   const height = metadata.autoOrient?.height ?? metadata.height;
   if (!width || !height) throw new Error('The screenshot has no readable size');
@@ -116,6 +149,7 @@ async function deviceSvg(
  * screenshot in a device frame. Text is drawn as paths, so the output is identical on every machine.
  */
 export async function renderScreenshotCard(input: CardInput): Promise<CardResult> {
+  assertCardInput(input);
   const { width, height } = input;
   const warnings: CardWarning[] = [];
   const shot = await screenshotInfo(input.screenshot);
@@ -128,9 +162,11 @@ export async function renderScreenshotCard(input: CardInput): Promise<CardResult
   const heavy = cardFont(800);
   const regular = cardFont(500);
   const ratios = LAYOUT_RATIOS[input.layout];
-  const subline = input.subline?.trim() ? input.subline.trim() : undefined;
+  // NFC: decomposed input (e.g. "s" + U+0327 from macOS) becomes the precomposed letters the font has.
+  const headline = input.headline.normalize('NFC').trim();
+  const subline = input.subline?.normalize('NFC').trim() || undefined;
   const fit = fitText({
-    headline: input.headline.trim(),
+    headline,
     ...(subline ? { subline } : {}),
     width: place.text.width,
     height: place.text.height,
@@ -145,7 +181,7 @@ export async function renderScreenshotCard(input: CardInput): Promise<CardResult
   });
   if (fit.overflow) warnings.push({ code: 'text-overflow', message: 'The text does not fit into its area even at the smallest size; shorten it' });
   if (fit.brokenWord) warnings.push({ code: 'word-broken', message: 'A word is too long for one line and was hyphenated; shorten it or add a line break' });
-  const missing = [...new Set([...heavy.missing(input.headline), ...regular.missing(subline ?? '')])];
+  const missing = [...new Set([...heavy.missing(headline), ...regular.missing(subline ?? '')])];
   if (missing.length > 0) warnings.push({ code: 'missing-glyphs', message: `These characters cannot be drawn: ${missing.join(' ')}` });
 
   const color = textColorFor(input.background);
@@ -154,10 +190,10 @@ export async function renderScreenshotCard(input: CardInput): Promise<CardResult
   let blockWidth = 0;
   const drawLines = (lines: string[], size: number, leading: number, font: typeof heavy) => {
     for (const line of lines) {
+      // Centre the glyph box (ascent to descent) inside the line box, and the line inside the text box.
+      const baseline = lineTop + (leading * size - (font.ascent - font.descent) * size) / 2 + font.ascent * size;
       const lineWidth = font.measure(line, size);
       blockWidth = Math.max(blockWidth, lineWidth);
-      // Centre the glyph box (ascent to descent) inside the line box.
-      const baseline = lineTop + (leading * size - (font.ascent - font.descent) * size) / 2 + font.ascent * size;
       textPaths.push(font.path(line, place.text.x + (place.text.width - lineWidth) / 2, baseline, size).path);
       lineTop += leading * size;
     }
