@@ -13,10 +13,11 @@ export interface ChecklistLike {
 }
 
 export interface ChecklistSummary {
+  /** Asset sets (one per asset and language) per status. */
   ok: number;
   warning: number;
   error: number;
-  /** Number of generated files across all items. */
+  /** Number of generated files across all sets. */
   files: number;
 }
 
@@ -39,6 +40,28 @@ export function sortByStatus<T extends { status: CheckStatus }>(items: readonly 
     .map((item, index) => ({ item, index }))
     .sort((a, b) => STATUS_ORDER[a.item.status] - STATUS_ORDER[b.item.status] || a.index - b.index)
     .map(({ item }) => item);
+}
+
+export interface AssetGroup<T> {
+  specId: string;
+  /** Worst status of the group's items. */
+  status: CheckStatus;
+  items: T[];
+}
+
+/**
+ * Groups checklist items by asset (spec id), keeping the first-seen order of assets and of the items inside.
+ * The group status is the worst item status, so an asset with one missing language shows as an error.
+ */
+export function groupBySpec<T extends { specId: string; status: CheckStatus }>(items: readonly T[]): AssetGroup<T>[] {
+  const groups = new Map<string, AssetGroup<T>>();
+  for (const item of items) {
+    const group = groups.get(item.specId) ?? { specId: item.specId, status: 'ok', items: [] };
+    group.items.push(item);
+    if (STATUS_ORDER[item.status] < STATUS_ORDER[group.status]) group.status = item.status;
+    groups.set(item.specId, group);
+  }
+  return [...groups.values()];
 }
 
 /** True when `next` (a status from the server, possibly unknown text) is worse than `shown`. */

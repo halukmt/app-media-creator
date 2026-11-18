@@ -6,7 +6,7 @@ import { unzipSync } from 'fflate';
 import { registerOutput } from '../../src/core/export/index.js';
 import { openWorkspace } from '../../src/core/workspace/index.js';
 import { viewportWidths } from '../factories/web.js';
-import { pngBytes } from '../factories/workspace.js';
+import { pngBytes, projectInputFactory } from '../factories/workspace.js';
 
 // Same folder the Playwright web server starts the CLI with (playwright.config.ts).
 const WORKSPACE = 'test-results/e2e-workspace';
@@ -24,7 +24,9 @@ test.describe('The export of the running tool', () => {
   // One worker seeds the shared workspace; parallel workers would race on output/manifest.json.
   test.describe.configure({ mode: 'serial' });
 
-  test.beforeAll(async () => {
+  test.beforeAll(async ({ request }) => {
+    // The tests need the default project: all 6 languages and every store enabled.
+    expect((await request.put('/api/project', { data: projectInputFactory() })).ok()).toBe(true);
     const workspace = await openWorkspace(WORKSPACE);
     await registerOutput(workspace, { specId: 'apple.icon', order: 1, name: 'app-icon', extension: 'png', bytes: await pngBytes(1024, 1024) });
     const shot = await pngBytes(1206, 2622);
@@ -62,10 +64,11 @@ test.describe('The export of the running tool', () => {
     await selectGermanOnly(page);
 
     const apple = page.getByRole('region', { name: 'Apple App Store' });
-    await apple.getByText(/items OK/).click();
-    const screenshotSet = apple.getByRole('listitem').filter({ hasText: 'iPhone 6.3"' });
-    await expect(screenshotSet).toContainText('German · 1 file');
-    await expect(screenshotSet).toContainText('OK');
+    await apple.getByText(/assets? OK/).click();
+    const languages = apple.getByRole('list', { name: 'Languages of iPhone 6.3" (Dynamic Island medium)' });
+    await expect(languages.getByRole('listitem')).toHaveCount(1);
+    await expect(languages.getByRole('listitem')).toContainText('German');
+    await expect(languages.getByRole('listitem')).toContainText('OK');
     await expect(apple).not.toContainText('Turkish');
 
     const google = page.getByRole('region', { name: 'Google Play' });
@@ -87,6 +90,16 @@ test.describe('The export of the running tool', () => {
     await expect(dialog).toBeHidden();
     await expect(button).toBeFocused();
     expect(downloads).toBe(0);
+  });
+
+  test('closes the confirmation with Escape and returns focus to the Download button', async ({ page }) => {
+    await page.goto('/#/export');
+    const button = page.getByRole('button', { name: 'Download ZIP' });
+    await button.click();
+    await expect(page.getByRole('dialog')).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(page.getByRole('dialog')).toBeHidden();
+    await expect(button).toBeFocused();
   });
 
   test('downloads the ZIP for the selected language after confirming', async ({ page }) => {

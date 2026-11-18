@@ -1,4 +1,4 @@
-import type { ChecklistLike } from '../../src/web/lib/export.js';
+import type { CheckStatus, ChecklistLike } from '../../src/web/lib/export.js';
 import type { TargetId } from '../../src/web/lib/sections.js';
 
 /** The 6 media locale ids in catalogue order. */
@@ -37,6 +37,15 @@ export function checklistFactory(): ChecklistLike {
       { items: [{ status: 'error', files: [] }] },
     ],
   };
+}
+
+/** Checklist items: an iPhone screenshot set that is ok in German and missing in Turkish, then a shared icon. */
+export function localizedItemsFactory(): { specId: string; locale?: string; status: CheckStatus }[] {
+  return [
+    { specId: 'apple.screenshot.iphone-6.3', locale: 'de-DE', status: 'ok' },
+    { specId: 'apple.screenshot.iphone-6.3', locale: 'tr-TR', status: 'error' },
+    { specId: 'apple.icon', status: 'ok' },
+  ];
 }
 
 /** All three targets enabled, with optional overrides. */

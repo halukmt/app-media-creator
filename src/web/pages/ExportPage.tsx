@@ -18,7 +18,6 @@ interface Props {
   focusHeading: boolean;
 }
 
-type Load = { kind: 'loading' } | { kind: 'failed'; messages: string[] } | { kind: 'ready'; checklist: Checklist };
 type Download =
   | { kind: 'idle' }
   | { kind: 'busy' }
@@ -36,41 +35,53 @@ function saveBlob(blob: Blob, fileName: string) {
   document.body.append(link);
   link.click();
   link.remove();
-  setTimeout(() => URL.revokeObjectURL(url), 1000);
+  // Generous delay: some browsers start reading the URL only after the click handler has returned.
+  setTimeout(() => URL.revokeObjectURL(url), 60_000);
 }
 
 /** Export section: checklist per store for the selected languages and the ZIP download. */
 export function ExportPage({ project, locales, selection, onSelectionChange, focusHeading }: Props) {
-  const [load, setLoad] = useState<Load>({ kind: 'loading' });
+  // The last loaded checklist stays visible while a new one loads, so the page does not jump.
+  const [checklist, setChecklist] = useState<Checklist | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string[] | null>(null);
   const [download, setDownload] = useState<Download>({ kind: 'idle' });
   const [confirming, setConfirming] = useState(false);
   const downloadButton = useRef<HTMLButtonElement>(null);
+  // Never send an empty list (the server would reject it); fall back to every project language.
+  const exportLocales = selection.length > 0 ? selection : project.locales;
 
   // Reload whenever the languages or the saved project change; an older request never overwrites a newer one.
   useEffect(() => {
-    if (selection.length === 0) return undefined;
     const controller = new AbortController();
-    setLoad({ kind: 'loading' });
-    fetchChecklist(selection, controller.signal)
-      .then((checklist) => setLoad({ kind: 'ready', checklist }))
+    setLoading(true);
+    setLoadError(null);
+    // A result for another selection must not stay next to the new checklist.
+    setDownload({ kind: 'idle' });
+    fetchChecklist(exportLocales, controller.signal)
+      .then((next) => {
+        setChecklist(next);
+        setLoading(false);
+      })
       .catch((error: unknown) => {
         if (controller.signal.aborted) return;
-        setLoad({ kind: 'failed', messages: error instanceof ApiError ? error.messages : [] });
+        setChecklist(null);
+        setLoading(false);
+        setLoadError(error instanceof ApiError ? error.messages : []);
       });
     return () => controller.abort();
-  }, [selection, project]);
+  }, [exportLocales, project]);
 
-  const checklist = load.kind === 'ready' ? load.checklist : null;
   const summary = checklist ? summarizeChecklist(checklist) : null;
   const noTarget = checklist !== null && checklist.targets.length === 0;
   const nothingGenerated = summary !== null && summary.files === 0;
 
   async function runDownload() {
-    if (!checklist) return;
+    if (!checklist || loading) return;
     setConfirming(false);
     setDownload({ kind: 'busy' });
     try {
-      const result = await downloadExport(selection);
+      const result = await downloadExport(exportLocales);
       const fileName = downloadFileName(result.header, en.export.fallbackFileName);
       saveBlob(result.blob, fileName);
       setDownload({ kind: 'done', fileName, changed: isWorseStatus(result.status, checklist.status) });
@@ -86,8 +97,9 @@ export function ExportPage({ project, locales, selection, onSelectionChange, foc
 
   function cancelDownload() {
     setConfirming(false);
-    downloadButton.current?.focus();
   }
+
+  const ready = checklist !== null && !noTarget && !nothingGenerated;
 
   return (
     <SectionLayout
@@ -97,107 +109,108 @@ export function ExportPage({ project, locales, selection, onSelectionChange, foc
     >
       {noTarget || nothingGenerated ? <SectionEmptyState section="export" project={project} /> : null}
 
-      {!noTarget ? (
-        <section aria-labelledby="export-checklist" className="flex flex-col gap-4" aria-busy={load.kind === 'loading'}>
+      {/* Status and the one primary action first; the per-store details follow below. */}
+      <section aria-labelledby="export-download" className="flex flex-col gap-3">
+        <h2 id="export-download" className="text-xl font-semibold">
+          {en.export.downloadHeading}
+        </h2>
+        {/* Mounted live regions; only the loading line and the one-line summary are announced, never the lists. */}
+        <div role="status">
+          {loading ? (
+            <p className="flex items-center gap-3">
+              <span className="loading loading-spinner" aria-hidden="true" />
+              {en.export.checking}
+            </p>
+          ) : null}
+          {!loading && checklist && summary && !noTarget ? (
+            <StatusAlert announce={false} tone={OVERALL_TONE[checklist.status]} title={en.export.overall[checklist.status]}>
+              <p>{en.export.summary(summary.error, summary.warning)}</p>
+            </StatusAlert>
+          ) : null}
+        </div>
+        <div role="alert">
+          {loadError ? (
+            <StatusAlert announce={false} tone="error" title={en.export.checkFailed}>
+              {loadError.length > 0 ? (
+                <ul className="list-disc pl-5">
+                  {loadError.map((message, index) => (
+                    <li key={index}>{message}</li>
+                  ))}
+                </ul>
+              ) : null}
+            </StatusAlert>
+          ) : null}
+        </div>
+        {checklist && checklist.problems.length > 0 ? (
+          <StatusAlert announce={false} tone="error" title={en.export.problemsTitle}>
+            <ul className="list-disc pl-5 [overflow-wrap:anywhere]">
+              {checklist.problems.map((problem, index) => (
+                <li key={index}>{problem}</li>
+              ))}
+            </ul>
+          </StatusAlert>
+        ) : null}
+        {ready ? (
+          <>
+            {checklist.status === 'error' ? <p className="max-w-prose">{en.export.missingHint}</p> : null}
+            <div>
+              <BusyButton
+                ref={downloadButton}
+                primary
+                busy={download.kind === 'busy'}
+                busyLabel={en.export.downloading}
+                disabled={loading}
+                onClick={requestDownload}
+              >
+                {en.export.download}
+              </BusyButton>
+            </div>
+          </>
+        ) : null}
+        <div role="status">
+          {download.kind === 'done' ? (
+            <StatusAlert announce={false} tone={download.changed ? 'warning' : 'success'} title={en.export.downloaded(download.fileName)}>
+              {download.changed ? <p>{en.export.statusChanged}</p> : null}
+            </StatusAlert>
+          ) : null}
+        </div>
+        <div role="alert">
+          {download.kind === 'failed' ? (
+            <StatusAlert announce={false} tone="error" title={en.export.downloadFailed}>
+              {download.messages.length > 0 ? <p>{download.messages.join(' ')}</p> : null}
+            </StatusAlert>
+          ) : null}
+        </div>
+        <ConfirmDialog
+          open={confirming}
+          title={en.export.confirmTitle}
+          confirmLabel={en.export.confirmAction}
+          cancelLabel={en.export.cancel}
+          onConfirm={() => void runDownload()}
+          onCancel={cancelDownload}
+          returnFocus={downloadButton}
+        >
+          <p>{en.export.confirmBody(summary?.error ?? 0)}</p>
+          <p className="mt-2">{en.export.missingHint}</p>
+        </ConfirmDialog>
+      </section>
+
+      {checklist && !noTarget ? (
+        <section aria-labelledby="export-checklist" className="flex flex-col gap-4">
           <h2 id="export-checklist" className="text-xl font-semibold">
             {en.export.checklistHeading}
           </h2>
-          {/* Mounted live regions; only the summary is announced, never the whole list. */}
-          <div role="status">
-            {load.kind === 'loading' ? (
-              <p className="flex items-center gap-3">
-                <span className="loading loading-spinner" aria-hidden="true" />
-                {en.export.checking}
-              </p>
-            ) : null}
-            {checklist && summary ? (
-              <StatusAlert announce={false} tone={OVERALL_TONE[checklist.status]} title={en.export.overall[checklist.status]}>
-                <p>{en.export.summary(summary.error, summary.warning)}</p>
-                {checklist.problems.length > 0 ? (
-                  <>
-                    <p className="mt-2 font-semibold">{en.export.problemsTitle}</p>
-                    <ul className="list-disc pl-5">
-                      {checklist.problems.map((problem) => (
-                        <li key={problem}>{problem}</li>
-                      ))}
-                    </ul>
-                  </>
-                ) : null}
-              </StatusAlert>
-            ) : null}
+          <div className="grid grid-cols-1 gap-4" aria-busy={loading}>
+            {checklist.targets.map((target) => (
+              <ChecklistCard
+                key={target.target}
+                title={en.targets[target.target]}
+                status={target.status}
+                items={target.items}
+                locales={locales}
+              />
+            ))}
           </div>
-          <div role="alert">
-            {load.kind === 'failed' ? (
-              <StatusAlert announce={false} tone="error" title={en.export.checkFailed}>
-                {load.messages.length > 0 ? (
-                  <ul className="list-disc pl-5">
-                    {load.messages.map((message) => (
-                      <li key={message}>{message}</li>
-                    ))}
-                  </ul>
-                ) : null}
-              </StatusAlert>
-            ) : null}
-          </div>
-          {checklist ? (
-            <div className="grid grid-cols-1 gap-4">
-              {checklist.targets.map((target) => (
-                <ChecklistCard
-                  key={target.target}
-                  title={en.targets[target.target]}
-                  status={target.status}
-                  items={target.items}
-                  locales={locales}
-                />
-              ))}
-            </div>
-          ) : null}
-        </section>
-      ) : null}
-
-      {checklist && !noTarget && !nothingGenerated ? (
-        <section aria-labelledby="export-download" className="flex flex-col gap-3">
-          <h2 id="export-download" className="text-xl font-semibold">
-            {en.export.downloadHeading}
-          </h2>
-          {checklist.status === 'error' ? <p className="max-w-prose">{en.export.missingHint}</p> : null}
-          <div>
-            <BusyButton
-              ref={downloadButton}
-              primary
-              busy={download.kind === 'busy'}
-              busyLabel={en.export.downloading}
-              disabled={load.kind !== 'ready'}
-              onClick={requestDownload}
-            >
-              {en.export.download}
-            </BusyButton>
-          </div>
-          <div role="status">
-            {download.kind === 'done' ? (
-              <StatusAlert announce={false} tone={download.changed ? 'warning' : 'success'} title={en.export.downloaded(download.fileName)}>
-                {download.changed ? <p>{en.export.statusChanged}</p> : null}
-              </StatusAlert>
-            ) : null}
-          </div>
-          <div role="alert">
-            {download.kind === 'failed' ? (
-              <StatusAlert announce={false} tone="error" title={en.export.downloadFailed}>
-                {download.messages.length > 0 ? <p>{download.messages.join(' ')}</p> : null}
-              </StatusAlert>
-            ) : null}
-          </div>
-          <ConfirmDialog
-            open={confirming}
-            title={en.export.confirmTitle}
-            confirmLabel={en.export.confirmAction}
-            cancelLabel={en.export.cancel}
-            onConfirm={() => void runDownload()}
-            onCancel={cancelDownload}
-          >
-            <p>{en.export.confirmBody(summary?.error ?? 0)}</p>
-            <p className="mt-2">{en.export.missingHint}</p>
-          </ConfirmDialog>
         </section>
       ) : null}
     </SectionLayout>

@@ -64,7 +64,8 @@ async function apiError(response: Response): Promise<ApiError> {
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(path, init);
   if (!response.ok) throw await apiError(response);
-  return (await response.json()) as T;
+  // An empty or non-JSON success body becomes null instead of a SyntaxError.
+  return (await response.json().catch(() => null)) as T;
 }
 
 export function fetchCatalogue(): Promise<Catalogue> {

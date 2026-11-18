@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, type ReactNode } from 'react';
+import { useEffect, useId, useRef, type ReactNode, type RefObject } from 'react';
 import { en } from '../i18n/en';
 
 interface Props {
@@ -10,13 +10,15 @@ interface Props {
   onConfirm: () => void;
   /** Called for Cancel, Escape and a click on the backdrop. */
   onCancel: () => void;
+  /** Gets focus after the dialog has closed (the page is no longer inert then), usually the control that opened it. */
+  returnFocus?: RefObject<HTMLElement | null>;
 }
 
 /**
  * Modal confirmation on the native `<dialog>`: the browser keeps focus inside, makes the page inert and closes on
- * Escape. Focus starts on Cancel, the safe choice. The caller returns focus to the control that opened it.
+ * Escape. Focus starts on Cancel, the safe choice, and goes to `returnFocus` after closing.
  */
-export function ConfirmDialog({ open, title, children, confirmLabel, cancelLabel, onConfirm, onCancel }: Props) {
+export function ConfirmDialog({ open, title, children, confirmLabel, cancelLabel, onConfirm, onCancel, returnFocus }: Props) {
   const dialog = useRef<HTMLDialogElement>(null);
   const cancel = useRef<HTMLButtonElement>(null);
   const id = useId();
@@ -38,9 +40,11 @@ export function ConfirmDialog({ open, title, children, confirmLabel, cancelLabel
       className="modal modal-bottom sm:modal-middle"
       aria-labelledby={`${id}-title`}
       aria-describedby={`${id}-body`}
-      // Escape closes the native dialog; keep React state in sync.
+      // Every way out (Cancel, Escape, backdrop, closing after confirm) ends here: sync React state for a cancel and
+      // return focus now that the page is no longer inert.
       onClose={() => {
         if (open) onCancel();
+        returnFocus?.current?.focus();
       }}
     >
       <div className="modal-box">
@@ -51,7 +55,7 @@ export function ConfirmDialog({ open, title, children, confirmLabel, cancelLabel
           {children}
         </div>
         <div className="modal-action">
-          <button ref={cancel} type="button" className="btn min-h-11" onClick={onCancel}>
+          <button ref={cancel} type="button" className="btn min-h-11" onClick={() => dialog.current?.close()}>
             {cancelLabel}
           </button>
           <button type="button" className="btn btn-primary min-h-11" onClick={onConfirm}>

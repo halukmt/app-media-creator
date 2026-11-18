@@ -11,8 +11,8 @@ import {
 } from '../../src/web/lib/locale-selection.js';
 import { fieldError, groupProjectErrors } from '../../src/web/lib/errors.js';
 import { sectionFromHash, sectionHref, targetsNeeding } from '../../src/web/lib/sections.js';
-import { downloadFileName, isWorseStatus, sortByStatus, summarizeChecklist } from '../../src/web/lib/export.js';
-import { allLocaleIds, checklistFactory, enabledTargets } from '../factories/web.js';
+import { downloadFileName, groupBySpec, isWorseStatus, sortByStatus, summarizeChecklist } from '../../src/web/lib/export.js';
+import { allLocaleIds, checklistFactory, enabledTargets, localizedItemsFactory } from '../factories/web.js';
 
 describe('Section routing follows the location hash', () => {
   test('reads the section from a hash', () => {
@@ -108,6 +108,18 @@ describe('The Export section summarizes the checklist', () => {
   test('lists errors first, then warnings, then ok items, keeping their order', () => {
     const items = checklistFactory().targets.flatMap((target) => target.items);
     expect(sortByStatus(items).map((item) => item.status)).toEqual(['error', 'warning', 'ok']);
+  });
+
+  test('groups the language sets of one asset and gives the group the worst status', () => {
+    const groups = groupBySpec(localizedItemsFactory());
+    expect(groups.map((group) => [group.specId, group.status, group.items.length])).toEqual([
+      ['apple.screenshot.iphone-6.3', 'error', 2],
+      ['apple.icon', 'ok', 1],
+    ]);
+  });
+
+  test('returns no groups for an empty checklist', () => {
+    expect(groupBySpec([])).toEqual([]);
   });
 
   test('notices when the files got worse while the ZIP was built', () => {
