@@ -82,3 +82,16 @@ the device models (spec id, name, required flag, condition) that a project may s
 #### Scenario: Catalogue content
 - **WHEN** the UI requests the catalogue
 - **THEN** it lists 6 locales including `tr-TR` with the native name "Türkçe", and the App Store devices include `apple.screenshot.iphone-6.3`
+
+### Requirement: Drawer dismissal on narrow screens
+When the sections menu was opened from the top bar, closing it without choosing a section (Escape or a tap outside the
+menu) SHALL return keyboard focus to the menu button. Growing the window to the wide layout while the menu is open
+SHALL leave every control of the page usable.
+
+#### Scenario: Escape returns focus
+- **WHEN** the menu is open on a 375 px wide screen and the user presses Escape
+- **THEN** the menu is hidden and the "Open sections menu" button has focus
+
+#### Scenario: Window grows to the wide layout
+- **WHEN** the menu is open on a 375 px wide screen and the window is resized to 1280 px
+- **THEN** the App name field of the Project screen can be focused and edited

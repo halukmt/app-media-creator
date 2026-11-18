@@ -94,3 +94,9 @@
   Playwright; Playwright wipes `test-results/` on every run; one e2e test per section and width (long tests time out
   under parallel load); the Play icon unit test asserted per pixel and timed out — now one assertion.
 - Codex on PR #41: no findings.
+
+## #44 Review findings from #43 — done (PR #45)
+
+- Codex on PR #43: focus could not return to the menu button while the page was still `inert` (moved into an effect
+  after commit); crossing the `lg` breakpoint with the drawer open left the page inert (`matchMedia` listener closes it).
+- Both new e2e tests were checked to fail against the old code.
