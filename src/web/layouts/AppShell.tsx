@@ -20,16 +20,39 @@ export function AppShell({ current, status, children }: Props) {
   const menuButton = useRef<HTMLButtonElement>(null);
   const sidebar = useRef<HTMLDivElement>(null);
 
-  /** Closes the drawer; without a navigation, focus returns to the menu button that opened it. */
-  const close = useCallback((returnFocus: boolean) => {
+  const returnFocus = useRef(false);
+
+  /**
+   * Closes the drawer; without a navigation, focus returns to the menu button that opened it. The focus moves in the
+   * effect below, after React has removed `inert` from the page; an inert button cannot take focus.
+   */
+  const close = useCallback((withFocus: boolean) => {
+    returnFocus.current = withFocus;
     setOpen(false);
-    if (returnFocus) menuButton.current?.focus();
   }, []);
 
   // Close after navigating (the new page heading takes focus) and on Escape.
   useEffect(() => setOpen(false), [current]);
+
+  // Entering the desktop layout (Tailwind `lg`, 64rem) shows the permanent sidebar; a still-open mobile drawer
+  // would leave the page inert.
   useEffect(() => {
-    if (!open) return undefined;
+    const desktop = window.matchMedia('(min-width: 64rem)');
+    const onChange = (event: MediaQueryListEvent) => {
+      if (event.matches) setOpen(false);
+    };
+    desktop.addEventListener('change', onChange);
+    return () => desktop.removeEventListener('change', onChange);
+  }, []);
+
+  useEffect(() => {
+    if (!open) {
+      if (returnFocus.current) menuButton.current?.focus();
+      returnFocus.current = false;
+      return undefined;
+    }
+    // A close request while already closed (double Escape) leaves no render behind; start every open clean.
+    returnFocus.current = false;
     // Opened: move focus into the menu, onto the current section.
     sidebar.current?.querySelector<HTMLElement>('[aria-current="page"]')?.focus();
     const onKey = (event: KeyboardEvent) => {

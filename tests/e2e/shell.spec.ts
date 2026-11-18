@@ -42,6 +42,28 @@ test.describe('The app shell navigates between sections', () => {
     await expect(nav).toBeHidden();
   });
 
+  test('returns focus to the menu button when the menu is closed with Escape', async ({ page }) => {
+    await page.setViewportSize({ width: 375, height: 800 });
+    await page.goto('/');
+    const menuButton = page.getByRole('button', { name: 'Open sections menu' });
+    await menuButton.click();
+    await expect(page.getByRole('navigation', { name: 'Sections' })).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(page.getByRole('navigation', { name: 'Sections' })).toBeHidden();
+    await expect(menuButton).toBeFocused();
+  });
+
+  test('keeps the page usable when the window grows to the wide layout with the menu open', async ({ page }) => {
+    await page.setViewportSize({ width: 375, height: 800 });
+    await page.goto('/#/project');
+    await page.getByRole('button', { name: 'Open sections menu' }).click();
+    await page.setViewportSize({ width: 1280, height: 900 });
+    const name = page.getByLabel('App name');
+    await name.click();
+    await expect(name).toBeFocused();
+    await expect(page.locator('.drawer-content')).not.toHaveAttribute('inert');
+  });
+
   test('explains in each empty section what to upload and which stores need it', async ({ page }) => {
     await page.goto('/#/logo');
     await expect(page.getByRole('heading', { level: 2, name: 'Upload your logo' })).toBeVisible();
