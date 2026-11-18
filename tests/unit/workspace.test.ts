@@ -7,9 +7,9 @@ import { openWorkspace, readProject, saveProject } from '../../src/core/workspac
 import { projectInputFactory, workspaceFactory } from '../factories/workspace.js';
 
 describe('openWorkspace prepares the workspace folder', () => {
-  test('creates project.json, inputs, jobs and output on first start, named after the repo folder', async () => {
+  test('creates project.json, inputs, jobs, output and exports on first start, named after the repo folder', async () => {
     const workspace = await workspaceFactory();
-    for (const folder of ['inputs', 'jobs', 'output']) expect(existsSync(path.join(workspace.root, folder))).toBe(true);
+    for (const folder of ['inputs', 'jobs', 'output', 'exports']) expect(existsSync(path.join(workspace.root, folder))).toBe(true);
     expect((await readProject(workspace)).name).toBe('demo-repo');
   });
 

@@ -18,7 +18,8 @@
     "frames/",
     "LICENSE",
     "README.md",
-    "CHANGELOG.md"
+    "CHANGELOG.md",
+    "THIRD_PARTY_NOTICES.md"
   ],
   "keywords": [
     "app-store",
@@ -48,6 +49,7 @@
   },
   "dependencies": {
     "@hono/node-server": "^2.1.9",
+    "fflate": "^0.8.3",
     "hono": "^4.13.19",
     "sharp": "^0.35.5",
     "zod": "^4.6.7"
