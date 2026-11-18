@@ -93,6 +93,8 @@ async function checkSet(
       messages.push({ level: 'error', text: `${file.path}: file is missing` });
     } else if (location === 'foreign') {
       messages.push({ level: 'error', text: `${file.path}: is a link or lies outside the output folder and is not exported` });
+    } else if (spec.kind === 'document') {
+      // Documents have no media properties; being present is enough.
     } else if (spec.kind === 'video') {
       messages.push({ level: 'warning', text: `${file.path}: video is not measured yet` });
     } else {

@@ -3,6 +3,7 @@ import { Readable } from 'node:stream';
 import { Hono } from 'hono';
 import { ExportError, createExport, exportChecklist } from '../core/export/index.js';
 import { ProjectFileError, type Workspace } from '../core/workspace/index.js';
+import { readOptionalJsonObject } from './json-body.js';
 
 /** Parses `?locales=all` or `?locales=de-DE,tr-TR`; absent means all locales of the project. */
 function parseLocalesQuery(value: string | undefined): string[] | undefined {
@@ -36,15 +37,9 @@ export function exportRoutes(workspace: Workspace): Hono {
     let locales: string | string[] | undefined;
     try {
       // An empty body means "all locales"; anything else must be JSON with a string or string list.
-      const text = await c.req.text();
-      let body: { locales?: unknown } = {};
-      if (text.trim() !== '') {
-        try {
-          body = JSON.parse(text) as { locales?: unknown };
-        } catch {
-          return c.json({ error: 'The request body must be JSON' }, 400);
-        }
-      }
+      const parsed = await readOptionalJsonObject(c);
+      if (!parsed.ok) return c.json({ error: parsed.error }, 400);
+      const body = parsed.body as { locales?: unknown };
       if (typeof body.locales === 'string') locales = body.locales;
       else if (Array.isArray(body.locales) && body.locales.every((l) => typeof l === 'string')) locales = body.locales;
       else if (body.locales !== undefined) {

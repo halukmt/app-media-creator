@@ -48,3 +48,20 @@ describe('inspectImage measures an image file', () => {
     await expect(inspectImage(path.join(dir, 'missing.png'))).rejects.toThrow();
   });
 });
+
+describe('inspectImage measures ICO files from their directory', () => {
+  test('reports the largest of the 16, 32 and 48 pixel images', async () => {
+    const { encodeIco } = await import('../../src/core/generators/render.js');
+    const png = async (size: number) =>
+      sharp({ create: { width: size, height: size, channels: 4, background: '#00000000' } }).png().toBuffer();
+    const file = path.join(dir, 'favicon.ico');
+    writeFileSync(file, encodeIco(await Promise.all([16, 32, 48].map(async (size) => ({ size, png: await png(size) })))));
+    expect(await inspectImage(file)).toEqual({ width: 48, height: 48, format: 'ico', hasAlpha: true, bytes: statSync(file).size });
+  });
+
+  test('rejects an ICO header without images', async () => {
+    const file = path.join(dir, 'empty.ico');
+    writeFileSync(file, Buffer.from([0, 0, 1, 0, 0, 0]));
+    await expect(inspectImage(file)).rejects.toThrow('is not a supported image');
+  });
+});

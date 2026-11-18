@@ -76,6 +76,7 @@ export async function locateOutputFile(absolutePath: string, outputDir: string):
  * `apple.preview.iphone` → `preview-iphone`). Unique per spec, so assets never overwrite each other.
  */
 export function segmentFor(spec: SpecEntry): string {
+  if (spec.folder) return spec.folder;
   const tail = spec.id.slice(spec.id.indexOf('.') + 1);
   if (spec.group === 'screenshot') return tail.slice(tail.indexOf('.') + 1);
   // Only the dot after the family becomes a dash; dots in device names (iphone-5.5) stay.
@@ -97,7 +98,7 @@ export interface OutputPathOptions {
 export function outputPath(spec: SpecEntry, options: OutputPathOptions): string {
   const name = cleanOutputName(options.name);
   const extension = options.extension.replace(/^\./, '').toLowerCase();
-  if (!/^[a-z0-9]{2,4}$/.test(extension)) throw new Error(`Invalid file extension: ${options.extension}`);
+  if (!/^[a-z0-9]{2,12}$/.test(extension)) throw new Error(`Invalid file extension: ${options.extension}`);
   if (!Number.isInteger(options.order) || options.order < 1 || options.order > 99) {
     throw new Error(`Order must be between 1 and 99, got ${options.order}`);
   }
@@ -173,41 +174,66 @@ export interface RegisterOptions extends OutputPathOptions {
 let queue: Promise<unknown> = Promise.resolve();
 
 /**
- * Writes a generated file into the output folder and records it in the manifest.
+ * Writes generated files into the output folder and records them in the manifest, as one batch:
+ * every path is checked first (a path that belongs to another asset rejects the whole batch before anything is
+ * written), then all files are written and the manifest is updated once.
  * A file for the same set position (spec, locale, order) replaces the previous one, even under a new name.
- * Calls run one after another.
+ * Batches run one after another.
  */
-export function registerOutput(workspace: Workspace, options: RegisterOptions): Promise<OutputEntry> {
-  const run = async (): Promise<OutputEntry> => {
-    const spec = getSpec(options.specId);
-    const relative = outputPath(spec, options);
-    const locale = spec.localized && options.locale ? getLocale(options.locale).id : undefined;
-    const target = path.join(workspace.outputDir, relative);
-    await mkdir(path.dirname(target), { recursive: true });
-    await writeFile(target, options.bytes);
-
-    const entry: OutputEntry = {
-      specId: spec.id,
-      ...(locale ? { locale } : {}),
-      order: options.order,
-      name: cleanOutputName(options.name),
-      path: relative,
-      fallbackInput: options.fallbackInput ?? false,
-    };
+export function registerOutputs(workspace: Workspace, list: readonly RegisterOptions[]): Promise<OutputEntry[]> {
+  const run = async (): Promise<OutputEntry[]> => {
     const manifest = await readManifest(workspace);
-    const samePosition = (e: OutputEntry) =>
-      e.path === relative || (e.specId === spec.id && e.locale === locale && e.order === options.order);
-    for (const old of manifest.entries.filter(samePosition)) {
-      if (old.path !== relative) await rm(path.join(workspace.outputDir, old.path), { force: true });
+    const planned = list.map((options) => {
+      const spec = getSpec(options.specId);
+      const relative = outputPath(spec, options);
+      const locale = spec.localized && options.locale ? getLocale(options.locale).id : undefined;
+      const entry: OutputEntry = {
+        specId: spec.id,
+        ...(locale ? { locale } : {}),
+        order: options.order,
+        name: cleanOutputName(options.name),
+        path: relative,
+        fallbackInput: options.fallbackInput ?? false,
+      };
+      return { entry, bytes: options.bytes };
+    });
+
+    const paths = new Map<string, string>();
+    for (const { entry } of planned) {
+      const owner = manifest.entries.find((e) => e.path === entry.path && e.specId !== entry.specId);
+      if (owner) throw new Error(`${entry.path} is already registered for ${owner.specId}`);
+      const twin = paths.get(entry.path);
+      if (twin !== undefined) throw new Error(`${entry.path} is planned twice in one batch (${twin}, ${entry.specId})`);
+      paths.set(entry.path, entry.specId);
     }
-    const entries = [...manifest.entries.filter((e) => !samePosition(e)), entry].sort((a, b) => a.path.localeCompare(b.path));
+
+    let entries = manifest.entries;
+    for (const { entry, bytes } of planned) {
+      const target = path.join(workspace.outputDir, entry.path);
+      await mkdir(path.dirname(target), { recursive: true });
+      await writeFile(target, bytes);
+      const samePosition = (e: OutputEntry) =>
+        e.path === entry.path || (e.specId === entry.specId && e.locale === entry.locale && e.order === entry.order);
+      for (const old of entries.filter(samePosition)) {
+        if (old.path !== entry.path) await rm(path.join(workspace.outputDir, old.path), { force: true });
+      }
+      entries = [...entries.filter((e) => !samePosition(e)), entry];
+    }
+
+    entries.sort((a, b) => a.path.localeCompare(b.path));
     const file = path.join(workspace.outputDir, MANIFEST_FILE);
     const tmp = `${file}.${randomBytes(4).toString('hex')}.tmp`;
     await writeFile(tmp, `${JSON.stringify({ version: 1, entries }, null, 2)}\n`, 'utf8');
     await rename(tmp, file);
-    return entry;
+    return planned.map((p) => p.entry);
   };
   const next = queue.then(run, run);
   queue = next.catch(() => undefined);
   return next;
+}
+
+/** Registers one generated file; see registerOutputs. */
+export async function registerOutput(workspace: Workspace, options: RegisterOptions): Promise<OutputEntry> {
+  const [entry] = await registerOutputs(workspace, [options]);
+  return entry!;
 }

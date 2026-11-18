@@ -14,9 +14,22 @@ export type AssetGroup =
   | 'share'
   | 'social';
 
-export type MediaKind = 'image' | 'video';
+/** `document` covers files of an asset set that are not media, e.g. a web app manifest or an HTML snippet. */
+export type MediaKind = 'image' | 'video' | 'document';
 
-export type MediaFormat = 'png' | 'jpeg' | 'webp' | 'gif' | 'svg' | 'ico' | 'mp4' | 'mov' | 'm4v';
+export type MediaFormat =
+  | 'png'
+  | 'jpeg'
+  | 'webp'
+  | 'gif'
+  | 'svg'
+  | 'ico'
+  | 'mp4'
+  | 'mov'
+  | 'm4v'
+  | 'json'
+  | 'html'
+  | 'txt';
 
 /** Whether a file may, must or must not have an alpha channel. */
 export type AlphaRule = 'forbidden' | 'allowed' | 'required';
@@ -39,6 +52,7 @@ export type Orientation = 'portrait' | 'landscape' | 'any';
  * - range: long and short side within bounds (`min`/`max` compare long with long and short with short),
  *   optional per-side bounds, aspect rule and orientation.
  * - vector: scalable format without fixed pixels (SVG).
+ * - none: documents, which have no pixels.
  */
 export type DimensionRule =
   | { kind: 'fixed'; sizes: readonly Size[]; rotatable: boolean }
@@ -51,7 +65,8 @@ export type DimensionRule =
       aspect?: AspectRule;
       orientation: Orientation;
     }
-  | { kind: 'vector' };
+  | { kind: 'vector' }
+  | { kind: 'none' };
 
 export interface VideoLimits {
   minSeconds: number;
@@ -93,6 +108,8 @@ export interface SpecEntry {
   video?: VideoLimits;
   /** Area that must hold the key art (Apple creative assets, YouTube banner). */
   safeArea?: Rect;
+  /** Output folder name instead of the default derived from the id (assets that ship together share a folder). */
+  folder?: string;
   /** True when a separate file is generated per media locale. */
   localized: boolean;
   /** True when the values come from the store's own documentation. */
