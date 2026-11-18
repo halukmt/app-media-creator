@@ -100,3 +100,12 @@
 - Codex on PR #43: focus could not return to the menu button while the page was still `inert` (moved into an effect
   after commit); crossing the `lg` breakpoint with the drawer open left the page inert (`matchMedia` listener closes it).
 - Both new e2e tests were checked to fail against the old code.
+
+## #32 Export section UI — done (PR #46)
+
+- `ExportPage`: Download first (status, hint, button, confirmation), then the checklist per store grouped by asset
+  (`groupBySpec`, language badges, messages in a Details collapse). New: `SectionLayout` (layout), `SectionEmptyState`,
+  `StatusBadge`, `RequiredBadge`, `BusyButton`, `ConfirmDialog`, `ChecklistCard`.
+- Playwright projects: `export` depends on `settings` (project.spec), `chromium` runs the rest in parallel.
+- Follow-up idea, not filed: stream the ZIP download instead of a Blob once video exports exist.
+- Codex on PR #45: no review yet at the start of this run; check at the next start.
