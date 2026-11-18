@@ -4,6 +4,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { serve } from '@hono/node-server';
 import { readPackageInfo } from '../core/package-info.js';
+import { openWorkspace } from '../core/workspace/index.js';
 import { createApp } from '../server/app.js';
 import { HELP_TEXT, parseArgs } from './args.js';
 
@@ -19,7 +20,7 @@ function openBrowser(url: string): void {
   spawn(command, args, { stdio: 'ignore', detached: true }).unref();
 }
 
-function main(): void {
+async function main(): Promise<void> {
   let options;
   try {
     options = parseArgs(process.argv.slice(2), process.env);
@@ -40,12 +41,18 @@ function main(): void {
     return;
   }
 
-  const app = createApp({ webRoot, packageInfo });
-  serve({ fetch: app.fetch, port: options.port }, (info) => {
-    const url = `http://localhost:${info.port}`;
+  const workspace = await openWorkspace(path.resolve(process.cwd(), options.workspace));
+  const app = createApp({ webRoot, packageInfo, workspace });
+  // Listen on the loopback interface only: the tool must not be reachable from the network.
+  serve({ fetch: app.fetch, port: options.port, hostname: '127.0.0.1' }, (info) => {
+    const url = `http://127.0.0.1:${info.port}`;
     console.log(`${packageInfo.name} ${packageInfo.version} running at ${url}`);
+    console.log(`Workspace: ${workspace.root}`);
     if (options.open) openBrowser(url);
   });
 }
 
-main();
+main().catch((error: unknown) => {
+  console.error((error as Error).message);
+  process.exitCode = 1;
+});
