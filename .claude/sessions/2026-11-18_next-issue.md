@@ -54,3 +54,11 @@
 - Haluk denied a visual check script (wrote a temp script into scripts/); no real-logo preview yet → comes with #10.
 - Haluk created a second GitHub project (#11) with more workflows; recommended: keep #10 (skills use 10, has
   "Released"), rename it, enable workflows in #10, delete #11 himself.
+
+## #38 Review findings from #37 — done (PR #39)
+
+- Codex findings on PR #37 taken right away (Ready, P1/XS), same reason as #35: shared code for #6/#7.
+- `registerOutputs` stages to `.tmp`, checks targets are files, renames after all writes; cleans up on failure.
+- `autoOrient()` in all logo render paths; `loadLogo` reports the displayed size.
+- Haluk enabled all 7 built-in workflows on project 10 and will delete project 11. Checked: "Pull request linked"
+  did not override the loop's "In review" status on #38; PRs are not auto-added to the board.
