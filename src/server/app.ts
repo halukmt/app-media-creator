@@ -5,6 +5,7 @@ import { serveStatic } from '@hono/node-server/serve-static';
 import type { PackageInfo } from '../core/package-info.js';
 import type { Workspace } from '../core/workspace/index.js';
 import { localOnly } from './protection.js';
+import { catalogueRoutes } from './catalogue-routes.js';
 import { exportRoutes } from './export-routes.js';
 import { generateRoutes } from './generate-routes.js';
 import { workspaceRoutes } from './workspace-routes.js';
@@ -26,6 +27,8 @@ export function createApp({ webRoot, packageInfo, workspace }: AppOptions): Hono
   app.get('/api/health', (c) =>
     c.json({ status: 'ok', name: packageInfo.name, version: packageInfo.version }),
   );
+
+  app.route('/api', catalogueRoutes());
 
   if (workspace) {
     app.route('/api', workspaceRoutes(workspace));
