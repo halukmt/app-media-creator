@@ -59,7 +59,7 @@ describe('registerOutput writes the file and records it in the manifest', () => 
     const bytes = await pngBytes();
     const play = await registerOutput(workspace, { specId: 'google.icon', order: 1, name: 'icon', extension: 'png', bytes });
     const launcher = await registerOutput(workspace, { specId: 'google.launcher-icon', order: 1, name: 'icon', extension: 'png', bytes });
-    expect([play.path, launcher.path]).toEqual(['google/shared/icon/icon.png', 'google/shared/launcher-icon/icon.png']);
+    expect([play.path, launcher.path]).toEqual(['google/shared/icon/icon.png', 'google/shared/android-res/icon.png']);
     expect((await readManifest(workspace)).entries).toHaveLength(2);
   });
 
@@ -196,5 +196,53 @@ describe('registerOutputs is all or nothing', () => {
     expect(readFileSync(path.join(workspace.outputDir, first.path))).toEqual(before);
     expect(readFileSync(path.join(workspace.outputDir, 'manifest.json'), 'utf8')).toBe(manifestBefore);
     expect(readdirSync(path.join(workspace.outputDir, 'web/shared/favicons')).filter((n) => n.endsWith('.tmp'))).toEqual([]);
+  });
+});
+
+describe('outputPath supports one subfolder below the asset folder', () => {
+  test('puts a launcher icon into the Android density folder and keeps it through the manifest', async () => {
+    const spec = getSpec('google.launcher-icon');
+    expect(outputPath(spec, { order: 2, name: 'ic_launcher', extension: 'png', subfolder: 'mipmap-hdpi' })).toBe(
+      'google/shared/android-res/mipmap-hdpi/ic_launcher.png',
+    );
+    const workspace = await workspaceFactory();
+    await registerOutput(workspace, { specId: 'google.launcher-icon', order: 2, name: 'ic_launcher', extension: 'png', subfolder: 'mipmap-hdpi', bytes: await pngBytes(72, 72) });
+    const manifest = await readManifest(workspace);
+    expect(manifest.problems).toEqual([]);
+    expect(manifest.entries[0]).toMatchObject({ subfolder: 'mipmap-hdpi', path: 'google/shared/android-res/mipmap-hdpi/ic_launcher.png' });
+  });
+
+  test('drops a manifest entry whose subfolder is not text', async () => {
+    const workspace = await workspaceFactory();
+    writeFileSync(
+      path.join(workspace.outputDir, 'manifest.json'),
+      JSON.stringify({ version: 1, entries: [{ specId: 'google.launcher-icon', order: 1, name: 'x', subfolder: 123, path: 'google/shared/android-res/123/x.png', fallbackInput: false }] }),
+    );
+    const manifest = await readManifest(workspace);
+    expect(manifest.entries).toEqual([]);
+    expect(manifest.problems[0]).toContain('subfolder must be text');
+  });
+
+  test('rejects a subfolder that tries to leave the asset folder', () => {
+    expect(() => outputPath(getSpec('google.launcher-icon'), { order: 1, name: 'x', extension: 'png', subfolder: '../x' })).toThrow('Invalid subfolder');
+  });
+});
+
+describe('registerOutputs never writes through a linked folder', () => {
+  test('rejects a target folder that is a link to a place outside the output folder', async () => {
+    const { mkdirSync, symlinkSync, readdirSync } = await import('node:fs');
+    const workspace = await workspaceFactory();
+    const outside = path.join(workspace.root, 'outside');
+    mkdirSync(outside);
+    mkdirSync(path.join(workspace.outputDir, 'google/shared'), { recursive: true });
+    try {
+      symlinkSync(outside, path.join(workspace.outputDir, 'google/shared/android-res'), 'junction');
+    } catch {
+      return; // Links need extra rights on some Windows setups; Linux CI covers this case.
+    }
+    await expect(
+      registerOutput(workspace, { specId: 'google.launcher-icon', order: 1, name: 'ic_launcher', extension: 'png', bytes: await pngBytes(48, 48) }),
+    ).rejects.toThrow('links outside the output folder');
+    expect(readdirSync(outside)).toEqual([]);
   });
 });

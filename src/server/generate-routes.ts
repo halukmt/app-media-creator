@@ -1,4 +1,5 @@
 import { Hono, type Context } from 'hono';
+import { generateAndroidIcons, type AndroidIconOptions } from '../core/generators/android-icons.js';
 import { generateAppStoreIcons, type AppStoreIconOptions } from '../core/generators/app-store-icons.js';
 import { GeneratorError, loadNewestLogo } from '../core/generators/logo.js';
 import { logoPalette } from '../core/generators/render.js';
@@ -20,6 +21,13 @@ function pick(body: Record<string, unknown>, fields: readonly string[]): Record<
   return Object.fromEntries(fields.filter((field) => body[field] !== undefined).map((field) => [field, body[field]]));
 }
 
+/** Parses `{ background?, logoScale? }` for the icon generators; returns an error message for a bad logoScale. */
+function iconOptions(body: Record<string, unknown>): { options: Record<string, unknown> } | { error: string } {
+  const scale = body.logoScale;
+  if (scale !== undefined && (typeof scale !== 'number' || !Number.isFinite(scale))) return { error: 'logoScale must be a number' };
+  return { options: pick(body, ['background', 'logoScale']) };
+}
+
 /** Routes that run generators, mounted under /api. */
 export function generateRoutes(workspace: Workspace): Hono {
   const api = new Hono();
@@ -38,13 +46,22 @@ export function generateRoutes(workspace: Workspace): Hono {
   api.post('/generate/app-store-icons', async (c) => {
     const parsed = await readOptionalJsonObject(c);
     if (!parsed.ok) return c.json({ error: parsed.error }, 400);
-    const scale = parsed.body.logoScale;
-    if (scale !== undefined && (typeof scale !== 'number' || !Number.isFinite(scale))) {
-      return c.json({ error: 'logoScale must be a number' }, 400);
-    }
-    const options = pick(parsed.body, ['background', 'logoScale']) as AppStoreIconOptions;
+    const checked = iconOptions(parsed.body);
+    if ('error' in checked) return c.json({ error: checked.error }, 400);
     try {
-      return c.json(await generateAppStoreIcons(workspace, options), 201);
+      return c.json(await generateAppStoreIcons(workspace, checked.options as AppStoreIconOptions), 201);
+    } catch (error) {
+      return generatorError(c, error);
+    }
+  });
+
+  api.post('/generate/android-icons', async (c) => {
+    const parsed = await readOptionalJsonObject(c);
+    if (!parsed.ok) return c.json({ error: parsed.error }, 400);
+    const checked = iconOptions(parsed.body);
+    if ('error' in checked) return c.json({ error: checked.error }, 400);
+    try {
+      return c.json(await generateAndroidIcons(workspace, checked.options as AndroidIconOptions), 201);
     } catch (error) {
       return generatorError(c, error);
     }

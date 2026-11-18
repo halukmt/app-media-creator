@@ -27,12 +27,21 @@ export async function loadLogo(filePath: string): Promise<LogoSource> {
   const bytes = await readFile(filePath);
   const metadata = await sharp(bytes).metadata();
   if (!metadata.width || !metadata.height) throw new Error('The logo has no readable size');
-  await sharp(bytes).stats();
   // Displayed size: JPEGs with an EXIF orientation store their pixels rotated.
   const width = metadata.autoOrient?.width ?? metadata.width;
   const height = metadata.autoOrient?.height ?? metadata.height;
-  return { bytes, isSvg: metadata.format === 'svg', width, height };
+  const logo: LogoSource = { bytes, isSvg: metadata.format === 'svg', width, height };
+  // At the lowest density (1 dpi) an SVG is rendered at a 72nd of its declared size; beyond this it cannot be bounded.
+  if (logo.isSvg && Math.max(width, height) / 72 > MAX_SVG_RASTER) throw new Error('The SVG logo declares a canvas that is too large');
+  // SVGs are decoded at the resolution of the largest icon, not at their (possibly huge) declared size.
+  await (logo.isSvg ? sharp(bytes, { density: svgDensity(logo, DECODE_CHECK_BOX) }) : sharp(bytes)).stats();
+  return logo;
 }
+
+/** Box used for the one-time decode check of SVG logos (the largest icon box rendered from a logo). */
+const DECODE_CHECK_BOX = 1024;
+/** Largest edge (px) an SVG may reach at the lowest density; larger declared canvases are rejected. */
+const MAX_SVG_RASTER = 8192;
 
 /** Density that rasterizes an SVG just large enough for `box` pixels (sharp's SVG base density is 72 dpi). */
 export function svgDensity(logo: LogoSource, box: number): number {
@@ -128,4 +137,50 @@ export async function logoPalette(logo: LogoSource, count = 5): Promise<HexColor
     .sort((x, y) => y.n - x.n)
     .slice(0, count)
     .map((c) => `#${hex(c.r / c.n)}${hex(c.g / c.n)}${hex(c.b / c.n)}` as HexColor);
+}
+
+/**
+ * Rasterizes the logo once into a PNG whose longer side is `box` pixels, for generators that render many sizes:
+ * every later render works on this small raster instead of decoding the source again.
+ */
+export async function rasterizeLogo(logo: LogoSource, box: number): Promise<LogoSource> {
+  const input = logo.isSvg ? sharp(logo.bytes, { density: svgDensity(logo, box) }) : sharp(logo.bytes);
+  const { data, info } = await input
+    .autoOrient()
+    .resize(box, box, { fit: 'inside', withoutEnlargement: !logo.isSvg })
+    .png()
+    .toBuffer({ resolveWithObject: true });
+  return { bytes: data, isSvg: false, width: info.width, height: info.height };
+}
+
+/** Colour distance below which a pixel of an opaque logo counts as its background. */
+const BACKGROUND_TOLERANCE = 48;
+
+/**
+ * Renders a one-colour silhouette of the logo: the logo's coverage filled with `color` on transparency, centred in
+ * `logoBox` on a `size` square. Used for Android monochrome (themed) icons. For logos without transparency the
+ * colour of the logo's top-left corner counts as background, so a logo on a white JPEG background still works.
+ */
+export async function renderSilhouette(logo: LogoSource, options: { size: number; logoBox: number; color: HexColor }): Promise<Buffer> {
+  const placed = await renderLogoSquare(logo, { size: options.size, logoBox: options.logoBox });
+  const { data, info } = await sharp(placed).raw().toBuffer({ resolveWithObject: true });
+  const { isOpaque } = await sharp(logo.bytes).stats();
+  if (isOpaque) {
+    // The first covered pixel (top-left of the placed logo) gives the background colour.
+    let first = 0;
+    while (first < data.length && data[first + 3] === 0) first += 4;
+    const [br, bg, bb] = [data[first] ?? 0, data[first + 1] ?? 0, data[first + 2] ?? 0];
+    for (let i = 0; i < data.length; i += 4) {
+      const distance = Math.abs(data[i]! - br) + Math.abs(data[i + 1]! - bg) + Math.abs(data[i + 2]! - bb);
+      if (distance < BACKGROUND_TOLERANCE) data[i + 3] = 0;
+    }
+  }
+  const alpha = await sharp(data, { raw: { width: info.width, height: info.height, channels: 4 } })
+    .extractChannel('alpha')
+    .png()
+    .toBuffer();
+  return sharp({ create: { width: options.size, height: options.size, channels: 3, background: options.color } })
+    .joinChannel(alpha)
+    .png()
+    .toBuffer();
 }

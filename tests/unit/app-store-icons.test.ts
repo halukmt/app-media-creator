@@ -8,20 +8,8 @@ import { GeneratorError } from '../../src/core/generators/logo.js';
 import { logoPalette, renderLogoSquare, type LogoSource } from '../../src/core/generators/render.js';
 import { getSpec, inspectImage, validateMedia } from '../../src/core/specs/index.js';
 import { saveInput, type Workspace } from '../../src/core/workspace/index.js';
+import { twoColourPng } from '../factories/logos.js';
 import { svgBytes, workspaceFactory } from '../factories/workspace.js';
-
-/** A transparent 300×300 logo: a red square with a smaller blue square below it. */
-async function twoColourPng(): Promise<Uint8Array> {
-  return Uint8Array.from(
-    await sharp({ create: { width: 300, height: 300, channels: 4, background: { r: 0, g: 0, b: 0, alpha: 0 } } })
-      .composite([
-        { input: { create: { width: 200, height: 150, channels: 4, background: '#dd1111' } }, left: 50, top: 20 },
-        { input: { create: { width: 100, height: 60, channels: 4, background: '#1133dd' } }, left: 100, top: 200 },
-      ])
-      .png()
-      .toBuffer(),
-  );
-}
 
 async function withLogo(bytes: Uint8Array, name: string): Promise<Workspace> {
   const workspace = await workspaceFactory();

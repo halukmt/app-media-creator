@@ -15,6 +15,10 @@ const squares = (...sides: number[]): Size[] => sides.map((side) => ({ width: si
 export const ADAPTIVE_LAYER_SIDES = [108, 162, 216, 324, 432] as const;
 /** Pixel sizes of a 48 dp legacy launcher icon at mdpi, hdpi, xhdpi, xxhdpi and xxxhdpi. */
 export const LEGACY_LAUNCHER_SIDES = [48, 72, 96, 144, 192] as const;
+/** Android density qualifiers, in the order of the two size lists above. */
+export const ANDROID_DENSITIES = ['mdpi', 'hdpi', 'xhdpi', 'xxhdpi', 'xxxhdpi'] as const;
+/** Output folder of all Android launcher resources (copied into app/src/main/res). */
+const ANDROID_RES = 'android-res';
 
 const SCREENSHOT_BASE = {
   target: 'google',
@@ -32,6 +36,7 @@ function adaptiveLayer(layer: 'foreground' | 'background' | 'monochrome'): SpecE
     id: `google.adaptive-icon.${layer}`,
     target: 'google',
     group: 'icon',
+    folder: ANDROID_RES,
     name: `Adaptive launcher icon, ${layer} layer`,
     kind: 'image',
     required: false,
@@ -205,9 +210,27 @@ export const GOOGLE_SPECS: readonly SpecEntry[] = [
   adaptiveLayer('background'),
   adaptiveLayer('monochrome'),
   {
+    id: 'google.adaptive-icon.xml',
+    target: 'google',
+    group: 'icon',
+    folder: ANDROID_RES,
+    name: 'Adaptive launcher icon definition (ic_launcher.xml)',
+    kind: 'document',
+    required: false,
+    condition: 'Needed for the in-app launcher icon (Android 8 and later).',
+    dimensions: { kind: 'none' },
+    formats: ['xml'],
+    alpha: 'allowed',
+    localized: false,
+    verified: true,
+    sourceUrl: ADAPTIVE,
+    notes: 'Placed in mipmap-anydpi-v26; references the background, foreground and monochrome layers.',
+  },
+  {
     id: 'google.launcher-icon',
     target: 'google',
     group: 'icon',
+    folder: ANDROID_RES,
     name: 'Legacy launcher icon',
     kind: 'image',
     required: false,
