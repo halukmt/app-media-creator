@@ -2,7 +2,8 @@ import { Hono } from 'hono';
 import { LOCALES } from '../core/locales/index.js';
 import { getSpec, type Target } from '../core/specs/index.js';
 import { cardSizeForSpec } from '../core/screenshots/index.js';
-import { ENVIRONMENT_COLORS, MAX_BADGE_LENGTH, MAX_ENVIRONMENTS, deviceOptions, type EnvironmentColor } from '../core/workspace/index.js';
+import { CREATIVE_IMAGES } from '../core/generators/creative-assets.js';
+import { ENVIRONMENT_COLORS, MAX_BADGE_LENGTH, MAX_ENVIRONMENTS, MAX_PHRASE, deviceOptions, type EnvironmentColor } from '../core/workspace/index.js';
 
 export interface CatalogueDevice {
   id: string;
@@ -20,6 +21,9 @@ export interface Catalogue {
   environmentColors: { id: EnvironmentColor; color: string }[];
   maxEnvironments: number;
   maxBadgeLength: number;
+  /** App Store header, search and universal images: size and art safe area in pixels, in display order. */
+  creativeImages: { specId: string; name: string; size: { width: number; height: number }; safeArea: { x: number; y: number; width: number; height: number } }[];
+  maxPhrase: number;
 }
 
 function devicesOf(target: Target): CatalogueDevice[] {
@@ -38,6 +42,12 @@ export function buildCatalogue(): Catalogue {
     environmentColors: Object.entries(ENVIRONMENT_COLORS).map(([id, color]) => ({ id: id as EnvironmentColor, color })),
     maxEnvironments: MAX_ENVIRONMENTS,
     maxBadgeLength: MAX_BADGE_LENGTH,
+    creativeImages: CREATIVE_IMAGES.map(({ specId }) => {
+      const spec = getSpec(specId);
+      const { width, height } = cardSizeForSpec(spec);
+      return { specId, name: spec.name, size: { width, height }, safeArea: spec.safeArea! };
+    }),
+    maxPhrase: MAX_PHRASE,
   };
 }
 

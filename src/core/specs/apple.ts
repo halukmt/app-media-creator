@@ -171,6 +171,8 @@ export const APPLE_SPECS: readonly SpecEntry[] = [
       aspect: { ratio: 1.5, tolerance: 0.01 },
       orientation: 'landscape',
     },
+    // The size the safe area is given for; the generator renders at this size.
+    defaultSize: { width: 3840, height: 2560 },
     formats: ['png', 'jpeg'],
     alpha: 'forbidden',
     maxCount: 1,

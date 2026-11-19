@@ -42,12 +42,15 @@ export interface DeviceOptions {
   screenshot: Uint8Array | undefined;
   /** Drop shadow under the generic frame (default true). */
   shadow?: boolean;
+  /** Prefix of the SVG ids (clip path, filter); give each device its own when one image holds several. */
+  id?: string;
 }
 
 /** SVG of a device with the screenshot on its screen: the user's bezel if given, otherwise the generic frame. */
 export async function deviceSvg(options: DeviceOptions): Promise<{ svg: string; height: number }> {
   const { kind, userFrame, box, screenAspect, screenshot } = options;
   const withShadow = options.shadow ?? true;
+  const id = options.id ?? 'device';
   if (userFrame) {
     const scale = box.width / userFrame.width;
     const s = userFrame.screen;
@@ -59,11 +62,11 @@ export async function deviceSvg(options: DeviceOptions): Promise<{ svg: string; 
     // its own screen opening ends up beneath the screenshot, and semi-transparent bezel pixels are not drawn twice.
     // The filter outputs only the shadow: the bezel's alpha, blurred and offset, filled black (no source graphic).
     const shadowLayer = withShadow
-      ? `<defs><filter id="bezel-shadow" x="-20%" y="-20%" width="140%" height="140%">` +
+      ? `<defs><filter id="${id}-bezel-shadow" x="-20%" y="-20%" width="140%" height="140%">` +
         `<feGaussianBlur in="SourceAlpha" stdDeviation="${n(box.width * SHADOW.blur)}"/>` +
         `<feOffset dx="0" dy="${n(box.width * SHADOW.offset)}" result="shape"/>` +
         `<feFlood flood-color="#000" flood-opacity="0.3"/><feComposite in2="shape" operator="in"/></filter></defs>` +
-        bezelImage('filter="url(#bezel-shadow)" ')
+        bezelImage(`filter="url(#${id}-bezel-shadow)" `)
       : '';
     return { svg: shadowLayer + image + bezelImage(''), height: userFrame.height * scale };
   }
@@ -71,5 +74,5 @@ export async function deviceSvg(options: DeviceOptions): Promise<{ svg: string; 
   const frame = frameBox(kind, screenWidth, screenWidth * screenAspect);
   const s = frame.screen;
   const image = await screenImage(screenshot, box.x + s.x, box.y + s.y, s.width, s.height);
-  return { svg: frameSvg(kind, box.x, box.y, frame, image, 'device', withShadow), height: frame.outerHeight };
+  return { svg: frameSvg(kind, box.x, box.y, frame, image, id, withShadow), height: frame.outerHeight };
 }

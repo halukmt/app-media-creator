@@ -37,3 +37,8 @@ export async function appScreenshot(width = 1179, height = 2556): Promise<Uint8A
 export function shareTaglines(): { 'de-DE': string; 'tr-TR': string } {
   return { 'de-DE': 'Faire Mannschaftsaufstellung in Sekunden', 'tr-TR': 'Şampiyonluğa giden yolda İstanbul’un takımları' };
 }
+
+/** Header phrases per locale: a long German compound and Turkish characters. */
+export function creativePhrases(): { 'de-DE': string; 'tr-TR': string } {
+  return { 'de-DE': 'Mannschaftsaufstellung in Sekunden', 'tr-TR': 'Şampiyonluğa giden yol İstanbul’da' };
+}

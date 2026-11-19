@@ -25,7 +25,7 @@ import { PreviewCard } from '../components/PreviewCard';
 import { ProgressStatus } from '../components/ProgressStatus';
 import { SectionEmptyState } from '../components/SectionEmptyState';
 import { StatusAlert } from '../components/StatusAlert';
-import { TextField } from '../components/TextField';
+import { LocaleTextFields } from '../components/LocaleTextFields';
 import { en } from '../i18n/en';
 import { SectionLayout } from '../layouts/SectionLayout';
 import type { CheckStatus } from '../lib/export';
@@ -326,24 +326,15 @@ export function LogoPage({ project, catalogue, selection, onSelectionChange, foc
             }}
           />
           {chosen.includes('social') ? (
-            <section aria-labelledby="logo-taglines" className="flex flex-col gap-2">
-              <h3 id="logo-taglines" className="text-lg font-semibold">
-                {en.logo.taglinesHeading}
-              </h3>
-              {localeOptions
-                .filter((locale) => selection.includes(locale.id))
-                .map((locale) => (
-                  <TextField
-                    key={locale.id}
-                    label={en.logo.taglineLabel(locale.name)}
-                    hint={en.logo.taglineHint(MAX_TAGLINE)}
-                    value={settings.taglines[locale.id] ?? ''}
-                    maxLength={MAX_TAGLINE}
-                    lang={locale.id}
-                    onChange={(text) => update({ ...settings, taglines: { ...settings.taglines, [locale.id]: text } })}
-                  />
-                ))}
-            </section>
+            <LocaleTextFields
+              heading={en.logo.taglinesHeading}
+              locales={localeOptions.filter((locale) => selection.includes(locale.id))}
+              values={settings.taglines}
+              label={en.logo.taglineLabel}
+              hint={en.logo.taglineHint(MAX_TAGLINE)}
+              maxLength={MAX_TAGLINE}
+              onChange={(locale, text) => update({ ...settings, taglines: { ...settings.taglines, [locale]: text } })}
+            />
           ) : null}
           <p className="text-sm text-base-content/70" aria-live="off">
             {saveState === 'saving' ? en.logo.saving : saveState === 'saved' ? en.logo.saved : ''}

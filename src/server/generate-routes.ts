@@ -9,7 +9,15 @@ import { generateLogoPack, listLogoOutputs } from '../core/generators/logo-packs
 import { logoPalette, renderLogoSquare } from '../core/generators/render.js';
 import { BACKGROUND_PRESETS, backgroundsFromPalette, type BackgroundPreset } from '../core/screenshots/index.js';
 import { generateWebIcons, type WebIconOptions } from '../core/generators/web-icons.js';
-import { ProjectFileError, readLogoSettings, saveLogoSettings, type Workspace } from '../core/workspace/index.js';
+import { generateCreativeAssets, renderCreativePreview, type CreativeAssetOptions } from '../core/generators/creative-assets.js';
+import {
+  ProjectFileError,
+  readCreativeSettings,
+  readLogoSettings,
+  saveCreativeSettings,
+  saveLogoSettings,
+  type Workspace,
+} from '../core/workspace/index.js';
 import { readOptionalJsonObject } from './json-body.js';
 
 /** Maps known generator errors to JSON responses; rethrows everything else. */
@@ -183,6 +191,54 @@ export function generateRoutes(workspace: Workspace): Hono {
     }
     const result = await saveLogoSettings(workspace, body);
     return result.ok ? c.json(result.settings) : c.json({ errors: result.errors }, 400);
+  });
+
+  // App Store header, search and universal images: settings, a small preview with its safe area, and generation.
+  api.get('/creative/settings', async (c) => c.json(await readCreativeSettings(workspace)));
+
+  api.put('/creative/settings', async (c) => {
+    let body: unknown;
+    try {
+      body = await c.req.json();
+    } catch {
+      return c.json({ errors: ['The request body must be JSON'] }, 400);
+    }
+    const result = await saveCreativeSettings(workspace, body);
+    return result.ok ? c.json(result.settings) : c.json({ errors: result.errors }, 400);
+  });
+
+  api.post('/creative/preview', async (c) => {
+    const parsed = await readOptionalJsonObject(c);
+    if (!parsed.ok) return c.json({ error: parsed.error }, 400);
+    const { locale, specId, width } = parsed.body;
+    if (typeof locale !== 'string' || typeof specId !== 'string' || (width !== undefined && typeof width !== 'number')) {
+      return c.json({ error: 'Send locale and specId as text (and width as a number)' }, 400);
+    }
+    try {
+      const preview = await renderCreativePreview(workspace, { locale, specId, ...(width !== undefined ? { width } : {}) });
+      return c.json({
+        image: `data:image/png;base64,${preview.png.toString('base64')}`,
+        width: preview.width,
+        height: preview.height,
+        full: { width: preview.full.width, height: preview.full.height, safeWidth: preview.full.safeArea.width, safeHeight: preview.full.safeArea.height },
+        safeArea: preview.safeArea,
+        warnings: preview.warnings,
+        fallbackInput: preview.fallbackInput,
+      });
+    } catch (error) {
+      return generatorError(c, error);
+    }
+  });
+
+  api.post('/generate/creative-assets', async (c) => {
+    const parsed = await readOptionalJsonObject(c);
+    if (!parsed.ok) return c.json({ error: parsed.error }, 400);
+    const options = pick(parsed.body, ['locales']) as CreativeAssetOptions;
+    try {
+      return c.json(await generateCreativeAssets(workspace, options), 201);
+    } catch (error) {
+      return generatorError(c, error);
+    }
   });
 
   api.get('/logo/palette', async (c) => {

@@ -88,6 +88,57 @@ test.describe('The Screenshots section', () => {
     await expect(page.getByLabel('Headline', { exact: true }).nth(1)).toHaveValue('Faire Teams in Sekunden');
   });
 
+  /** Opens the purpose step and picks the App Store header and search images. */
+  async function chooseHeader(page: Page) {
+    await page.goto('/#/screenshots');
+    await page.getByRole('button', { name: 'Purpose', exact: false }).first().click();
+    await page.getByRole('group', { name: /What are the screenshots for/ }).locator('label', { hasText: 'Product page header' }).click();
+  }
+
+  test('creates the App Store header, search and universal images with a phrase and shows their safe area (#18)', async ({ page, request }) => {
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await chooseHeader(page);
+    await page.getByLabel('Phrase (German)').fill('Faire Teams in Sekunden');
+    await page.getByLabel('Phrase (Turkish)').fill('Saniyeler içinde adil takımlar');
+    await expect(page.getByText('Changes saved.')).toBeVisible();
+
+    await page.getByRole('button', { name: /Preview and edit →/ }).click();
+    await page.getByRole('group', { name: /Language to edit/ }).locator('label', { hasText: 'Turkish' }).click();
+    for (const name of ['Product page header', 'Search results', 'Universal (header and search)']) {
+      await expect(page.getByRole('img', { name: `Preview of ${name}, Turkish` })).toBeVisible();
+    }
+    await expect(page.getByText('3840 × 1646 px · safe area 1646 × 661 px')).toBeVisible();
+    await expect(page.getByTestId('preview-guide')).toHaveCount(3);
+    await page.getByRole('switch', { name: 'Show safe area' }).uncheck();
+    await expect(page.getByTestId('preview-guide')).toHaveCount(0);
+
+    await page.getByRole('button', { name: /Export →/ }).click();
+    await page.getByRole('button', { name: 'Generate header and search images' }).click();
+    await expect(page.getByText(/files generated/)).toBeVisible({ timeout: 60_000 });
+    const paths = ((await (await request.get('/api/output')).json()) as { path: string }[]).map((e) => e.path);
+    expect(paths).toEqual(
+      expect.arrayContaining([
+        'apple/de-DE/creative-header-image/01-header.png',
+        'apple/tr-TR/creative-search-image/01-search.png',
+        'apple/tr-TR/creative-universal-image/01-universal.png',
+      ]),
+    );
+  });
+
+  for (const width of viewportWidths()) {
+    test(`shows the header image preview at ${width} px without accessibility violations`, async ({ page }) => {
+      await page.setViewportSize({ width, height: 900 });
+      await chooseHeader(page);
+      await page.getByRole('button', { name: /Preview and edit →/ }).click();
+      await expect(page.getByRole('img', { name: /^Preview of Universal/ })).toBeVisible();
+      const results = await new AxeBuilder({ page }).analyze();
+      expect(results.violations.filter((v) => v.impact === 'serious' || v.impact === 'critical')).toEqual([]);
+      const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+      expect(overflow).toBeLessThanOrEqual(0);
+      await page.screenshot({ path: `test-results/screenshots/screenshots-header-${width}.png`, fullPage: true });
+    });
+  }
+
   for (const width of viewportWidths()) {
     test(`shows the preview step at ${width} px without accessibility violations`, async ({ page }) => {
       await page.setViewportSize({ width, height: 900 });
