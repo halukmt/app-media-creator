@@ -22,7 +22,8 @@ export interface LogoSettings {
 }
 
 const FILE = 'logo.json';
-const MAX_TAGLINE = 120;
+/** Longest tagline in characters; mirrored by the UI in src/web/lib/logo.ts. */
+export const MAX_TAGLINE = 120;
 
 export function defaultLogoSettings(): LogoSettings {
   return { version: 1, packs: [...LOGO_PACKS], background: '#ffffff', taglines: {} };

@@ -50,4 +50,19 @@ No new components.
 
 ## Review log
 
-- Design-critic, `/code-review` and `security-review` results are recorded below after the reviews.
+- **security-review:** no findings ≥ 8 (manifest-only paths, `locateOutputFile` own files, fixed image types with
+  nosniff and sandbox CSP, `localOnly` on all routes, anchored hex colour, taglines drawn as paths).
+- **/code-review:** fixed — taglines of removed languages are ignored when generating; an empty language selection
+  reports a clear message for the social pack; reload after an upload keeps unsaved settings; the e2e ZIP step waits
+  for either the confirmation or the download; `listLogoOutputs` runs in parallel; one `MAX_TAGLINE` in core (mirrored
+  once in the UI); the save queue is created once. Deferred to the Backlog issue: caching resized previews (kept
+  `no-store` because other sections regenerate files under the same URL), one helper for image response headers, a
+  section → page map in `App.tsx`.
+- **design-critic:** fixed — checkerboard behind logo previews (white and black marks visible), visible card border on
+  `bg-base-100`, title above size with the badge on its own line, no stretched paragraphs, one primary action per
+  step (Generate until outputs exist, then Export), languages of one asset next to each other, documents without a
+  repeated name, the no-packs state as a warning with a way back to Options, only chosen packs in the grid, taglines
+  only when Social can be generated. Deferred: the third-party warning once per pack, `srcSet` for HiDPI, a more
+  precise Generate label, size and badge on the current-logo card.
+- **Found during review, own issues:** clipped app name on share images without a tagline (fix, Ready); an empty
+  monochrome layer for one-colour opaque logos (Backlog).

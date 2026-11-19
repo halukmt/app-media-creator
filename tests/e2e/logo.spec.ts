@@ -43,10 +43,11 @@ test.describe('The Logo section', () => {
 
     await page.getByRole('button', { name: /Export →/ }).click();
     await page.getByRole('link', { name: 'Open Export section' }).click();
-    await page.getByRole('button', { name: 'Download ZIP' }).click();
+    // The confirmation appears only while required files of other sections are missing: wait for either outcome.
     const downloading = page.waitForEvent('download');
-    const dialog = page.getByRole('dialog');
-    if (await dialog.isVisible()) await dialog.getByRole('button', { name: 'Download anyway' }).click();
+    await page.getByRole('button', { name: 'Download ZIP' }).click();
+    const anyway = page.getByRole('dialog').getByRole('button', { name: 'Download anyway' });
+    await Promise.race([downloading, anyway.waitFor().then(() => anyway.click()).catch(() => undefined)]);
     const names = Object.keys(unzipSync(new Uint8Array(readFileSync(await (await downloading).path()))));
     // Files per target.
     expect(names).toEqual(

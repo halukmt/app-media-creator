@@ -30,7 +30,7 @@ import { en } from '../i18n/en';
 import { SectionLayout } from '../layouts/SectionLayout';
 import type { CheckStatus } from '../lib/export';
 import { projectLocaleOptions } from '../lib/locale-selection';
-import { groupOutputs, groupStatus } from '../lib/logo';
+import { groupOutputs, groupStatus, MAX_TAGLINE } from '../lib/logo';
 import { createSaveQueue } from '../lib/save-queue';
 import { backgroundChoices, backgroundKey, swatchCss } from '../lib/screenshots';
 import { sectionHref, type TargetId } from '../lib/sections';
@@ -76,7 +76,8 @@ export function LogoPage({ project, catalogue, selection, onSelectionChange, foc
   const localeOptions = projectLocaleOptions(catalogue.locales, project.locales);
   const localeName = (id: string) => catalogue.locales.find((locale) => locale.id === id)?.name ?? id;
 
-  const reload = useCallback(async () => {
+  // Settings are read only on the first load: later reloads (after an upload) must not overwrite unsaved edits.
+  const reload = useCallback(async (withSettings = true) => {
     try {
       const [inputs, nextSettings, nextBackgrounds, nextOutputs] = await Promise.all([
         fetchInputs(),
@@ -85,7 +86,7 @@ export function LogoPage({ project, catalogue, selection, onSelectionChange, foc
         fetchLogoOutputs(),
       ]);
       setHasLogo(inputs.some((input) => input.kind === 'logo'));
-      setSettings(nextSettings);
+      if (withSettings) setSettings(nextSettings);
       // Icons need one solid colour: gradients are not offered here.
       setBackgrounds([...nextBackgrounds.presets, ...nextBackgrounds.palette].filter((b) => b.background.kind === 'solid'));
       setOutputs(nextOutputs);
@@ -116,7 +117,7 @@ export function LogoPage({ project, catalogue, selection, onSelectionChange, foc
   }, [outputs, selection]);
 
   // Settings are saved shortly after each change; generate and leaving the page send pending changes first.
-  const queue = useRef(createSaveQueue<LogoSettings>(saveLogoSettings, () => setSaveState('saved')));
+  const [queue] = useState(() => ({ current: createSaveQueue<LogoSettings>(saveLogoSettings, () => setSaveState('saved')) }));
   const flushSave = useCallback(async () => {
     if (saveTimer.current) {
       clearTimeout(saveTimer.current);
@@ -148,7 +149,7 @@ export function LogoPage({ project, catalogue, selection, onSelectionChange, foc
       await uploadLogo(file);
       setUploadMessage({ tone: 'success', text: en.logo.uploaded });
       setLogoVersion((v) => v + 1);
-      await reload();
+      await reload(false);
     } catch (error) {
       setUploadMessage({ tone: 'error', text: en.logo.uploadFailed, details: messagesOf(error) });
     } finally {
@@ -173,6 +174,11 @@ export function LogoPage({ project, catalogue, selection, onSelectionChange, foc
     // One pack after the other: real progress, and a failed pack does not stop the others.
     for (const [index, pack] of chosen.entries()) {
       setGenerateState({ pack: en.logo.packs[pack], done: index, total: chosen.length });
+      if (pack === 'social' && selection.length === 0) {
+        failed = true;
+        details.push(`${en.logo.packFailed(en.logo.packs[pack])} ${en.logo.noLanguage}`);
+        continue;
+      }
       try {
         const result = await generateLogoPack(pack, selection);
         files += result.entries.length;
@@ -192,8 +198,7 @@ export function LogoPage({ project, catalogue, selection, onSelectionChange, foc
     setOutputVersion((v) => v + 1);
   }
 
-  const offered = backgrounds;
-  const backgroundList = backgroundChoices(offered, settings ? [{ kind: 'solid' as const, color: settings.background }] : [], en.logo.currentBackground);
+  const backgroundList = backgroundChoices(backgrounds, settings ? [{ kind: 'solid' as const, color: settings.background }] : [], en.logo.currentBackground);
   const backgroundOptions: Option[] = backgroundList.map((b) => ({ id: backgroundKey(b.background), label: b.name, swatch: swatchCss(b.background) }));
 
   const steps = [
@@ -304,7 +309,7 @@ export function LogoPage({ project, catalogue, selection, onSelectionChange, foc
               if (found && found.background.kind === 'solid') update({ ...settings, background: found.background.color });
             }}
           />
-          {settings.packs.includes('social') ? (
+          {chosen.includes('social') ? (
             <section aria-labelledby="logo-taglines" className="flex flex-col gap-2">
               <h3 id="logo-taglines" className="text-lg font-semibold">
                 {en.logo.taglinesHeading}
@@ -315,9 +320,9 @@ export function LogoPage({ project, catalogue, selection, onSelectionChange, foc
                   <TextField
                     key={locale.id}
                     label={en.logo.taglineLabel(locale.name)}
-                    hint={en.logo.taglineHint}
+                    hint={en.logo.taglineHint(MAX_TAGLINE)}
                     value={settings.taglines[locale.id] ?? ''}
-                    maxLength={120}
+                    maxLength={MAX_TAGLINE}
                     lang={locale.id}
                     onChange={(text) => update({ ...settings, taglines: { ...settings.taglines, [locale.id]: text } })}
                   />
@@ -342,11 +347,17 @@ export function LogoPage({ project, catalogue, selection, onSelectionChange, foc
             {en.logo.previewHeading}
           </h2>
           <div>
-            <BusyButton primary busy={generateState !== null} busyLabel={en.logo.generatingShort} disabled={chosen.length === 0} onClick={() => void generate()}>
+            <BusyButton primary={shownOutputs.length === 0} busy={generateState !== null} busyLabel={en.logo.generatingShort} disabled={chosen.length === 0} onClick={() => void generate()}>
               {en.logo.generate}
             </BusyButton>
           </div>
-          {chosen.length === 0 ? <p className="text-sm">{en.logo.noPacks}</p> : null}
+          {chosen.length === 0 ? (
+            <StatusAlert tone="warning" title={en.logo.noPacks}>
+              <button type="button" className="btn btn-sm min-h-11 mt-2" onClick={() => goTo('options')}>
+                {en.logo.optionsStep}
+              </button>
+            </StatusAlert>
+          ) : null}
           <div role="status">
             {generateState ? (
               <ProgressStatus label={en.logo.generating(generateState.pack, generateState.done, generateState.total)} value={generateState.done} max={generateState.total} />
@@ -367,7 +378,7 @@ export function LogoPage({ project, catalogue, selection, onSelectionChange, foc
             ) : null}
           </div>
           {shownOutputs.length === 0 ? <p>{en.logo.nothingYet}</p> : null}
-          {PACKS.map((pack) => {
+          {chosen.map((pack) => {
             const files = shownOutputs.filter((o) => o.pack === pack);
             if (files.length === 0) return null;
             // One card per asset and language (densities and sizes of one asset together); documents come last.
@@ -384,10 +395,13 @@ export function LogoPage({ project, catalogue, selection, onSelectionChange, foc
                       ? group.files.length > 1 && group.widths
                         ? en.logo.sizes(group.files.length, group.widths[0], group.widths[1])
                         : en.screenshots.pixels(group.largest.width ?? 0, group.largest.height ?? 0)
-                      : `${first.path.split('/').pop() ?? first.path} · ${en.logo.document}`;
+                      : first.path.split('/').pop() === group.name
+                        ? en.logo.document
+                        : `${first.path.split('/').pop() ?? first.path} · ${en.logo.document}`;
                     return (
                       <PreviewCard
                         key={group.key}
+                        checkered
                         {...(group.largest
                           ? { media: <img src={outputFileUrl(group.largest.path, PREVIEW_WIDTH, outputVersion)} alt={en.logo.previewAlt(group.name)} className="h-auto! w-full rounded object-contain" /> }
                           : {})}
@@ -403,7 +417,7 @@ export function LogoPage({ project, catalogue, selection, onSelectionChange, foc
             );
           })}
           <div>
-            <button type="button" className="btn btn-primary min-h-11" onClick={() => goTo('export')}>
+            <button type="button" className={`btn min-h-11 ${shownOutputs.length > 0 ? 'btn-primary' : ''}`} onClick={() => goTo('export')}>
               {en.steps.export} →
             </button>
           </div>

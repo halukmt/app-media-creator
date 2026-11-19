@@ -3,7 +3,7 @@ import { readManifest, locateOutputFile, type OutputEntry } from '../export/mani
 import type { LocaleSelection } from '../locales/index.js';
 import type { CardWarning } from '../screenshots/index.js';
 import { getSpec, inspectImage } from '../specs/index.js';
-import { LOGO_PACKS, readLogoSettings, type LogoPack, type Workspace } from '../workspace/index.js';
+import { LOGO_PACKS, readLogoSettings, readProject, type LogoPack, type Workspace } from '../workspace/index.js';
 import { generateAndroidIcons } from './android-icons.js';
 import { generateAppStoreIcons } from './app-store-icons.js';
 import { GeneratorError } from './logo.js';
@@ -39,12 +39,16 @@ export async function generateLogoPack(workspace: Workspace, pack: string, optio
       return { entries: await generateAndroidIcons(workspace, { background: settings.background }), warnings: [] };
     case 'web':
       return { entries: await generateWebIcons(workspace, { background: settings.background }), warnings: [] };
-    case 'social':
+    case 'social': {
+      // Taglines of languages that were removed from the project stay saved but are not used.
+      const { locales } = await readProject(workspace);
+      const taglines = Object.fromEntries(Object.entries(settings.taglines).filter(([locale]) => (locales as readonly string[]).includes(locale)));
       return generateShareImages(workspace, {
         background: settings.background,
-        taglines: settings.taglines,
+        taglines,
         ...(options.locales !== undefined ? { locales: options.locales } : {}),
       });
+    }
   }
 }
 
@@ -64,10 +68,11 @@ const RASTER = new Set(['.png', '.jpg', '.jpeg', '.webp']);
 
 /** The generated files of the logo packs, with pack and measured size, for the preview grid. */
 export async function listLogoOutputs(workspace: Workspace): Promise<LogoOutput[]> {
-  const outputs: LogoOutput[] = [];
-  for (const entry of (await readManifest(workspace)).entries) {
+  const entries = (await readManifest(workspace)).entries.flatMap((entry) => {
     const pack = packOf(entry.specId);
-    if (!pack) continue;
+    return pack ? [{ entry, pack }] : [];
+  });
+  return Promise.all(entries.map(async ({ entry, pack }) => {
     const output: LogoOutput = {
       path: entry.path,
       specId: entry.specId,
@@ -84,7 +89,6 @@ export async function listLogoOutputs(workspace: Workspace): Promise<LogoOutput[
         // An unreadable file stays without size; the export checklist reports it.
       }
     }
-    outputs.push(output);
-  }
-  return outputs;
+    return output;
+  }));
 }

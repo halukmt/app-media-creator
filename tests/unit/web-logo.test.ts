@@ -28,6 +28,12 @@ describe('groupOutputs', () => {
     expect(groups.map((g) => g.locale ?? 'shared')).toEqual(['de-DE', 'tr-TR', 'shared']);
     expect(groups[2]!.largest).toBeUndefined();
   });
+
+  it('puts the languages of one asset next to each other', () => {
+    const share = (specId: string, locale: string) => ({ path: `web/${locale}/${specId}.png`, specId, name: specId, locale, width: 1200, height: 630 });
+    const groups = groupOutputs([share('og', 'de-DE'), share('x', 'de-DE'), share('og', 'tr-TR'), share('x', 'tr-TR')]);
+    expect(groups.map((g) => `${g.name} ${g.locale}`)).toEqual(['og de-DE', 'og tr-TR', 'x de-DE', 'x tr-TR']);
+  });
 });
 
 describe('groupStatus', () => {

@@ -2,6 +2,9 @@
 
 import { type CheckStatus, isWorseStatus } from './export.js';
 
+/** Longest tagline in characters (MAX_TAGLINE in src/core/workspace/logo-settings.ts; the UI cannot import core). */
+export const MAX_TAGLINE = 120;
+
 export interface OutputLike {
   path: string;
   specId: string;
@@ -40,7 +43,12 @@ export function groupOutputs<T extends OutputLike>(outputs: readonly T[]): Outpu
     const sorted = [...images].sort((a, b) => (b.width ?? 0) - (a.width ?? 0));
     return { ...group, largest: sorted[0]!, widths: [sorted.at(-1)!.width!, sorted[0]!.width!] as [number, number] };
   });
-  return [...list.filter((g) => g.largest), ...list.filter((g) => !g.largest)];
+  // All languages of one asset sit next to each other (in the order the asset first appears), so long German and
+  // Turkish texts can be compared side by side.
+  const specOrder = new Map<string, number>();
+  for (const output of outputs) if (!specOrder.has(output.specId)) specOrder.set(output.specId, specOrder.size);
+  const bySpec = [...list].sort((a, b) => specOrder.get(a.files[0]!.specId)! - specOrder.get(b.files[0]!.specId)!);
+  return [...bySpec.filter((g) => g.largest), ...bySpec.filter((g) => !g.largest)];
 }
 
 /** Worst status and the distinct messages of a group's files; undefined while no file has a status yet. */
