@@ -236,3 +236,13 @@
 - One unit-test failure under full-suite load (`framed-screenshots` "removes the files of a deleted screenshot"),
   green alone and on rerun — second flaky occurrence after #34; watch, file an issue if it repeats.
 - CI e2e took 6m19s again (usually ~1–2 min).
+
+## #63 One-colour logo silhouette — done (PR #73)
+
+- `renderSilhouette` decides the background cut-out once per logo (`analyseBackground`, 512 px, WeakMap cache per
+  logo buffer, rejected analyses not cached): cut only when ≥ 60 % of the border shares one corner's flat colour
+  (tolerance 24) and ≥ 0.1 % of the pixels differ (tolerance 48). One-colour and gradient marks keep full coverage.
+- First design (keep whole below 1 % kept pixels, per size) failed review: densities could disagree, line art near
+  1 %, gradients still cut. Second review: edge-touching wordmarks → 60 % best corner. Tests for each case.
+- Flaky unit test cause captured: `TestTimeoutError` 20 s in framed-screenshots → #72 (Backlog, P2/XS).
+- Codex on PR #71: no findings.
