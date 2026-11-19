@@ -30,4 +30,5 @@ entries left under `[Unreleased]` is rejected by `npm run check:release`.
 - A failed batch of generated files leaves the previous files untouched, and rotated JPEG logos are rendered upright. (#38)
 - Closing the sections menu on a phone returns focus to the menu button, and widening the window with the menu open no longer locks the page. (#44)
 - The shadow of a user bezel no longer darkens the edges of the screenshot inside it. (#51)
+- Semi-transparent parts of a user bezel keep their opacity instead of being drawn twice. (#53)
 

@@ -55,11 +55,14 @@ export async function deviceSvg(options: DeviceOptions): Promise<{ svg: string; 
     const bezelImage = (filter: string) =>
       `<image x="${n(box.x)}" y="${n(box.y)}" width="${n(box.width)}" height="${n(userFrame.height * scale)}" preserveAspectRatio="none" ` +
       `${filter}href="data:image/png;base64,${userFrame.png.toString('base64')}"/>`;
-    // Order: shadowed bezel, then the screenshot, then the plain bezel on top. The shadow the bezel casts into its own
-    // screen opening ends up beneath the screenshot, so it never darkens the screen content.
+    // Order: the shadow alone, then the screenshot, then the bezel artwork once on top. The shadow the bezel casts into
+    // its own screen opening ends up beneath the screenshot, and semi-transparent bezel pixels are not drawn twice.
+    // The filter outputs only the shadow: the bezel's alpha, blurred and offset, filled black (no source graphic).
     const shadowLayer = withShadow
-      ? `<defs><filter id="bezel-shadow" x="-20%" y="-20%" width="140%" height="140%"><feDropShadow dx="0" ` +
-        `dy="${n(box.width * SHADOW.offset)}" stdDeviation="${n(box.width * SHADOW.blur)}" flood-color="#000" flood-opacity="0.3"/></filter></defs>` +
+      ? `<defs><filter id="bezel-shadow" x="-20%" y="-20%" width="140%" height="140%">` +
+        `<feGaussianBlur in="SourceAlpha" stdDeviation="${n(box.width * SHADOW.blur)}"/>` +
+        `<feOffset dx="0" dy="${n(box.width * SHADOW.offset)}" result="shape"/>` +
+        `<feFlood flood-color="#000" flood-opacity="0.3"/><feComposite in2="shape" operator="in"/></filter></defs>` +
         bezelImage('filter="url(#bezel-shadow)" ')
       : '';
     return { svg: shadowLayer + image + bezelImage(''), height: userFrame.height * scale };
