@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { LOCALE_IDS, isLocaleId, resolveLocales, type LocaleId } from '../locales/index.js';
-import { listSpecs, type Target } from '../specs/index.js';
+import { SCREENSHOT_MATRIX, type Target } from '../specs/index.js';
 
 export const PROJECT_VERSION = 1;
 
@@ -19,9 +19,9 @@ export interface ProjectSettings {
   claims: { allowed: string[]; forbidden: string[] };
 }
 
-/** Screenshot spec ids a target offers as device models. */
+/** Screenshot spec ids a target offers as device models: the device matrix the card renderer supports. */
 export function deviceOptions(target: Target): string[] {
-  return listSpecs({ target, group: 'screenshot' }).map((entry) => entry.id);
+  return [...SCREENSHOT_MATRIX[target]];
 }
 
 export function defaultProject(name = 'My app'): ProjectSettings {

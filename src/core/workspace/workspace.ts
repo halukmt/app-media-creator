@@ -2,7 +2,7 @@ import { randomBytes } from 'node:crypto';
 import { existsSync } from 'node:fs';
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import path from 'node:path';
-import { defaultProject, validateProject, type ProjectSettings, type ProjectValidation } from './project.js';
+import { defaultProject, deviceOptions, validateProject, type ProjectSettings, type ProjectValidation } from './project.js';
 
 export const DEFAULT_WORKSPACE_DIR = '.app-media';
 const PROJECT_FILE = 'project.json';
@@ -68,9 +68,28 @@ export async function readProject(workspace: Workspace): Promise<ProjectSettings
   } catch {
     throw new ProjectFileError(workspace.projectFile, ['not valid JSON']);
   }
-  const result = validateProject(raw);
+  const result = validateProject(dropUnknownDevices(raw));
   if (!result.ok) throw new ProjectFileError(workspace.projectFile, result.errors);
   return result.project;
+}
+
+/**
+ * A stored project may list devices that an earlier version offered (e.g. Mac or Apple TV screenshots before the
+ * device matrix). Reading drops them instead of making the whole file invalid; the next save writes the clean list.
+ */
+function dropUnknownDevices(raw: unknown): unknown {
+  if (typeof raw !== 'object' || raw === null) return raw;
+  const targets = (raw as { targets?: unknown }).targets;
+  if (typeof targets !== 'object' || targets === null) return raw;
+  const cleaned: Record<string, unknown> = { ...(targets as Record<string, unknown>) };
+  for (const target of ['apple', 'google', 'web'] as const) {
+    const settings = cleaned[target] as { devices?: unknown } | undefined;
+    if (settings && Array.isArray(settings.devices)) {
+      const allowed = deviceOptions(target);
+      cleaned[target] = { ...settings, devices: settings.devices.filter((d) => typeof d === 'string' && allowed.includes(d)) };
+    }
+  }
+  return { ...(raw as object), targets: cleaned };
 }
 
 // Saves run one after another, so overlapping requests never interleave their writes.
@@ -89,7 +108,7 @@ export function saveProject(workspace: Workspace, input: unknown): Promise<Proje
 }
 
 /** Writes JSON to a uniquely named temporary file and renames it, so readers never see a half-written file. */
-async function writeJsonAtomic(file: string, data: unknown): Promise<void> {
+export async function writeJsonAtomic(file: string, data: unknown): Promise<void> {
   const tmp = `${file}.${process.pid}.${randomBytes(4).toString('hex')}.tmp`;
   await writeFile(tmp, `${JSON.stringify(data, null, 2)}\n`, 'utf8');
   await rename(tmp, file);

@@ -23,6 +23,7 @@ entries left under `[Unreleased]` is rejected by `npm run check:release`.
 - Export section: overall status and ZIP download for the selected languages (with a confirmation while required files are missing), and a checklist per store grouped by asset with a status per language. (#32)
 - Screenshot card renderer: headline and subline above or below the app screenshot in a generic device frame (iPhone, iPhone Duo, iPad, Android phone and tablet, or your own bezel), three layouts, background presets and logo colours, text fitting for long German and Turkish words, opaque PNG at the exact store size. (#11)
 - Website screenshots: every uploaded screenshot in a device frame on transparency, with an optional shadow, as PNG and WebP in 1x and 2x per language. (#13)
+- Screenshot sets per language with headlines that move with their screenshot, a device matrix (iPhone 6.9"/6.5"/6.3", iPhone Duo, iPad 13", Android phone and tablets), fallback to the source language, and card generation for one, several or all languages. (#12)
 
 ### Fixed
 

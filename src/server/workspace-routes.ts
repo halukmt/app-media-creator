@@ -6,6 +6,8 @@ import {
   ProjectFileError,
   isInputKind,
   listInputs,
+  readScreenshotSets,
+  saveScreenshotSets,
   readProject,
   saveInput,
   saveProject,
@@ -47,6 +49,19 @@ export function workspaceRoutes(workspace: Workspace): Hono {
   });
 
   api.get('/inputs', async (c) => c.json(await listInputs(workspace)));
+
+  api.get('/screenshots', async (c) => c.json(await readScreenshotSets(workspace)));
+
+  api.put('/screenshots', async (c) => {
+    let body: unknown;
+    try {
+      body = await c.req.json();
+    } catch {
+      return c.json({ errors: ['The request body must be JSON'] }, 400);
+    }
+    const result = await saveScreenshotSets(workspace, body);
+    return result.ok ? c.json(result.sets) : c.json({ errors: result.errors }, 400);
+  });
 
   api.post(
     '/inputs/:kind',
