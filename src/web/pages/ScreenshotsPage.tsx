@@ -128,6 +128,18 @@ export function ScreenshotsPage({ project, catalogue, selection, onSelectionChan
   }, [selection, project.sourceLocale]);
 
   const [loadError, setLoadError] = useState<string[] | null>(null);
+  // Edit lock around applying AI headlines (#84, #87). Edits are refused while
+  // - an apply runs (`applyRunning`), or
+  // - the server holds applied texts the page has not shown yet (`lockedAfter` = the last reload number started
+  //   before the apply finished; only a successful reload started later can bring the applied texts).
+  // The lock is released only after such a reload is rendered, so no handler of an earlier render can save old texts.
+  const applyRunning = useRef(false);
+  const lockedAfter = useRef<number | null>(null);
+  const [releaseLock, setReleaseLock] = useState(false);
+  // Mirrors the lock for rendering: the page says why edits are not taken.
+  const [editsLocked, setEditsLocked] = useState(false);
+  // Reloads are numbered: an older reload that answers late never overwrites a newer one.
+  const reloadCount = useRef(0);
   const loadCreative = useCallback(async () => {
     try {
       setCreative(await fetchCreativeSettings());
@@ -138,14 +150,18 @@ export function ScreenshotsPage({ project, catalogue, selection, onSelectionChan
   }, []);
   /** Loads uploads and sets; resolves false when that failed (the error is shown). */
   const reload = useCallback(async (): Promise<boolean> => {
+    const number = (reloadCount.current += 1);
     try {
       const [nextInputs, nextSets] = await Promise.all([fetchInputs(), fetchScreenshots()]);
+      if (number !== reloadCount.current) return false;
       setInputs(nextInputs.filter((input) => input.kind === 'screenshot'));
       setSets(nextSets);
       setLoadError(null);
+      // This reload started after the apply finished, so it shows the applied texts: release once it is rendered.
+      if (!applyRunning.current && lockedAfter.current !== null && number > lockedAfter.current) setReleaseLock(true);
       return true;
     } catch (error) {
-      setLoadError(messagesOf(error));
+      if (number === reloadCount.current) setLoadError(messagesOf(error));
       return false;
     }
   }, []);
@@ -221,15 +237,9 @@ export function ScreenshotsPage({ project, catalogue, selection, onSelectionChan
     }
   }, []);
 
-  // While AI headlines are applied and the sets reloaded, edits are not taken: a save of the older document queued in
-  // that time would overwrite the applied headlines (#84).
-  const applyingAi = useRef(false);
-  // Set when the reload after an apply failed; the next successful reload ("Try again") releases the lock.
-  const keepLockedUntilReload = useRef(false);
-
   /** Takes an edit and queues its save; returns false while AI headlines are applied (the edit is not taken). */
   function updateSets(next: ScreenshotSets): boolean {
-    if (applyingAi.current) return false;
+    if (applyRunning.current || lockedAfter.current !== null) return false;
     setSets(next);
     queue.current.schedule(next);
     setSaveState('saving');
@@ -273,14 +283,15 @@ export function ScreenshotsPage({ project, catalogue, selection, onSelectionChan
     return updateSets({ ...sets, sets: { ...sets.sets, [editLocale]: entries } });
   }
 
-  // The edit lock of an apply is released only after the reloaded sets are rendered, so no handler of an earlier
-  // render (holding the pre-apply texts) can queue a save.
-  const [releaseLock, setReleaseLock] = useState(false);
   useEffect(() => {
     if (!releaseLock) return;
-    applyingAi.current = false;
     setReleaseLock(false);
-  }, [releaseLock, sets]);
+    if (applyRunning.current) return;
+    lockedAfter.current = null;
+    setEditsLocked(false);
+    // The previews still show the texts from before the apply.
+    setPreviewVersion((v) => v + 1);
+  }, [releaseLock]);
 
   // Previews of the editing language on the chosen device, one request at a time; a newer version cancels the rest.
   useEffect(() => {
@@ -440,8 +451,8 @@ export function ScreenshotsPage({ project, catalogue, selection, onSelectionChan
     if (!aiJob) return;
     setAiMessage(null);
     // From here until the reloaded sets are rendered, no edit may queue a save (see updateSets).
-    applyingAi.current = true;
-    let applied = false;
+    applyRunning.current = true;
+    setEditsLocked(true);
     setAiBusy(variant);
     try {
       try {
@@ -452,24 +463,24 @@ export function ScreenshotsPage({ project, catalogue, selection, onSelectionChan
       }
       try {
         await applyJob(aiJob.id, variant);
-        applied = true;
+        // Applied on the server: show it at once. A failed refresh below must not read as a failed apply.
+        showJob({ ...aiJob, status: 'applied', applied: { variant, at: new Date().toISOString() } });
       } catch (error) {
         setAiMessage({ action: 'apply', tone: 'error', text: en.screenshots.ai.applyFailed, details: messagesOf(error) });
-        return;
-      }
-      // Applied on the server: show it at once, then load the new sets. A failed refresh must not read as a failed apply.
-      showJob({ ...aiJob, status: 'applied', applied: { variant, at: new Date().toISOString() } });
-      refreshJob(aiJob.id);
-      if (await reload()) {
-        setPreviewVersion((v) => v + 1);
-        setReleaseLock(true);
-      } else {
-        // The page still holds the old texts: edits stay blocked until "Try again" loads the applied ones.
-        keepLockedUntilReload.current = true;
+      } finally {
+        // Also after an error: the server may have saved the headlines before the answer was lost. Only a reload
+        // started from now on shows the server's state and may release the lock.
+        lockedAfter.current = reloadCount.current;
+        refreshJob(aiJob.id);
       }
     } finally {
-      // Before the apply request, nothing changed on the server: edits may go on at once.
-      if (!applied) applyingAi.current = false;
+      applyRunning.current = false;
+    }
+    try {
+      // Releases the lock when it succeeds; when it fails, the lock stays until a later reload succeeds (#87).
+      if (lockedAfter.current !== null) await reload();
+      else setEditsLocked(false);
+    } finally {
       setAiBusy(null);
     }
   }
@@ -533,14 +544,7 @@ export function ScreenshotsPage({ project, catalogue, selection, onSelectionChan
             <button
               type="button"
               className="btn btn-sm min-h-11 mt-2"
-              onClick={() =>
-                void reload().then((ok) => {
-                  if (ok && keepLockedUntilReload.current) {
-                    keepLockedUntilReload.current = false;
-                    setReleaseLock(true);
-                  }
-                })
-              }
+              onClick={() => void reload()}
             >
               {en.app.retry}
             </button>
@@ -754,6 +758,7 @@ export function ScreenshotsPage({ project, catalogue, selection, onSelectionChan
             <h3 id="slots-heading" tabIndex={-1} className="text-lg font-semibold focus:outline-none">
               {en.screenshots.slotsHeading}
             </h3>
+            {editsLocked ? <StatusAlert tone="info" title={en.screenshots.ai.editsPaused} /> : null}
             <LocaleSelector label={en.screenshots.editLocaleLabel} mode="single" options={editOptions} value={[editLocale]} onChange={([id]) => id && setEditLocale(id)} />
             {devices.length > 0 ? (
               <OptionGroup
