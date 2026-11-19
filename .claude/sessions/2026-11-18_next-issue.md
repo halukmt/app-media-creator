@@ -133,3 +133,8 @@
 - Codex on PR #50: user bezel shadow darkened the screenshot edges. Bezel now drawn twice (shadowed beneath, plain on
   top). The test bezels had no real opening (`dest-out` with a transparent shape removes nothing) — fixed.
 - CI e2e took about 5 minutes this time (usually under 1); keep an eye on it.
+
+## #53 Review finding from #52 — done (PR #54)
+
+- Codex on PR #52: `feDropShadow` in the lower layer drew the bezel twice → shadow-only filter (blur SourceAlpha,
+  offset, flood, composite). Lesson: for a "shadow layer" never use feDropShadow (it merges the source).

@@ -75,3 +75,12 @@ the bezel's screen opening keeps its own colours up to the opening's edge.
 #### Scenario: White screenshot in a dark bezel
 - **WHEN** a white screenshot is framed in a dark user bezel with a transparent screen opening and the default shadow
 - **THEN** the screenshot pixel two pixels inside the left edge of the opening is still white (every channel at least 250), and the area below the device shows a partly transparent shadow
+
+### Requirement: User bezel artwork is drawn once
+The shadow of a user bezel SHALL be drawn as a separate layer that contains only the shadow; the bezel artwork SHALL
+be drawn exactly once, so semi-transparent bezel pixels keep the opacity they have in the bezel file (plus the shadow
+beneath them).
+
+#### Scenario: Semi-transparent ring
+- **WHEN** a user bezel whose ring is red at 50 % alpha is drawn with the default shadow
+- **THEN** a pixel in the middle of the ring has an alpha above 128 and below 180 (drawn twice it would be about 200)
