@@ -116,7 +116,9 @@ export const APPLE_SPECS: readonly SpecEntry[] = [
   preview('iphone-5.5', 'App preview iPhone 5.5" and 4"', sizes([1080, 1920]), true),
   preview('iphone-4.7', 'App preview iPhone 4.7"', sizes([750, 1334]), true),
   preview('ipad', 'App preview iPad 13", 11", 10.5"', sizes([1200, 1600]), true),
-  preview('ipad-legacy', 'App preview iPad 12.9" (2nd gen) and 9.7"', sizes([900, 1200]), true),
+  // The 12.9" (2nd gen) takes both sizes, the 9.7" only the smaller one.
+  preview('ipad-12.9', 'App preview iPad 12.9" (2nd gen)', sizes([1200, 1600], [900, 1200]), true),
+  preview('ipad-9.7', 'App preview iPad 9.7"', sizes([900, 1200]), true),
   preview('mac', 'App preview Mac', sizes([1920, 1080]), false),
   preview('apple-tv', 'App preview Apple TV', sizes([1920, 1080]), false),
   preview('vision-pro', 'App preview Apple Vision Pro', sizes([3840, 2160]), false),

@@ -52,11 +52,12 @@ export function getLocale(id: string): Locale {
  */
 export function resolveLocales(selection: LocaleSelection): LocaleId[] {
   const requested = typeof selection === 'string' ? [selection] : [...selection];
-  if (requested.includes('all')) return [...LOCALE_IDS];
   if (requested.length === 0) throw new Error('Select at least one locale');
-  const unsupported = requested.filter((id) => !isLocaleId(id));
+  // Every entry is checked before "all" expands, so a typo next to "all" is reported instead of ignored.
+  const unsupported = requested.filter((id) => id !== 'all' && !isLocaleId(id));
   if (unsupported.length > 0) {
     throw new Error(`${unsupported.join(', ')} ${unsupported.length === 1 ? 'is' : 'are'} not a supported locale`);
   }
+  if (requested.includes('all')) return [...LOCALE_IDS];
   return LOCALE_IDS.filter((id) => requested.includes(id));
 }

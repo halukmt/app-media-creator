@@ -23,13 +23,14 @@ export class ExportError extends Error {}
 export function selectExportLocales(project: ProjectSettings, selection: LocaleSelection | undefined): LocaleId[] {
   if (selection === undefined) return [...project.locales];
   const requested = typeof selection === 'string' ? [selection] : [...selection];
-  if (requested.includes('all')) return [...project.locales];
   let locales: LocaleId[];
   try {
+    // Validates every entry first, so an unsupported locale next to "all" is rejected too (#30).
     locales = resolveLocales(requested);
   } catch (error) {
     throw new ExportError((error as Error).message);
   }
+  if (requested.includes('all')) return [...project.locales];
   const outside = locales.filter((locale) => !project.locales.includes(locale));
   if (outside.length > 0) {
     throw new ExportError(`${outside.join(', ')} ${outside.length === 1 ? 'is' : 'are'} not a locale of this project`);
