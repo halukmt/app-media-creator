@@ -33,3 +33,14 @@ No UI in this change, so no component reuse map.
 
 | Source | Finding | Severity | Decision | Status |
 |---|---|---|---|---|
+| code-review | One deleted upload made the stored file invalid and wiped all texts and the style | critical | Lenient read: entries of deleted uploads and unknown locales are dropped, the rest is kept; test | fixed |
+| code-review | project.json with devices outside the new matrix became unreadable | major | Reading drops unknown devices (saving still rejects them); tests | fixed |
+| code-review | A failure in a later locale left earlier locales already replaced | major | Render and validate all locales first, then register | fixed |
+| code-review | Spec violation answered with 500 | minor | Validation errors become GeneratorError (400) | fixed |
+| code-review | A screenshot removed from a set came back automatically | major | `known` list: only uploads not seen before are appended; test | fixed |
+| code-review | Cards of unpicked devices and skipped locales stayed | major | Each selected locale replaces all matrix devices, also when it has no screenshots; test | fixed |
+| code-review | Fallback locales rendered identical cards again | minor | Cards cached per (device, screenshot, headline, subline) within a run | fixed |
+| code-review | Store minimum count ignored | minor | `too-few-screenshots` warning per locale and device; test | fixed |
+| code-review | Deletion scenario untested | minor | Test added (see first row) | fixed |
+| code-review | Screenshot listing done twice and duplicated | minor | `listScreenshots`; `readScreenshotSets` takes the list | fixed |
+| security-review | No findings: inputs must match listed uploads (also when read from disk), locale keys checked, texts drawn as paths, style validated twice | — | — | — |

@@ -12,5 +12,5 @@
 
 ## 3. Verification loop
 
-- [ ] 3.1 `npm run build`, `npm run check`, `npm run check:all`, `npm test`, `npm run test:e2e` all pass
-- [ ] 3.2 `/code-review` and `security-review` (new routes, file reads by stored paths); findings in the review log
+- [x] 3.1 `npm run build`, `npm run check`, `npm run check:all`, `npm test`, `npm run test:e2e` all pass
+- [x] 3.2 `/code-review` and `security-review` (new routes, file reads by stored paths); findings in the review log

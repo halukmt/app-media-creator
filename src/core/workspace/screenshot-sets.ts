@@ -34,10 +34,25 @@ export interface ScreenshotSets {
   version: 1;
   style: CardStyle;
   sets: Partial<Record<LocaleId, ScreenshotEntry[]>>;
+  /**
+   * Screenshots the sets have already seen. Only uploads that are not in this list are appended automatically, so a
+   * screenshot the user took out of a set stays out.
+   */
+  known: string[];
 }
 
 export function defaultScreenshotSets(): ScreenshotSets {
-  return { version: 1, style: { layout: 'text-top', background: { kind: 'gradient', from: '#003a72', to: '#0079dd', angle: 160 } }, sets: {} };
+  return {
+    version: 1,
+    style: { layout: 'text-top', background: { kind: 'gradient', from: '#003a72', to: '#0079dd', angle: 160 } },
+    sets: {},
+    known: [],
+  };
+}
+
+/** The uploaded screenshots (all locales). */
+export async function listScreenshots(workspace: Workspace): Promise<StoredInput[]> {
+  return (await listInputs(workspace)).filter((input) => input.kind === 'screenshot');
 }
 
 const entrySchema = z.object({
@@ -53,6 +68,7 @@ const documentSchema = z.object({
     background: z.custom<Background>(isBackground, { message: 'must be a #rrggbb colour or a gradient of two' }),
   }),
   sets: z.record(z.string(), z.array(entrySchema).max(MAX_SET_SIZE, `at most ${MAX_SET_SIZE} screenshots per language`)),
+  known: z.array(z.string()).optional(),
 });
 
 export type SetsValidation = { ok: true; sets: ScreenshotSets } | { ok: false; errors: string[] };
@@ -60,77 +76,90 @@ export type SetsValidation = { ok: true; sets: ScreenshotSets } | { ok: false; e
 /**
  * Validates screenshot sets against the uploaded screenshots: known locales, only existing screenshot inputs, each
  * screenshot at most once per locale, at most 10 per locale, texts up to 200 characters. Never throws.
+ * `lenient` (for the stored file): entries of deleted screenshots and unknown locales are dropped instead of rejected,
+ * so deleting one upload never loses the other texts and the style.
  */
-export function validateScreenshotSets(input: unknown, screenshots: readonly StoredInput[]): SetsValidation {
+export function validateScreenshotSets(input: unknown, screenshots: readonly StoredInput[], lenient = false): SetsValidation {
   const parsed = documentSchema.safeParse(input);
   if (!parsed.success) {
     return { ok: false, errors: parsed.error.issues.map((issue) => `${issue.path.join('.') || 'screenshots'}: ${issue.message}`) };
   }
-  const known = new Set(screenshots.filter((s) => s.kind === 'screenshot').map((s) => s.path));
+  const uploaded = new Set(screenshots.map((s) => s.path));
   const errors: string[] = [];
   const sets: Partial<Record<LocaleId, ScreenshotEntry[]>> = {};
   for (const [locale, entries] of Object.entries(parsed.data.sets)) {
     if (!isLocaleId(locale)) {
-      errors.push(`sets.${locale}: not a supported locale`);
+      if (!lenient) errors.push(`sets.${locale}: not a supported locale`);
       continue;
     }
     const seen = new Set<string>();
+    const kept: ScreenshotEntry[] = [];
     entries.forEach((entry, index) => {
-      if (!known.has(entry.input)) errors.push(`sets.${locale}.${index}.input: ${entry.input} is not an uploaded screenshot`);
-      if (seen.has(entry.input)) errors.push(`sets.${locale}.${index}.input: ${entry.input} is listed twice`);
+      const problem = !uploaded.has(entry.input) ? 'is not an uploaded screenshot' : seen.has(entry.input) ? 'is listed twice' : null;
       seen.add(entry.input);
+      if (problem) {
+        if (!lenient) errors.push(`sets.${locale}.${index}.input: ${entry.input} ${problem}`);
+        return;
+      }
+      kept.push({ input: entry.input, headline: entry.headline.trim(), subline: entry.subline.trim() });
     });
-    sets[locale] = entries.map((entry) => ({ input: entry.input, headline: entry.headline.trim(), subline: entry.subline.trim() }));
+    sets[locale] = kept;
   }
   if (errors.length > 0) return { ok: false, errors };
-  return { ok: true, sets: { version: 1, style: parsed.data.style, sets } };
+  const known = (parsed.data.known ?? []).filter((p) => uploaded.has(p));
+  return { ok: true, sets: { version: 1, style: parsed.data.style, sets, known } };
 }
 
 /**
- * Brings stored sets in line with the uploaded screenshots: entries whose screenshot was deleted are dropped, and a
- * locale's own uploads that are in no entry yet are appended (in upload order, without text) while there is room.
+ * Brings stored sets in line with the uploaded screenshots: entries whose screenshot was deleted are dropped, and new
+ * uploads of a locale (not yet known) are appended in upload order, without text, while there is room.
  */
 export function mergeWithInputs(stored: ScreenshotSets, screenshots: readonly StoredInput[]): ScreenshotSets {
   const existing = new Set(screenshots.map((s) => s.path));
+  const known = new Set(stored.known);
   const sets: Partial<Record<LocaleId, ScreenshotEntry[]>> = {};
   for (const locale of LOCALE_IDS) {
     const kept = (stored.sets[locale] ?? []).filter((entry) => existing.has(entry.input));
     const listed = new Set(kept.map((entry) => entry.input));
     const added = screenshots
-      .filter((s) => s.locale === locale && !listed.has(s.path))
+      .filter((s) => s.locale === locale && !listed.has(s.path) && !known.has(s.path))
       .map((s) => ({ input: s.path, headline: '', subline: '' }));
     const merged = [...kept, ...added].slice(0, MAX_SET_SIZE);
     if (merged.length > 0) sets[locale] = merged;
   }
-  return { ...stored, sets };
+  return { ...stored, sets, known: screenshots.map((s) => s.path) };
 }
 
 /** The current sets: the stored file (or defaults) merged with the uploaded screenshots. */
-export async function readScreenshotSets(workspace: Workspace): Promise<ScreenshotSets> {
+export async function readScreenshotSets(workspace: Workspace, screenshots?: readonly StoredInput[]): Promise<ScreenshotSets> {
+  const uploads = screenshots ?? (await listScreenshots(workspace));
   const file = path.join(workspace.root, FILE);
-  const screenshots = (await listInputs(workspace)).filter((input) => input.kind === 'screenshot');
   let stored = defaultScreenshotSets();
   if (existsSync(file)) {
-    // A broken or outdated file falls back to defaults rather than blocking the section; saving rewrites it.
     let raw: unknown = null;
     try {
       raw = JSON.parse(await readFile(file, 'utf8'));
     } catch {
       raw = null;
     }
-    const result = validateScreenshotSets(raw, screenshots);
+    // Lenient: a deleted upload drops only its own entry. A file that is broken as a whole falls back to defaults.
+    const result = validateScreenshotSets(raw, uploads, true);
     if (result.ok) stored = result.sets;
   }
-  return mergeWithInputs(stored, screenshots);
+  return mergeWithInputs(stored, uploads);
 }
 
-/** Validates and stores the sets; returns the merged result or the validation errors. */
+/**
+ * Validates and stores the sets; returns the merged result or the validation errors. Every current upload counts as
+ * known afterwards, so a screenshot left out of the saved sets is not appended again.
+ */
 export async function saveScreenshotSets(workspace: Workspace, input: unknown): Promise<SetsValidation> {
-  const screenshots = (await listInputs(workspace)).filter((s) => s.kind === 'screenshot');
+  const screenshots = await listScreenshots(workspace);
   const result = validateScreenshotSets(input, screenshots);
   if (!result.ok) return result;
-  await writeJsonAtomic(path.join(workspace.root, FILE), result.sets);
-  return { ok: true, sets: mergeWithInputs(result.sets, screenshots) };
+  const toStore: ScreenshotSets = { ...result.sets, known: screenshots.map((s) => s.path) };
+  await writeJsonAtomic(path.join(workspace.root, FILE), toStore);
+  return { ok: true, sets: mergeWithInputs(toStore, screenshots) };
 }
 
 export interface EffectiveEntry extends ScreenshotEntry {
