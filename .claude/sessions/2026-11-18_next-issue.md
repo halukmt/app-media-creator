@@ -346,3 +346,13 @@
   counts apply requests (0) and checks that edits work; fails on old code.
 - Third lock fix in a row (#84, #87, #89) → #85 (revision check on saves) raised to P1 and Ready, before #16.
 - Codex on PR #88 led to this issue.
+
+## #85 Revision-checked saves for the screenshot sets — done (PR #91)
+
+- `revision` in screenshots.json; serialized save per workspace with an optimistic check (409 + current sets); PUT
+  requires a revision; `known` = stored ∪ page's known ∪ listed (unseen uploads still appended); AI apply retries.
+- Page stamps saves with `knownRevision`; 409 → discard, reload, "changed elsewhere", callers continue; reload with a
+  newer revision discards waiting edits, older ones are ignored. Save queue `discard()`.
+- Code review found 10 points (stale edit after reload, double reader, known semantics, …) → fixed; security clean.
+- The client edit lock from #84–#89 stays as a UX guard; data loss is now prevented by the server.
+- Codex on PR #90: no findings. Next: #16 (amc-copy skill), #24 (store texts).
