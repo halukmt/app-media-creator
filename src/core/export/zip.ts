@@ -8,9 +8,11 @@ import { resolveLocales, type LocaleId, type LocaleSelection } from '../locales/
 import { getSpec } from '../specs/index.js';
 import { safeBaseName } from '../workspace/inputs.js';
 import type { ProjectSettings } from '../workspace/project.js';
+import { StoreTextsFileError, defaultStoreTexts, readStoreTexts, type StoreTexts } from '../workspace/store-texts.js';
 import { readProject, type Workspace } from '../workspace/workspace.js';
 import { buildChecklist, checklistMarkdown, type Checklist, type LocateFile, type MeasureFile } from './checklist.js';
 import { locateOutputFile, readManifest } from './manifest.js';
+import { storeTextFiles } from './store-texts.js';
 
 /** Invalid export request (e.g. a locale the project does not use). */
 export class ExportError extends Error {}
@@ -59,15 +61,29 @@ async function prepare(workspace: Workspace, options: ExportOptions) {
   const project = await readProject(workspace);
   const locales = selectExportLocales(project, options.locales);
   const manifest = await readManifest(workspace);
+  let storeTexts: StoreTexts;
+  let storeTextsProblem: string | undefined;
+  try {
+    storeTexts = await readStoreTexts(workspace);
+  } catch (error) {
+    if (!(error instanceof StoreTextsFileError)) throw error;
+    storeTexts = defaultStoreTexts();
+    storeTextsProblem = `${error.message}; the store texts are not exported`;
+  }
   const checklist = await buildChecklist({
     project,
     manifest,
     locales,
+    storeTexts,
     outputDir: workspace.outputDir,
     ...(options.measure ? { measure: options.measure } : {}),
     ...(options.locate ? { locate: options.locate } : {}),
   });
-  return { project, locales, manifest, checklist };
+  if (storeTextsProblem) {
+    checklist.problems.push(storeTextsProblem);
+    checklist.status = 'error';
+  }
+  return { project, locales, manifest, checklist, storeTexts };
 }
 
 /** Builds the checklist for the selected locales. */
@@ -76,12 +92,12 @@ export async function exportChecklist(workspace: Workspace, options: ExportOptio
 }
 
 /**
- * Writes a ZIP with the files of the selected locales and all shared files of the enabled targets,
- * plus CHECKLIST.md, into the workspace `exports/` folder. Files are streamed and stored without compression.
+ * Writes a ZIP with the files of the selected locales and all shared files of the enabled targets, the store texts
+ * of the selected locales (`<target>/store-texts/<store code>/NN-<field>.txt`), plus CHECKLIST.md, into the workspace `exports/` folder. Files are streamed and stored without compression.
  * A failed export leaves no partial ZIP behind.
  */
 export async function createExport(workspace: Workspace, options: ExportOptions = {}): Promise<ExportResult> {
-  const { project, locales, manifest, checklist } = await prepare(workspace, options);
+  const { project, locales, manifest, checklist, storeTexts } = await prepare(workspace, options);
 
   const allLocales = locales.length === project.locales.length;
   const stamp = (options.now ?? new Date()).toISOString().replace(/[:.]/g, '-').slice(0, 19);
@@ -143,6 +159,15 @@ export async function createExport(workspace: Workspace, options: ExportOptions 
       }
       part.push(new Uint8Array(0), true);
       entries.push(entry.path);
+    }
+    // Store texts come from the document, not from generated files: always the current texts.
+    for (const text of storeTextFiles(project, storeTexts, locales)) {
+      failIfBroken();
+      const part = new ZipPassThrough(text.path);
+      zip.add(part);
+      part.push(strToU8(text.text), true);
+      entries.push(text.path);
+      await drain();
     }
     failIfBroken();
     zip.end();

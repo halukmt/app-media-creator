@@ -3,7 +3,7 @@ import {
   ApiError,
   JOB_EVENTS_URL,
   applyJob,
-  createCopyJob,
+  createJob,
   fetchBackgrounds,
   fetchJob,
   fetchJobs,
@@ -32,6 +32,8 @@ import {
   type StoredInput,
 } from '../api';
 import { AiJobPanel, type AiJobMessage } from '../components/AiJobPanel';
+import { AiResultCard } from '../components/AiResultCard';
+import { SaveStatus } from '../components/SaveStatus';
 import { BusyButton } from '../components/BusyButton';
 import { FileField } from '../components/FileField';
 import { LocaleSelector } from '../components/LocaleSelector';
@@ -45,7 +47,7 @@ import { StatusAlert } from '../components/StatusAlert';
 import { ToggleField } from '../components/ToggleField';
 import { en } from '../i18n/en';
 import { SectionLayout } from '../layouts/SectionLayout';
-import { latestCopyJob } from '../lib/ai-jobs';
+import { headlineLocales } from '../lib/ai-jobs';
 import { CREATIVE_PREVIEW_WIDTH, creativeLabelKey, isCreativePurpose, safeAreaPercent, safeAreaShares } from '../lib/creative';
 import type { CheckStatus } from '../lib/export';
 import { projectLocaleOptions, sourceLocaleFor } from '../lib/locale-selection';
@@ -190,8 +192,8 @@ export function ScreenshotsPage({ project, catalogue, selection, onSelectionChan
       .then(setBackgrounds)
       .catch(() => setBackgrounds({ presets: [], palette: [] }));
     void loadCreative();
-    fetchJobs(1)
-      .then((jobs) => showJob(latestCopyJob(jobs)))
+    fetchJobs('copy', 1)
+      .then((jobs) => showJob(jobs[0] ?? null))
       .catch(() => showJob(null));
   }, [reload, loadCreative, showJob]);
 
@@ -477,7 +479,7 @@ export function ScreenshotsPage({ project, catalogue, selection, onSelectionChan
     }
     setAiBusy('prepare');
     try {
-      showJob(await createCopyJob([...selection]));
+      showJob(await createJob('copy', [...selection]));
     } catch (error) {
       setAiMessage({ action: 'prepare', tone: 'error', text: en.screenshots.ai.prepareFailed, details: messagesOf(error) });
     } finally {
@@ -525,6 +527,8 @@ export function ScreenshotsPage({ project, catalogue, selection, onSelectionChan
     }
   }
 
+
+  const aiLocales = aiJob ? headlineLocales(aiJob, project.locales) : [];
 
   const steps = [
     { id: 'upload', label: en.steps.upload },
@@ -701,10 +705,7 @@ export function ScreenshotsPage({ project, catalogue, selection, onSelectionChan
                 />
               ) : null}
               <p className="max-w-prose text-sm text-base-content/70">{purpose === 'feature' ? en.screenshots.featureUsesShots : en.screenshots.headerUsesShots}</p>
-              <p className="text-sm text-base-content/70" aria-live="off">
-                {creativeSaveState === 'saving' ? en.screenshots.saving : creativeSaveState === 'saved' ? en.screenshots.saved : ''}
-              </p>
-              <div role="alert">{creativeSaveState === 'failed' ? <StatusAlert announce={false} tone="error" title={en.screenshots.saveFailed} /> : null}</div>
+              <SaveStatus state={creativeSaveState} failedText={en.screenshots.saveFailed} />
             </>
           ) : null}
           <div>
@@ -816,14 +817,8 @@ export function ScreenshotsPage({ project, catalogue, selection, onSelectionChan
             <div role="status" className="sr-only">
               {announce}
             </div>
-            <p className="text-sm text-base-content/70" aria-live="off">
-              {saveState === 'saving' ? en.screenshots.saving : saveState === 'saved' ? en.screenshots.saved : ''}
-              {deviceSize ? ` ${deviceName} · ${en.screenshots.pixels(deviceSize.width, deviceSize.height)}` : ''}
-            </p>
-            <div role="alert">
-              {saveState === 'failed' ? <StatusAlert announce={false} tone="error" title={en.screenshots.saveFailed} /> : null}
-              {saveState === 'conflict' ? <StatusAlert announce={false} tone="warning" title={en.screenshots.changedElsewhere} /> : null}
-            </div>
+            {deviceSize ? <p className="text-sm text-base-content/70">{`${deviceName} · ${en.screenshots.pixels(deviceSize.width, deviceSize.height)}`}</p> : null}
+            <SaveStatus state={saveState} failedText={en.screenshots.saveFailed} conflictText={en.screenshots.changedElsewhere} />
             {usesFallback ? (
               <>
                 <StatusAlert tone="info" title={en.screenshots.fallbackNote(localeName(project.sourceLocale))}>
@@ -891,15 +886,40 @@ export function ScreenshotsPage({ project, catalogue, selection, onSelectionChan
           </section>
           <AiJobPanel
             job={aiJob}
-            order={project.locales}
+            text={en.screenshots.ai}
+            resultLocales={aiLocales}
             localeName={localeName}
-            slotTitle={(_locale, input, index) => `${en.screenshots.ai.slot(index + 1)} · ${uploadName(input)}`}
+            actions={(['A', 'B'] as const).map((variant) => ({
+              id: variant,
+              label: en.screenshots.ai.apply(variant),
+              confirmTitle: en.screenshots.ai.confirmTitle(variant),
+              confirmBody: en.screenshots.ai.confirmBody(aiLocales.map(localeName).join(', ')),
+            }))}
             preparing={aiBusy === 'prepare'}
             applying={aiBusy === 'A' || aiBusy === 'B' ? aiBusy : null}
             message={aiMessage}
             onPrepare={() => void prepareAiJob()}
-            onApply={(variant) => void applyAiJob(variant)}
-          />
+            onApply={(variant) => void applyAiJob(variant === 'B' ? 'B' : 'A')}
+          >
+            <p className="text-sm text-base-content/70">{en.screenshots.ai.variantHint}</p>
+            <div className="grid grid-cols-1 gap-3">
+              {aiLocales.map((locale) => (
+                <AiResultCard
+                  key={locale}
+                  locale={locale}
+                  localeName={localeName(locale)}
+                  rows={(aiJob?.headlines?.locales[locale]?.slots ?? []).map((slot, index) => ({
+                    title: `${en.screenshots.ai.slot(index + 1)} · ${uploadName(slot.input)}`,
+                    texts: (['A', 'B'] as const).map((variant) => ({
+                      label: en.screenshots.ai.variant(variant),
+                      main: slot[variant].headline,
+                      ...(slot[variant].subline ? { sub: slot[variant].subline } : {}),
+                    })),
+                  }))}
+                />
+              ))}
+            </div>
+          </AiJobPanel>
           <div>
             <button type="button" className="btn btn-primary min-h-11" onClick={() => goTo('export')}>
               {en.steps.export} →

@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import { LOCALES } from '../core/locales/index.js';
-import { getSpec, type Target } from '../core/specs/index.js';
+import { STORE_TEXT_SPECS, getSpec, type StoreTextSpec, type Target } from '../core/specs/index.js';
 import { cardSizeForSpec } from '../core/screenshots/index.js';
 import { CREATIVE_IMAGES, creativeGeometry, type CreativeGroup } from '../core/generators/creative-assets.js';
 import { ENVIRONMENT_COLORS, MAX_BADGE_LENGTH, MAX_ENVIRONMENTS, MAX_PHRASE, deviceOptions, type EnvironmentColor } from '../core/workspace/index.js';
@@ -36,6 +36,8 @@ export interface Catalogue {
     storeSafeArea: boolean;
   }[];
   maxPhrase: number;
+  /** Store text fields with their limits, in catalogue order (paste order per store). */
+  storeTexts: StoreTextSpec[];
 }
 
 function devicesOf(target: Target): CatalogueDevice[] {
@@ -69,6 +71,7 @@ export function buildCatalogue(): Catalogue {
       };
     }),
     maxPhrase: MAX_PHRASE,
+    storeTexts: [...STORE_TEXT_SPECS],
   };
 }
 

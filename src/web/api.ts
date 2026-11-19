@@ -54,6 +54,50 @@ export interface Catalogue {
   maxBadgeLength: number;
   creativeImages: CatalogueCreativeImage[];
   maxPhrase: number;
+  /** Store text fields with their limits (paste order per store). */
+  storeTexts: StoreTextSpec[];
+}
+
+export type StoreTextField =
+  | 'apple-name'
+  | 'apple-subtitle'
+  | 'apple-promotional-text'
+  | 'apple-description'
+  | 'apple-keywords'
+  | 'apple-whats-new'
+  | 'google-title'
+  | 'google-short-description'
+  | 'google-full-description';
+
+/** One store text field of the catalogue (mirrors core StoreTextSpec). */
+export interface StoreTextSpec {
+  field: StoreTextField;
+  target: 'apple' | 'google';
+  name: string;
+  order: number;
+  fileName: string;
+  max: number;
+  /** `bytes`: UTF-8 bytes (Apple keywords). */
+  unit: 'characters' | 'bytes';
+  min?: number;
+  required: boolean;
+  multiline: boolean;
+  verified: boolean;
+  sourceUrl: string;
+  notes?: string;
+}
+
+export interface StoreTextMessage {
+  level: 'error' | 'warning';
+  text: string;
+}
+
+/** The store texts document with the server's check messages per locale and field. */
+export interface StoreTexts {
+  version: 1;
+  revision: number;
+  texts: Partial<Record<string, Partial<Record<StoreTextField, string>>>>;
+  checks: Partial<Record<string, Partial<Record<StoreTextField, StoreTextMessage[]>>>>;
 }
 
 /** One App Store creative image: size and art safe area in pixels (from the spec catalogue). */
@@ -238,6 +282,19 @@ export function saveScreenshots(sets: ScreenshotSets): Promise<ScreenshotSets> {
   });
 }
 
+export function fetchStoreTexts(): Promise<StoreTexts> {
+  return request<StoreTexts>('/api/store-texts');
+}
+
+/** Saves the texts; the server rejects a stale `revision` with 409 (ApiError status 409). */
+export function saveStoreTexts(document: Pick<StoreTexts, 'version' | 'revision' | 'texts'>): Promise<StoreTexts> {
+  return request<StoreTexts>('/api/store-texts', {
+    method: 'PUT',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ version: document.version, revision: document.revision, texts: document.texts }),
+  });
+}
+
 export function fetchBackgrounds(): Promise<{ presets: BackgroundPreset[]; palette: BackgroundPreset[] }> {
   return request('/api/screenshots/backgrounds');
 }
@@ -387,9 +444,11 @@ export interface CopyText {
 }
 
 /** An AI job folder as the server reports it (mirrors core JobState). */
+export type AiJobTask = 'copy' | 'store-texts';
+
 export interface AiJob {
   id: string;
-  task: 'copy';
+  task: AiJobTask;
   createdAt: string;
   locales: string[];
   folder: string;
@@ -399,31 +458,35 @@ export interface AiJob {
   errors: string[];
   warnings: string[];
   headlines?: { version: 1; locales: Partial<Record<string, { slots: { input: string; A: CopyText; B: CopyText }[] }>> };
-  applied?: { variant: 'A' | 'B'; at: string };
+  /** Store text jobs: the texts the AI wrote, per locale and field. */
+  storeTexts?: Partial<Record<string, Partial<Record<StoreTextField, string>>>>;
+  /** When the current result was applied; `variant` for headline jobs. */
+  applied?: { variant?: 'A' | 'B'; at: string };
 }
 
-/** Jobs, newest first; `limit` reads only that many (the page needs the newest one). */
-export function fetchJobs(limit?: number): Promise<AiJob[]> {
-  return request<AiJob[]>(limit ? `/api/jobs?limit=${limit}` : '/api/jobs');
+/** Jobs of one task, newest first; `limit` reads only that many (a section needs its newest one). */
+export function fetchJobs(task: AiJobTask, limit?: number): Promise<AiJob[]> {
+  return request<AiJob[]>(`/api/jobs?task=${task}${limit ? `&limit=${limit}` : ''}`);
 }
 
 export function fetchJob(id: string): Promise<AiJob> {
   return request<AiJob>(`/api/jobs/${encodeURIComponent(id)}`);
 }
 
-export function createCopyJob(locales: readonly string[]): Promise<AiJob> {
+export function createJob(task: AiJobTask, locales: readonly string[]): Promise<AiJob> {
   return request<AiJob>('/api/jobs', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ locales }),
+    body: JSON.stringify({ task, locales }),
   });
 }
 
-export function applyJob(id: string, variant: 'A' | 'B'): Promise<{ locales: string[] }> {
+/** Applies a job: one variant of a headline job, or all texts of a store texts job (no variant). */
+export function applyJob(id: string, variant?: 'A' | 'B'): Promise<{ locales: string[] }> {
   return request<{ locales: string[] }>(`/api/jobs/${encodeURIComponent(id)}/apply`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ variant }),
+    body: JSON.stringify(variant ? { variant } : {}),
   });
 }
 

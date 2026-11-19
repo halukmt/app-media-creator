@@ -1,15 +1,11 @@
-import { useId, useRef, useState, type RefObject } from 'react';
+import { useId, useRef, useState, type ReactNode } from 'react';
 import type { AiJob } from '../api';
 import { en } from '../i18n/en';
-import { headlineLocales } from '../lib/ai-jobs';
 import { BusyButton } from './BusyButton';
 import { CommandBox } from './CommandBox';
 import { ConfirmDialog } from './ConfirmDialog';
-import { HeadlineVariantsCard } from './HeadlineVariantsCard';
 import { ProgressStatus } from './ProgressStatus';
 import { StatusAlert } from './StatusAlert';
-
-type Variant = 'A' | 'B';
 
 /** Outcome of the last action; prepare messages show at the top, apply messages next to the apply buttons. */
 export interface AiJobMessage {
@@ -19,20 +15,50 @@ export interface AiJobMessage {
   details?: string[];
 }
 
+/** The texts of one section's job panel (headlines or store texts). */
+export interface AiJobText {
+  heading: string;
+  intro: string;
+  prepare: string;
+  preparing: string;
+  commandLabel: string;
+  waiting: string;
+  ready: string;
+  invalid: string;
+  warningsTitle: string;
+  applying: string;
+  forLocales: (languages: string) => string;
+  missingLocales: (languages: string) => string;
+  /** Success line of an applied job; `variant` for headline jobs. */
+  applied: (languages: string, variant?: string) => string;
+}
+
+/** One way to apply the result, e.g. "Apply variant A", each behind its own confirmation. */
+export interface AiJobAction {
+  id: string;
+  label: string;
+  confirmTitle: string;
+  confirmBody: string;
+}
+
 interface Props {
-  /** The newest copy job, or null before the first one. */
+  /** The newest job of this section's task, or null before the first one. */
   job: AiJob | null;
-  /** Project locales, for the order of the languages. */
-  order: readonly string[];
+  text: AiJobText;
+  /** Languages the result has texts for, in project order. */
+  resultLocales: readonly string[];
   localeName: (locale: string) => string;
-  /** Title of a slot in the comparison, e.g. "Screenshot 1 · start". */
-  slotTitle: (locale: string, input: string, index: number) => string;
+  actions: readonly AiJobAction[];
   preparing: boolean;
-  /** The variant being applied, or null. */
-  applying: Variant | null;
+  /** Preparing is not possible yet (e.g. no language selected). */
+  prepareDisabled?: boolean;
+  /** The id of the action being applied, or null. */
+  applying: string | null;
   message: AiJobMessage | null;
   onPrepare: () => void;
-  onApply: (variant: Variant) => void;
+  onApply: (actionId: string) => void;
+  /** Read-only preview of the result, shown when it can be applied. */
+  children?: ReactNode;
 }
 
 function ErrorAlert({ message }: { message: AiJobMessage }) {
@@ -44,21 +70,21 @@ function ErrorAlert({ message }: { message: AiJobMessage }) {
 }
 
 /**
- * AI headlines for the screenshot sets: prepares a job folder, shows the command to run in Claude Code, follows the
- * job live, compares variant A and B per language, and applies one variant after a confirmation.
+ * An AI job of one section: prepares a job folder, shows the command to run in Claude Code, follows the job live,
+ * shows the result preview (children), and applies it through one of the actions after a confirmation.
  */
-export function AiJobPanel({ job, order, localeName, slotTitle, preparing, applying, message, onPrepare, onApply }: Props) {
+export function AiJobPanel({ job, text: t, resultLocales, localeName, actions, preparing, prepareDisabled = false, applying, message, onPrepare, onApply, children }: Props) {
   const headingId = useId();
-  const [confirm, setConfirm] = useState<Variant | null>(null);
-  // The variant whose button opened the dialog last; kept after closing, so focus returns to that button.
-  const [opener, setOpener] = useState<Variant>('A');
-  // Focus goes back to the button that opened the dialog.
-  const buttons: Record<Variant, RefObject<HTMLButtonElement | null>> = { A: useRef<HTMLButtonElement>(null), B: useRef<HTMLButtonElement>(null) };
-  const t = en.screenshots.ai;
-  const locales = job ? headlineLocales(job, order) : [];
-  const languages = locales.map(localeName).join(', ');
-  const missing = job && (job.status === 'ready' || job.status === 'applied') ? job.locales.filter((locale) => !locales.includes(locale)) : [];
-  const canApply = job !== null && (job.status === 'ready' || job.status === 'applied') && locales.length > 0;
+  const [confirm, setConfirm] = useState<AiJobAction | null>(null);
+  // The action whose dialog opened last; kept after closing, so the dialog keeps its texts while it closes.
+  const [shown, setShown] = useState<AiJobAction | null>(null);
+  // Focus goes back to the button that opened the dialog; the ref is set when the dialog opens.
+  const buttons = useRef(new Map<string, HTMLButtonElement>());
+  const returnFocus = useRef<HTMLButtonElement | null>(null);
+  const languages = resultLocales.map(localeName).join(', ');
+  const usable = job !== null && (job.status === 'ready' || job.status === 'applied');
+  const missing = usable ? job.locales.filter((locale) => !resultLocales.includes(locale)) : [];
+  const canApply = usable && resultLocales.length > 0;
   const applyMessage = message?.action === 'apply' ? message : null;
   const prepareMessage = message?.action === 'prepare' ? message : null;
 
@@ -69,7 +95,7 @@ export function AiJobPanel({ job, order, localeName, slotTitle, preparing, apply
       </h3>
       <p className="max-w-prose text-sm text-base-content/70">{t.intro}</p>
       <div>
-        <BusyButton busy={preparing} busyLabel={t.preparing} onClick={onPrepare}>
+        <BusyButton busy={preparing} busyLabel={t.preparing} disabled={prepareDisabled} onClick={onPrepare}>
           {t.prepare}
         </BusyButton>
       </div>
@@ -85,7 +111,7 @@ export function AiJobPanel({ job, order, localeName, slotTitle, preparing, apply
       <div role="status">
         {job?.status === 'waiting' ? <ProgressStatus label={t.waiting} /> : null}
         {/* One success line: the applied state of the job, or "ready". */}
-        {job && canApply ? <StatusAlert announce={false} tone="success" title={job.applied ? t.applied(job.applied.variant, languages) : t.ready} /> : null}
+        {job && canApply ? <StatusAlert announce={false} tone="success" title={job.applied ? t.applied(languages, job.applied.variant) : t.ready} /> : null}
       </div>
       <div role="alert">
         {job?.status === 'invalid' ? (
@@ -109,28 +135,27 @@ export function AiJobPanel({ job, order, localeName, slotTitle, preparing, apply
         </StatusAlert>
       ) : null}
 
-      {canApply && job?.headlines ? (
+      {canApply ? (
         <>
-          <p className="text-sm text-base-content/70">{t.variantHint}</p>
-          <div className="grid grid-cols-1 gap-3">
-            {locales.map((locale) => (
-              <HeadlineVariantsCard
-                key={locale}
-                locale={locale}
-                localeName={localeName(locale)}
-                slots={(job.headlines?.locales[locale]?.slots ?? []).map((slot, index) => ({ title: slotTitle(locale, slot.input, index), A: slot.A, B: slot.B }))}
-              />
-            ))}
-          </div>
+          {children}
           <div className="flex flex-wrap gap-3">
-            {(['A', 'B'] as const).map((variant) => (
-              <BusyButton key={variant} ref={buttons[variant]} busy={applying === variant} busyLabel={t.applying} disabled={applying !== null}
+            {actions.map((action) => (
+              <BusyButton
+                key={action.id}
+                ref={(element: HTMLButtonElement | null) => {
+                  if (element) buttons.current.set(action.id, element);
+                  else buttons.current.delete(action.id);
+                }}
+                busy={applying === action.id}
+                busyLabel={t.applying}
+                disabled={applying !== null}
                 onClick={() => {
-                  setOpener(variant);
-                  setConfirm(variant);
+                  returnFocus.current = buttons.current.get(action.id) ?? null;
+                  setShown(action);
+                  setConfirm(action);
                 }}
               >
-                {t.apply(variant)}
+                {action.label}
               </BusyButton>
             ))}
           </div>
@@ -141,18 +166,18 @@ export function AiJobPanel({ job, order, localeName, slotTitle, preparing, apply
 
       <ConfirmDialog
         open={confirm !== null}
-        title={t.confirmTitle(confirm ?? 'A')}
-        confirmLabel={t.apply(confirm ?? 'A')}
+        title={shown?.confirmTitle ?? ''}
+        confirmLabel={shown?.label ?? ''}
         cancelLabel={en.common.cancel}
         onConfirm={() => {
-          const variant = confirm;
+          const action = confirm;
           setConfirm(null);
-          if (variant) onApply(variant);
+          if (action) onApply(action.id);
         }}
         onCancel={() => setConfirm(null)}
-        returnFocus={buttons[opener]}
+        returnFocus={returnFocus}
       >
-        <p>{t.confirmBody(languages)}</p>
+        <p>{shown?.confirmBody ?? ''}</p>
       </ConfirmDialog>
     </section>
   );

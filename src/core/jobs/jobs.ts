@@ -4,6 +4,7 @@ import { copyFile, lstat, mkdir, readFile, readdir } from 'node:fs/promises';
 import path from 'node:path';
 import { isLocaleId, resolveLocales, type LocaleId, type LocaleSelection } from '../locales/index.js';
 import type { CardLayout } from '../screenshots/index.js';
+import { checkStoreText, getStoreTextSpec, storeTextSpecs, type StoreTextSpec, type TextTarget } from '../specs/texts.js';
 import {
   effectiveSet,
   listInputs,
@@ -11,10 +12,13 @@ import {
   originalInputName,
   readProject,
   readScreenshotSets,
+  readStoreTexts,
   saveScreenshotSets,
+  saveStoreTexts,
   writeJsonAtomic,
   type ProjectSettings,
   type ScreenshotEntry,
+  type StoreTexts,
   type Workspace,
 } from '../workspace/index.js';
 import { FfmpegMissingError, extractFrames, ffmpegBinary, runProgram, type RunProgram } from './frames.js';
@@ -46,7 +50,13 @@ export const COPY_LIMITS: Record<CardLayout, { headline: number; subline: number
   'text-bottom': { headline: 34, subline: 44 },
 };
 
-export type JobTask = 'copy';
+/** `copy`: screenshot headlines (amc-copy); `store-texts`: store listing texts (amc-store-texts). */
+export type JobTask = 'copy' | 'store-texts';
+export const JOB_TASKS: readonly JobTask[] = ['copy', 'store-texts'];
+
+export function isJobTask(value: unknown): value is JobTask {
+  return typeof value === 'string' && (JOB_TASKS as readonly string[]).includes(value);
+}
 export type JobStatus = 'waiting' | 'ready' | 'invalid' | 'applied';
 
 /** Invalid job request; `status` is the HTTP status the API answers with. */
@@ -95,6 +105,14 @@ export interface Brief {
   results: { headlines: string; storeTexts: string; storyboard: string };
   storeTextFields: readonly StoreTextField[];
   schemas: { headlines: string; storyboard: string };
+  /** Store text jobs: the fields of the enabled stores with their limits, and the current texts per language. */
+  storeTexts?: BriefStoreTexts;
+}
+
+export interface BriefStoreTexts {
+  targets: TextTarget[];
+  fields: Pick<StoreTextSpec, 'field' | 'target' | 'name' | 'order' | 'max' | 'unit' | 'required' | 'multiline' | 'notes'>[];
+  current: Partial<Record<LocaleId, Partial<Record<StoreTextField, string>>>>;
 }
 
 export interface JobState {
@@ -113,7 +131,8 @@ export interface JobState {
   headlines?: HeadlinesResult;
   storeTexts?: Partial<Record<LocaleId, Partial<Record<StoreTextField, string>>>>;
   storyboard?: StoryboardResult;
-  applied?: { variant: 'A' | 'B'; at: string };
+  /** When the current result was applied; `variant` for headlines. */
+  applied?: { variant?: 'A' | 'B'; at: string };
 }
 
 export interface CreateJobOptions {
@@ -128,18 +147,26 @@ export interface JobDeps {
   now?: Date;
 }
 
-const INSTRUCTIONS =
-  'Write headlines.json (and, when asked, store-texts/<locale>/<field>.md) into this folder. Follow the copy rules of ' +
-  'the amc-copy skill and claims.json: never use a forbidden claim. Name every slot by its "input". Check your JSON ' +
-  'against schemas/ before saving. The tool validates the results and applies them only when the user chooses to.';
+const INSTRUCTIONS: Record<JobTask, string> = {
+  copy:
+    'Write headlines.json into this folder. Follow the copy rules of the amc-copy skill and claims.json: never use a ' +
+    'forbidden claim. Name every slot by its "input". Check your JSON against schemas/ before saving. The tool ' +
+    'validates the results and applies them only when the user chooses to.',
+  'store-texts':
+    'Write one file store-texts/<locale>/<field>.md per store text, for the fields and languages of this brief. Follow ' +
+    'the rules of the amc-store-texts skill and claims.json: never use a forbidden claim, stay within each field\'s ' +
+    'limit. The tool validates the results and applies them only when the user chooses to.',
+};
+
+const SKILLS: Record<JobTask, string> = { copy: 'amc-copy', 'store-texts': 'amc-store-texts' };
 
 function jobFolder(workspace: Workspace, id: string): string {
   if (!JOB_ID.test(id)) throw new JobError(`${id} is not a job id`, 404);
   return path.join(workspace.jobsDir, id);
 }
 
-function commandFor(folder: string): string {
-  return `/amc-copy "${folder}"`;
+function commandFor(folder: string, task: JobTask): string {
+  return `/${SKILLS[task] ?? SKILLS.copy} "${folder}"`;
 }
 
 function newId(now: Date): string {
@@ -157,8 +184,10 @@ function newId(now: Date): string {
  */
 export async function createJob(workspace: Workspace, options: CreateJobOptions = {}, deps: JobDeps = {}): Promise<JobState> {
   const task = options.task ?? 'copy';
-  if (task !== 'copy') throw new JobError(`Unknown job task: ${String(task)}`);
+  if (!isJobTask(task)) throw new JobError(`Unknown job task: ${String(task)}`);
   const project = await readProject(workspace);
+  const textTargets = (['apple', 'google'] as const).filter((target) => project.targets[target].enabled);
+  if (task === 'store-texts' && textTargets.length === 0) throw new JobError('Turn on the App Store or Google Play in the project first');
   let locales: LocaleId[];
   try {
     locales = options.locales === undefined ? project.locales : resolveLocales(options.locales);
@@ -170,7 +199,8 @@ export async function createJob(workspace: Workspace, options: CreateJobOptions 
 
   const inputs = await listInputs(workspace);
   const screenshots = inputs.filter((input) => input.kind === 'screenshot');
-  if (screenshots.length === 0) throw new JobError(`Upload screenshots for ${project.sourceLocale} first`);
+  // Store texts can be written without screenshots; they only help the AI see the app.
+  if (screenshots.length === 0 && task === 'copy') throw new JobError(`Upload screenshots for ${project.sourceLocale} first`);
   const sets = await readScreenshotSets(workspace, screenshots);
 
   const now = deps.now ?? new Date();
@@ -226,7 +256,7 @@ export async function createJob(workspace: Workspace, options: CreateJobOptions 
     id,
     task,
     createdAt: now.toISOString(),
-    instructions: INSTRUCTIONS,
+    instructions: INSTRUCTIONS[task],
     project: { name: project.name, sourceLocale: project.sourceLocale, locales },
     screenshots: briefShots,
     videos,
@@ -234,6 +264,7 @@ export async function createJob(workspace: Workspace, options: CreateJobOptions 
     results: { headlines: 'headlines.json', storeTexts: 'store-texts/<locale>/<field>.md', storyboard: 'storyboard.json' },
     storeTextFields: STORE_TEXT_FIELDS,
     schemas: { headlines: 'schemas/headlines.schema.json', storyboard: 'schemas/storyboard.schema.json' },
+    ...(task === 'store-texts' ? { storeTexts: briefStoreTexts(textTargets, await readStoreTexts(workspace), locales) } : {}),
   };
   await mkdir(path.join(folder, 'schemas'), { recursive: true });
   for (const [name, schema] of Object.entries(resultJsonSchemas())) await writeJsonAtomic(path.join(folder, 'schemas', name), schema);
@@ -241,6 +272,20 @@ export async function createJob(workspace: Workspace, options: CreateJobOptions 
   // The brief is written last: a folder with a brief is a complete job.
   await writeJsonAtomic(path.join(folder, 'brief.json'), brief);
   return readJob(workspace, id);
+}
+
+function briefStoreTexts(targets: TextTarget[], stored: StoreTexts, locales: readonly LocaleId[]): BriefStoreTexts {
+  const fields = targets.flatMap((target) =>
+    storeTextSpecs(target).map(({ field, name, order, max, unit, required, multiline, notes }) => ({
+      field, target, name, order, max, unit, required, multiline, ...(notes ? { notes } : {}),
+    })),
+  );
+  const current: BriefStoreTexts['current'] = {};
+  for (const locale of locales) {
+    const own = Object.fromEntries(fields.flatMap(({ field }) => (stored.texts[locale]?.[field] ? [[field, stored.texts[locale]![field]!]] : [])));
+    if (Object.keys(own).length > 0) current[locale] = own;
+  }
+  return { targets, fields, current };
 }
 
 /** Reads a result file: undefined when absent; only a regular file up to the size limit inside the job folder. */
@@ -283,9 +328,17 @@ export async function readJob(workspace: Workspace, id: string, projectSettings?
   return (await inspectJob(workspace, id, projectSettings)).state;
 }
 
-/** readJob plus the fingerprint of the headlines text it validated (internal: used to record what was applied). */
-async function inspectJob(workspace: Workspace, id: string, projectSettings?: ProjectSettings): Promise<{ state: JobState; headlinesHash?: string }> {
+/**
+ * readJob plus the fingerprints of the headlines text and of the store texts it validated (internal: used to record
+ * what was applied).
+ */
+async function inspectJob(
+  workspace: Workspace,
+  id: string,
+  projectSettings?: ProjectSettings,
+): Promise<{ state: JobState; headlinesHash?: string; storeTextsHash?: string }> {
   let headlinesHash: string | undefined;
+  let storeTextsHash: string | undefined;
   const folder = jobFolder(workspace, id);
   let brief: Brief;
   try {
@@ -302,7 +355,7 @@ async function inspectJob(workspace: Workspace, id: string, projectSettings?: Pr
     createdAt: brief.createdAt,
     locales,
     folder,
-    command: commandFor(folder),
+    command: commandFor(folder, isJobTask(brief.task) ? brief.task : 'copy'),
     status: 'waiting',
     errors: [],
     warnings: [...brief.notes],
@@ -392,6 +445,9 @@ async function inspectJob(workspace: Workspace, id: string, projectSettings?: Pr
           else if (text.length > MAX_STORE_TEXT) state.errors.push(`store-texts/${locale}/${file}: longer than ${MAX_STORE_TEXT} characters`);
           else {
             state.errors.push(...forbiddenUses([{ label: `store-texts/${locale}/${file}`, text }], forbidden));
+            if (brief.storeTexts && !brief.storeTexts.fields.some((entry) => entry.field === field)) {
+              state.warnings.push(`store-texts/${locale}/${file}: ${getStoreTextSpec(field).name} is not a field of the stores in this job`);
+            }
             (storeTexts[locale] ??= {})[field] = text;
           }
         } catch (error) {
@@ -403,7 +459,16 @@ async function inspectJob(workspace: Workspace, id: string, projectSettings?: Pr
     found = true;
     state.errors.push('store-texts: cannot be read');
   }
-  if (Object.keys(storeTexts).length > 0) state.storeTexts = storeTexts;
+  if (Object.keys(storeTexts).length > 0) {
+    // Store limits and advice are warnings: a text slightly too long is still worth applying and shortening.
+    for (const [locale, fields] of Object.entries(storeTexts) as [LocaleId, Partial<Record<StoreTextField, string>>][]) {
+      for (const [field, text] of Object.entries(fields) as [StoreTextField, string][]) {
+        for (const message of checkStoreText(field, text, fields, locale)) state.warnings.push(`store-texts/${locale}/${field}.md: ${message.text}`);
+      }
+    }
+    state.storeTexts = storeTexts;
+    storeTextsHash = fingerprint(canonicalStoreTexts(storeTexts));
+  }
 
   // storyboard.json
   try {
@@ -435,30 +500,64 @@ async function inspectJob(workspace: Workspace, id: string, projectSettings?: Pr
     delete state.headlines;
     headlinesHash = undefined;
     delete state.storeTexts;
+    storeTextsHash = undefined;
     delete state.storyboard;
   } else if (found) state.status = 'ready';
 
   try {
-    const applied = JSON.parse(await readFile(path.join(folder, 'applied.json'), 'utf8')) as { variant: 'A' | 'B'; at: string; headlines?: string };
-    // A rewritten headlines.json (a second AI run in the same folder) is a new result, not the applied one.
-    if (state.status === 'ready' && applied.headlines !== undefined && applied.headlines === headlinesHash) {
-      state.applied = { variant: applied.variant, at: applied.at };
+    const applied = JSON.parse(await readFile(path.join(folder, 'applied.json'), 'utf8')) as {
+      variant?: 'A' | 'B';
+      at: string;
+      headlines?: string;
+      storeTexts?: string;
+    };
+    // A rewritten result (a second AI run in the same folder) is a new result, not the applied one. Each task counts
+    // the result it applies.
+    const appliedNow =
+      state.task === 'store-texts'
+        ? applied.storeTexts !== undefined && applied.storeTexts === storeTextsHash
+        : applied.headlines !== undefined && applied.headlines === headlinesHash;
+    if (state.status === 'ready' && appliedNow) {
+      state.applied = { ...(applied.variant && state.task === 'copy' ? { variant: applied.variant } : {}), at: applied.at };
       state.status = 'applied';
     }
   } catch {
     // Not applied yet.
   }
-  return { state, ...(headlinesHash ? { headlinesHash } : {}) };
+  return { state, ...(headlinesHash ? { headlinesHash } : {}), ...(storeTextsHash ? { storeTextsHash } : {}) };
 }
 
-/** All jobs, newest first. Folders that are not jobs (other names, no brief) are skipped. */
-export async function listJobs(workspace: Workspace, limit = Infinity): Promise<JobState[]> {
+/** Store texts as one string in a fixed order, so the same texts always give the same fingerprint. */
+function canonicalStoreTexts(texts: NonNullable<JobState['storeTexts']>): string {
+  const sorted = Object.keys(texts)
+    .sort()
+    .map((locale) => {
+      const fields = texts[locale as LocaleId] ?? {};
+      return [locale, Object.keys(fields).sort().map((field) => [field, fields[field as StoreTextField]])];
+    });
+  return JSON.stringify(sorted);
+}
+
+/** The task a job's brief names, without reading its results; undefined when the brief cannot be read. */
+async function briefTask(folder: string): Promise<JobTask | undefined> {
+  try {
+    const task = (JSON.parse(await readFile(path.join(folder, 'brief.json'), 'utf8')) as { task?: unknown }).task;
+    return isJobTask(task) ? task : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/** All jobs (or those of one task), newest first. Folders that are not jobs (other names, no brief) are skipped. */
+export async function listJobs(workspace: Workspace, limit = Infinity, task?: JobTask): Promise<JobState[]> {
   const names = existsSync(workspace.jobsDir) ? await readdir(workspace.jobsDir) : [];
   const project = await readProject(workspace);
   const jobs: JobState[] = [];
   for (const name of names.filter((n) => JOB_ID.test(n)).sort().reverse()) {
     if (jobs.length >= limit) break;
     try {
+      // Jobs of another task are skipped before their results are read.
+      if (task !== undefined && (await briefTask(path.join(workspace.jobsDir, name))) !== task) continue;
       jobs.push(await readJob(workspace, name, project));
     } catch (error) {
       if (!(error instanceof JobError)) throw error;
@@ -506,4 +605,39 @@ export async function applyHeadlines(workspace: Workspace, id: string, variant: 
   // The fingerprint of the text that was validated and applied, not of the file as it is now.
   await writeJsonAtomic(path.join(state.folder, 'applied.json'), { variant, at: new Date().toISOString(), headlines: headlinesHash });
   return { locales: applied };
+}
+
+/**
+ * Applies the store texts of a ready job: every field the job wrote replaces the stored text of that language and
+ * field; all other texts stay. When a page saved in between (conflict), it starts again from the newer document.
+ */
+export async function applyStoreTexts(workspace: Workspace, id: string): Promise<{ locales: LocaleId[]; fields: number }> {
+  const { state, storeTextsHash } = await inspectJob(workspace, id);
+  if (state.status === 'invalid') throw new JobError(`Job ${id} has invalid results: ${state.errors.join('; ')}`, 409);
+  if (!state.storeTexts) throw new JobError(`Job ${id} has no store texts yet`, 409);
+  const result = state.storeTexts;
+  const locales = Object.keys(result) as LocaleId[];
+  const fields = Object.values(result).reduce((count, entry) => count + Object.keys(entry ?? {}).length, 0);
+  for (let attempt = 1; ; attempt += 1) {
+    const stored = await readStoreTexts(workspace);
+    const texts = { ...stored.texts };
+    for (const locale of locales) texts[locale] = { ...texts[locale], ...result[locale] };
+    const saved = await saveStoreTexts(workspace, { ...stored, texts });
+    if (saved.ok) break;
+    if (!saved.conflict) throw new JobError(`The store texts cannot be saved: ${saved.errors.join('; ')}`, 409);
+    if (attempt >= 3) throw new JobError('The store texts keep changing; try applying again', 409);
+  }
+  await writeJsonAtomic(path.join(state.folder, 'applied.json'), { at: new Date().toISOString(), storeTexts: storeTextsHash });
+  return { locales, fields };
+}
+
+/**
+ * Applies a ready job by its task: one variant of a headline job, or all texts of a store texts job (no variant).
+ */
+export async function applyJob(workspace: Workspace, id: string, variant?: unknown): Promise<{ locales: LocaleId[] }> {
+  const task = await briefTask(jobFolder(workspace, id));
+  if (task === undefined) throw new JobError(`Job ${id} does not exist`, 404);
+  if (task === 'store-texts') return applyStoreTexts(workspace, id);
+  if (variant !== 'A' && variant !== 'B') throw new JobError('variant must be A or B');
+  return applyHeadlines(workspace, id, variant);
 }

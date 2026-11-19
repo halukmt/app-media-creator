@@ -2,6 +2,8 @@ import path from 'node:path';
 import type { LocaleId } from '../locales/index.js';
 import { SPECS, inspectImage, validateMedia, type MediaProperties, type SpecEntry, type Target } from '../specs/index.js';
 import type { ProjectSettings } from '../workspace/project.js';
+import type { StoreTexts } from '../workspace/store-texts.js';
+import { storeTextChecklistItems } from './store-texts.js';
 import { locateOutputFile, type FileLocation, type Manifest, type OutputEntry } from './manifest.js';
 
 export type CheckStatus = 'ok' | 'warning' | 'error';
@@ -51,6 +53,8 @@ export interface ChecklistInput {
   outputDir: string;
   measure?: MeasureFile;
   locate?: LocateFile;
+  /** The project's store texts; checked per locale for each store that has any. */
+  storeTexts?: StoreTexts;
 }
 
 const TARGETS: readonly Target[] = ['apple', 'google', 'web'];
@@ -183,6 +187,7 @@ export async function buildChecklist(input: ChecklistInput): Promise<Checklist> 
         }
       }
     }
+    if (input.storeTexts && target !== 'web') items.push(...storeTextChecklistItems(input.project, target, input.storeTexts, input.locales));
     targets.push({ target, status: worst(items.map((i) => i.status)), items });
   }
 

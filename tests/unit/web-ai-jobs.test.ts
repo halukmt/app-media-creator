@@ -1,25 +1,25 @@
 // conventions: RULE-TESTING-3301
 import { describe, expect, test } from 'vitest';
-import { headlineLocales, isWaiting, latestCopyJob } from '../../src/web/lib/ai-jobs.js';
+import { headlineLocales, isWaiting, resultLocales, storeTextLocales } from '../../src/web/lib/ai-jobs.js';
 
-const job = (id: string, status: string, locales: string[] = []) => ({
-  id,
-  task: 'copy',
+const job = (status: string, locales: string[] = []) => ({
   status,
   headlines: { locales: Object.fromEntries(locales.map((locale) => [locale, { slots: [{ input: 'x' }] }])) },
+  storeTexts: Object.fromEntries(locales.map((locale) => [locale, { 'apple-name': 'Teamfinder' }])),
 });
 
-describe('The AI job helpers of the Screenshots section', () => {
-  test('picks the newest copy job and lists its languages in project order', () => {
-    const jobs = [job('20261119-120000-bbbb', 'ready', ['tr-TR', 'de-DE']), job('20261119-110000-aaaa', 'waiting')];
-    expect(latestCopyJob(jobs)?.id).toBe('20261119-120000-bbbb');
-    expect(headlineLocales(jobs[0]!, ['de-DE', 'en-US', 'tr-TR'])).toEqual(['de-DE', 'tr-TR']);
+describe('The AI job helpers list the languages of a result', () => {
+  test('lists the languages of headlines and store texts in project order', () => {
+    const ready = job('ready', ['tr-TR', 'de-DE']);
+    expect(headlineLocales(ready, ['de-DE', 'en-US', 'tr-TR'])).toEqual(['de-DE', 'tr-TR']);
+    expect(storeTextLocales(ready, ['tr-TR', 'de-DE'])).toEqual(['tr-TR', 'de-DE']);
   });
 
-  test('has no job and nothing to wait for without jobs', () => {
-    expect(latestCopyJob([])).toBeNull();
+  test('has no languages without a result and nothing to wait for without a job', () => {
+    expect(resultLocales(undefined, ['de-DE'])).toEqual([]);
+    expect(storeTextLocales({ status: 'waiting' }, ['de-DE'])).toEqual([]);
     expect(isWaiting(null)).toBe(false);
-    expect(isWaiting(job('20261119-110000-aaaa', 'waiting'))).toBe(true);
-    expect(isWaiting(job('20261119-110000-aaaa', 'invalid'))).toBe(false);
+    expect(isWaiting(job('waiting'))).toBe(true);
+    expect(isWaiting(job('invalid'))).toBe(false);
   });
 });

@@ -11,6 +11,7 @@ import { ExportPage } from './pages/ExportPage';
 import { LogoPage } from './pages/LogoPage';
 import { ScreenshotsPage } from './pages/ScreenshotsPage';
 import { SectionPage } from './pages/SectionPage';
+import { StoreTextsPage } from './pages/StoreTextsPage';
 
 interface Health {
   version: string;
@@ -136,7 +137,16 @@ export function App() {
           focusHeading={navigated}
         />
       ) : null}
-      {load.kind === 'ready' && section !== 'project' && section !== 'export' && section !== 'screenshots' && section !== 'logo' ? (
+      {load.kind === 'ready' && section === 'store-texts' ? (
+        <StoreTextsPage
+          project={load.project}
+          catalogue={load.catalogue}
+          selection={selection}
+          onSelectionChange={setSelection}
+          focusHeading={navigated}
+        />
+      ) : null}
+      {load.kind === 'ready' && section !== 'project' && section !== 'export' && section !== 'screenshots' && section !== 'logo' && section !== 'store-texts' ? (
         <SectionPage
           key={section}
           section={section}

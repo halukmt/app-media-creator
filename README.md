@@ -42,6 +42,38 @@ AI is optional and never needs your credentials inside the tool:
 4. The page shows the result as soon as the skill has written it. Compare A and B and apply one; nothing changes
    before you do. Results that break the rules (for example a forbidden claim) are shown as errors and never applied.
 
+### Store texts with Claude Code
+
+1. Install the skill once: │
+●   claude-code_2-1-327_agent  Agent detected — installing non-interactively
+[?25l│
+◇  Source: https://github.com/halukmt/app-media-creator.git
+[?25h[?25l│
+◒  Cloning repository…[1G[J◐  Cloning repository…[1G[J◓  Cloning repository…[1G[J◑  Cloning repository…[1G[J◒  Cloning repository…[1G[J◐  Cloning repository…[1G[J◓  Cloning repository…[1G[J◑  Cloning repository…[1G[J◒  Cloning repository….[1G[J◐  Cloning repository….[1G[J◓  Cloning repository….[1G[J◑  Cloning repository….[1G[J◒  Cloning repository….[1G[J◐  Cloning repository….[1G[J◓  Cloning repository….[1G[J◑  Cloning repository….[1G[J◒  Cloning repository…..[1G[J◐  Cloning repository…..[1G[J◓  Cloning repository…..[1G[J◑  Cloning repository…..[1G[J◒  Cloning repository…..[1G[J◐  Cloning repository…..[1G[J◓  Cloning repository…..[1G[J◑  Cloning repository…..[1G[J◒  Cloning repository…...[1G[J◐  Cloning repository…...[1G[J◓  Cloning repository…...[1G[J◑  Cloning repository…...[1G[J◒  Cloning repository…...[1G[J◐  Cloning repository…...[1G[J◓  Cloning repository…...[1G[J◑  Cloning repository…...[1G[J◒  Cloning repository…...[1G[J◐  Cloning repository…[1G[J◓  Cloning repository…[1G[J◑  Cloning repository…[1G[J◒  Cloning repository…[1G[J◐  Cloning repository…[1G[J◓  Cloning repository…[1G[J◑  Cloning repository…[1G[J◒  Cloning repository…[1G[J◐  Cloning repository….[1G[J◓  Cloning repository….[1G[J◑  Cloning repository….[1G[J◒  Cloning repository….[1G[J◐  Cloning repository….[1G[J◓  Cloning repository….[1G[J◑  Cloning repository….[1G[J◒  Cloning repository….[1G[J◐  Cloning repository…..[1G[J◓  Cloning repository…..[1G[J◇  Repository cloned
+[?25h[?25l│
+[1G[J◒  Discovering skills…[1G[J◐  Discovering skills…[1G[J◓  Discovering skills…[1G[J◑  Discovering skills…[1G[J◒  Discovering skills…[1G[J◇  Found 13 skills
+[?25h│
+■  [SKILLS_NO_MATCHING_SKILLS] No matching skills found for: amc-store-texts│  ╰▶ fix: Available skills:
+│    - amc-copy
+│    - next-issue
+│    - openspec-apply-change
+│    - openspec-archive-change
+│    - openspec-explore
+│    - openspec-propose
+│    - openspec-sync-specs
+│    - openspec-update-change
+│    - release
+│    - daisyui-colors
+│    - daisyui-config
+│    - daisyui-install
+│    - daisyui-usage.
+2. In the Store texts section, choose the languages and **Prepare AI job**; run the command the page shows in Claude Code.
+3. The skill learns what the app does (screenshots, current texts, your repo's README), writes name, subtitle,
+   promotional text, description, keywords and what's new for the App Store and title, short and full description for
+   Google Play, within each store's limits, and checks them. Keywords are researched per language, not translated.
+4. The page shows the texts as soon as they are written; apply them, then edit any field. Counters show each field's
+   limit (Apple keywords in bytes), and the export packs the texts per store and language in paste order.
+
 ## Requirements
 
 - Node.js ≥ 22.12

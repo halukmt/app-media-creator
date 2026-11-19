@@ -9,8 +9,8 @@ import { z } from 'zod';
 export const JOB_VERSION = 1;
 /** Longest headline or subline the screenshot sets store (MAX_TEXT in screenshot-sets.ts). */
 const MAX_TEXT = 200;
-/** Longest store text file; exact per-field limits come with the store text specs (#24). */
-export const MAX_STORE_TEXT = 4000;
+/** Longest store text file (the store text catalogue's MAX_STORE_TEXT). */
+export { MAX_STORE_TEXT } from '../specs/texts.js';
 
 const copy = z.object({
   headline: z.string().trim().min(1, 'headline is required').max(MAX_TEXT),
@@ -56,19 +56,8 @@ export const storyboardSchema = z.object({
 });
 export type StoryboardResult = z.infer<typeof storyboardSchema>;
 
-/** Store text files the AI may write as `store-texts/<locale>/<field>.md`. */
-export const STORE_TEXT_FIELDS = [
-  'apple-name',
-  'apple-subtitle',
-  'apple-promotional-text',
-  'apple-description',
-  'apple-keywords',
-  'apple-whats-new',
-  'google-title',
-  'google-short-description',
-  'google-full-description',
-] as const;
-export type StoreTextField = (typeof STORE_TEXT_FIELDS)[number];
+/** Store text files the AI may write as `store-texts/<locale>/<field>.md` (the store text catalogue). */
+export { STORE_TEXT_FIELDS, type StoreTextField } from '../specs/texts.js';
 
 /** JSON Schema files written into every job folder, so the skill can check its output before saving it. */
 export function resultJsonSchemas(): Record<string, unknown> {
