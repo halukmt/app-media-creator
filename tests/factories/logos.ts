@@ -23,6 +23,33 @@ export async function opaqueJpegLogo(): Promise<Uint8Array> {
   );
 }
 
+/** An opaque JPEG logo that is one solid colour (#7c3aed) edge to edge, like a filled square mark. */
+export async function oneColourJpeg(): Promise<Uint8Array> {
+  return Uint8Array.from(await sharp({ create: { width: 300, height: 300, channels: 3, background: '#7c3aed' } }).jpeg({ quality: 90 }).toBuffer());
+}
+
+/** An opaque JPEG mark filled edge to edge with a purple-to-blue diagonal gradient. */
+export async function gradientJpeg(): Promise<Uint8Array> {
+  const svg =
+    '<svg xmlns="http://www.w3.org/2000/svg" width="300" height="300"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1">' +
+    '<stop offset="0" stop-color="#7c3aed"/><stop offset="1" stop-color="#1d4ed8"/></linearGradient></defs><rect width="300" height="300" fill="url(#g)"/></svg>';
+  return Uint8Array.from(await sharp(Buffer.from(svg)).flatten({ background: '#ffffff' }).jpeg({ quality: 90 }).toBuffer());
+}
+
+/** An opaque JPEG line-art logo: a thin dark ring (stroke 2 % of the canvas, about 1 % of its pixels) on white. */
+export async function outlineJpeg(): Promise<Uint8Array> {
+  const svg =
+    '<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="1000"><rect width="1000" height="1000" fill="#ffffff"/>' +
+    '<circle cx="500" cy="500" r="80" fill="none" stroke="#111827" stroke-width="20"/></svg>';
+  return Uint8Array.from(await sharp(Buffer.from(svg)).jpeg({ quality: 92 }).toBuffer());
+}
+
+/** An opaque, tightly cropped JPEG wordmark: four dark letter bars (#111827) touching the top and bottom edge, on white. */
+export async function croppedWordmarkJpeg(): Promise<Uint8Array> {
+  const bars = [60, 200, 340, 480].map((left) => ({ input: { create: { width: 50, height: 150, channels: 3 as const, background: '#111827' } }, left, top: 0 }));
+  return Uint8Array.from(await sharp({ create: { width: 600, height: 150, channels: 3, background: '#ffffff' } }).composite(bars).jpeg({ quality: 92 }).toBuffer());
+}
+
 /** A transparent SVG logo: a green ring with a dark dot inside, nothing in the corners. */
 export function transparentSvg(): Uint8Array {
   return new TextEncoder().encode(

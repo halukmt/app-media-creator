@@ -9,7 +9,7 @@ import { GeneratorError } from '../../src/core/generators/logo.js';
 import { loadLogo } from '../../src/core/generators/render.js';
 import { getSpec, inspectImage, validateMedia } from '../../src/core/specs/index.js';
 import { saveInput, type Workspace } from '../../src/core/workspace/index.js';
-import { opaqueJpegLogo, squareSvg, twoColourPng } from '../factories/logos.js';
+import { croppedWordmarkJpeg, gradientJpeg, oneColourJpeg, opaqueJpegLogo, outlineJpeg, squareSvg, twoColourPng } from '../factories/logos.js';
 import { svgBytes, workspaceFactory } from '../factories/workspace.js';
 
 async function withLogo(bytes: Uint8Array, name: string): Promise<Workspace> {
@@ -89,6 +89,57 @@ describe('generateAndroidIcons builds the Play icon and the launcher resources',
     const at = (x: number, y: number) => data[(y * info.width + x) * 4 + 3];
     expect(at(216, 216)).toBe(255); // the red block in the middle
     expect(at(140, 140)).toBe(0); // the white background around it, inside the logo box
+  });
+
+  test('keeps the whole logo box in the monochrome layer of a one-colour opaque logo (#63)', async () => {
+    const workspace = await withLogo(await oneColourJpeg(), 'mark.jpg');
+    await generateAndroidIcons(workspace);
+    const { data, info } = await rgba(res(workspace, 'mipmap-xxxhdpi/ic_launcher_monochrome.png'));
+    const box = Math.floor(info.width * ADAPTIVE_LOGO_SHARE);
+    let opaque = 0;
+    for (let i = 3; i < data.length; i += 4) if (data[i] === 255) opaque += 1;
+    expect(opaque).toBeGreaterThan(box * box * 0.95);
+    expect(data[(Math.floor(info.height / 2) * info.width + Math.floor(info.width / 2)) * 4 + 3]).toBe(255);
+    expect(data[3]).toBe(0); // outside the logo box stays transparent
+  });
+
+  test('keeps a gradient mark whole instead of cutting out the colour of its corner (#63)', async () => {
+    const workspace = await withLogo(await gradientJpeg(), 'gradient.jpg');
+    await generateAndroidIcons(workspace);
+    const { data, info } = await rgba(res(workspace, 'mipmap-xxxhdpi/ic_launcher_monochrome.png'));
+    const box = Math.floor(info.width * ADAPTIVE_LOGO_SHARE);
+    let opaque = 0;
+    for (let i = 3; i < data.length; i += 4) if (data[i] === 255) opaque += 1;
+    expect(opaque).toBeGreaterThan(box * box * 0.95);
+  });
+
+  test('cuts the white out of a thin line logo at every density, never filling the box (#63)', async () => {
+    const workspace = await withLogo(await outlineJpeg(), 'ring.jpg');
+    await generateAndroidIcons(workspace);
+    for (const density of ['mdpi', 'xxxhdpi']) {
+      const { data, info } = await rgba(res(workspace, `mipmap-${density}/ic_launcher_monochrome.png`));
+      const centre = Math.floor(info.width / 2);
+      const box = Math.floor(info.width * ADAPTIVE_LOGO_SHARE);
+      const boxCorner = Math.round((info.width - box) / 2) + 1;
+      let opaque = 0;
+      for (let i = 3; i < data.length; i += 4) if (data[i]! > 128) opaque += 1;
+      expect(opaque, density).toBeGreaterThan(0); // the ring
+      expect(data[(centre * info.width + centre) * 4 + 3], density).toBe(0); // inside the ring
+      expect(data[(boxCorner * info.width + boxCorner) * 4 + 3], density).toBe(0); // white corner of the logo box
+    }
+  });
+
+  test('cuts the white out of a cropped wordmark whose letters touch the edge (#63)', async () => {
+    const workspace = await withLogo(await croppedWordmarkJpeg(), 'wordmark.jpg');
+    await generateAndroidIcons(workspace);
+    const { data, info } = await rgba(res(workspace, 'mipmap-xxxhdpi/ic_launcher_monochrome.png'));
+    const box = Math.floor(info.width * ADAPTIVE_LOGO_SHARE);
+    const left = Math.round((info.width - box) / 2);
+    const row = Math.floor(info.height / 2);
+    // The wordmark is 600 px wide in the box: letter bar at 60–110 px, gap at 110–200 px of the source.
+    const alphaAt = (sourceX: number) => data[(row * info.width + left + Math.round((sourceX / 600) * box)) * 4 + 3];
+    expect(alphaAt(85)).toBe(255);
+    expect(alphaAt(155)).toBe(0);
   });
 
   test('writes ic_launcher.xml that references the three layers', async () => {
