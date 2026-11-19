@@ -3,6 +3,7 @@
  * because that code depends on Node modules.
  */
 import type { CheckStatus } from './lib/export';
+import type { CreativePurpose } from './lib/creative';
 import type { TargetId } from './lib/sections';
 
 export interface TargetSettings {
@@ -59,6 +60,12 @@ export interface Catalogue {
 export interface CatalogueCreativeImage {
   specId: string;
   name: string;
+  group: CreativePurpose;
+  target: TargetId;
+  /** Whether the phrase is drawn (no own text on in-app event images). */
+  text: boolean;
+  /** True: the store's art safe area; false: the centred key area of images without one. */
+  storeSafeArea: boolean;
   size: { width: number; height: number };
   safeArea: { x: number; y: number; width: number; height: number };
 }
@@ -363,10 +370,10 @@ export function previewCreative(locale: string, specId: string, width: number, s
   });
 }
 
-export function generateCreativeAssets(locales: readonly string[]): Promise<CardGenerationResult> {
+export function generateCreativeAssets(locales: readonly string[], group: CreativePurpose): Promise<CardGenerationResult> {
   return request<CardGenerationResult>('/api/generate/creative-assets', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ locales }),
+    body: JSON.stringify({ locales, group }),
   });
 }

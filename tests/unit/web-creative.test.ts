@@ -16,7 +16,8 @@ describe('The header image helpers of the Screenshots section', () => {
 
   test('has a label for every creative image the catalogue lists, and serves the phrase limit of core', () => {
     const catalogue = buildCatalogue();
-    expect(catalogue.creativeImages.map((image) => creativeLabelKey(image.specId))).toEqual(['header', 'search', 'universal']);
+    expect(catalogue.creativeImages.map((image) => creativeLabelKey(image.specId))).toEqual(['header', 'search', 'universal', 'featureGraphic', 'eventCard', 'eventDetails']);
+    expect(catalogue.creativeImages.filter((image) => !image.storeSafeArea).map((image) => image.group)).toEqual(['feature', 'feature', 'feature']);
     expect(catalogue.maxPhrase).toBe(MAX_PHRASE);
     expect(creativeLabelKey('apple.icon')).toBeUndefined();
   });

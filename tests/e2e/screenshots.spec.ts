@@ -46,9 +46,9 @@ test.describe('The Screenshots section', () => {
     await uploadFor(page, 'German', 'start.png');
     await uploadFor(page, 'Turkish', 'baslangic.png');
 
-    // Purpose: store screenshots with headline (the default); the later purposes are disabled.
+    // Purpose: store screenshots with headline (the default).
     await page.getByRole('button', { name: 'Purpose', exact: false }).first().click();
-    await expect(page.getByRole('radio', { name: /Feature graphic/ })).toBeDisabled();
+    await expect(page.getByRole('radio', { name: /Store screenshots with headline/ })).toBeChecked();
     await page.getByRole('button', { name: /Preview and edit →/ }).click();
 
     // Edit the German headline and see the preview.
@@ -123,6 +123,28 @@ test.describe('The Screenshots section', () => {
         'apple/tr-TR/creative-universal-image/01-universal.png',
       ]),
     );
+  });
+
+  test('creates the Play feature graphic with the phrase and the in-app event images without text (#19)', async ({ page, request }) => {
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await page.goto('/#/screenshots');
+    await page.getByRole('button', { name: 'Purpose', exact: false }).first().click();
+    await page.getByRole('group', { name: /What are the screenshots for/ }).locator('label', { hasText: 'Feature graphic and in-app event images' }).click();
+    // Background and phrases are shared with the header images.
+    await expect(page.getByLabel('Phrase (German)')).toHaveValue('Faire Teams in Sekunden');
+    await page.getByRole('button', { name: /Preview and edit →/ }).click();
+    for (const name of ['Feature graphic (Google Play)', 'In-app event card', 'In-app event details']) {
+      await expect(page.getByRole('img', { name: `Preview of ${name}, German` })).toBeVisible();
+    }
+    await expect(page.getByText('1024 × 500 px · key area')).toBeVisible();
+
+    await page.getByRole('button', { name: /Export →/ }).click();
+    await page.getByRole('button', { name: 'Generate feature graphic and event images' }).click();
+    await expect(page.getByText(/files generated/)).toBeVisible({ timeout: 60_000 });
+    const entries = (await (await request.get('/api/output')).json()) as { specId: string; locale?: string }[];
+    for (const specId of ['google.feature-graphic', 'apple.event.card-image', 'apple.event.details-image']) {
+      expect(entries.filter((e) => e.specId === specId).map((e) => e.locale).sort(), specId).toEqual(['de-DE', 'tr-TR']);
+    }
   });
 
   for (const width of viewportWidths()) {

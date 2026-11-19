@@ -38,7 +38,7 @@ import { StatusAlert } from '../components/StatusAlert';
 import { ToggleField } from '../components/ToggleField';
 import { en } from '../i18n/en';
 import { SectionLayout } from '../layouts/SectionLayout';
-import { CREATIVE_PREVIEW_WIDTH, creativeLabelKey, safeAreaPercent, safeAreaShares } from '../lib/creative';
+import { CREATIVE_PREVIEW_WIDTH, creativeLabelKey, isCreativePurpose, safeAreaPercent, safeAreaShares } from '../lib/creative';
 import type { CheckStatus } from '../lib/export';
 import { projectLocaleOptions, sourceLocaleFor } from '../lib/locale-selection';
 import { createSaveQueue } from '../lib/save-queue';
@@ -54,7 +54,7 @@ interface Props {
 }
 
 type StepId = 'upload' | 'purpose' | 'preview' | 'export';
-type Purpose = 'cards' | 'frame' | 'header';
+type Purpose = 'cards' | 'frame' | 'header' | 'feature';
 type Message = { tone: 'success' | 'warning' | 'error'; text: string; details?: string[] } | null;
 
 const LAYOUTS: readonly CardLayout[] = ['text-top', 'text-top-large', 'text-bottom'];
@@ -141,6 +141,11 @@ export function ScreenshotsPage({ project, catalogue, selection, onSelectionChan
   useEffect(() => {
     if (!devices.some((d) => d.id === device)) setDevice(devices[0]?.id ?? '');
   }, [devices, device]);
+
+  const creativeImages = useMemo(
+    () => catalogue.creativeImages.filter((image) => image.group === purpose && project.targets[image.target].enabled),
+    [catalogue.creativeImages, purpose, project.targets],
+  );
 
   const ownEntries = sets?.sets[editLocale] ?? [];
   const usesFallback = ownEntries.length === 0 && editLocale !== project.sourceLocale;
@@ -236,12 +241,12 @@ export function ScreenshotsPage({ project, catalogue, selection, onSelectionChan
   // Header, search and universal previews of the editing language, one request at a time.
   // Old previews never stay under another language: they are cleared first, also when there is nothing to render.
   useEffect(() => {
-    if (step !== 'preview' || purpose !== 'header') return undefined;
+    if (step !== 'preview' || !isCreativePurpose(purpose)) return undefined;
     setCreativePreviews({});
     if (shownEntries.length === 0) return undefined;
     const controller = new AbortController();
     void (async () => {
-      for (const image of catalogue.creativeImages) {
+      for (const image of creativeImages) {
         if (controller.signal.aborted) return;
         try {
           const preview = await previewCreative(editLocale, image.specId, CREATIVE_PREVIEW_WIDTH, controller.signal);
@@ -253,7 +258,7 @@ export function ScreenshotsPage({ project, catalogue, selection, onSelectionChan
       }
     })();
     return () => controller.abort();
-  }, [step, purpose, editLocale, previewVersion, shownEntries.length, catalogue.creativeImages]);
+  }, [step, purpose, editLocale, previewVersion, shownEntries.length, creativeImages]);
 
   async function upload(files: File[]) {
     setUploadMessage(null);
@@ -291,7 +296,7 @@ export function ScreenshotsPage({ project, catalogue, selection, onSelectionChan
     // Generate from what the user sees: send pending edits first; if that fails, do not generate from older data.
     try {
       await flushSave();
-      if (purpose === 'header') await flushCreative();
+      if (isCreativePurpose(purpose)) await flushCreative();
     } catch {
       setGenerateMessage({ tone: 'error', text: en.screenshots.saveFirst });
       return;
@@ -306,7 +311,7 @@ export function ScreenshotsPage({ project, catalogue, selection, onSelectionChan
         files = (await generateFramedScreenshots(locales, frameKind, shadow)).length;
       } else {
         // One request per language: real progress, and earlier languages are kept if a later one fails.
-        const run = purpose === 'header' ? generateCreativeAssets : generateScreenshotCards;
+        const run = isCreativePurpose(purpose) ? (list: string[]) => generateCreativeAssets(list, purpose) : generateScreenshotCards;
         for (const [index, locale] of locales.entries()) {
           setGenerateState({ locale: localeName(locale), done: index, total: locales.length });
           try {
@@ -368,6 +373,13 @@ export function ScreenshotsPage({ project, catalogue, selection, onSelectionChan
   }
 
   const deviceName = devices.find((d) => d.id === device)?.name ?? device;
+  // Generate button per purpose; the feature purpose names only what the enabled stores get.
+  const generateLabel: string = {
+    cards: en.screenshots.generate,
+    frame: en.screenshots.generateFramed,
+    header: en.screenshots.generateHeader,
+    feature: creativeImages.some((image) => image.target === 'google') ? en.screenshots.generateFeature : en.screenshots.generateEvents,
+  }[purpose];
   const deviceSize = devices.find((d) => d.id === device)?.size;
 
   function previewFor(index: number, fallbackAlt: string, thumbnail?: string) {
@@ -458,7 +470,12 @@ export function ScreenshotsPage({ project, catalogue, selection, onSelectionChan
                 description: en.screenshots.purposeHeaderHint,
                 ...(project.targets.apple.enabled ? {} : { disabled: true, note: en.screenshots.appleDisabled }),
               },
-              { id: 'feature', label: en.screenshots.purposeFeature, disabled: true, note: en.screenshots.later },
+              {
+                id: 'feature',
+                label: en.screenshots.purposeFeature,
+                description: en.screenshots.purposeFeatureHint,
+                ...(project.targets.apple.enabled || project.targets.google.enabled ? {} : { disabled: true, note: en.screenshots.noFeatureStore }),
+              },
             ]}
           />
           {purpose === 'frame' ? (
@@ -472,7 +489,7 @@ export function ScreenshotsPage({ project, catalogue, selection, onSelectionChan
               <ToggleField label={en.screenshots.shadowLabel} checked={shadow} onChange={setShadow} />
             </>
           ) : null}
-          {purpose === 'header' && creativeLoadFailed ? (
+          {isCreativePurpose(purpose) && creativeLoadFailed ? (
             <div role="alert">
               <StatusAlert announce={false} tone="error" title={en.screenshots.headerLoadFailed}>
                 <button type="button" className="btn btn-sm min-h-11 mt-2" onClick={() => void loadCreative()}>
@@ -481,7 +498,7 @@ export function ScreenshotsPage({ project, catalogue, selection, onSelectionChan
               </StatusAlert>
             </div>
           ) : null}
-          {purpose === 'header' && creative ? (
+          {isCreativePurpose(purpose) && creative ? (
             <>
               <OptionGroup
                 label={en.screenshots.backgroundLabel}
@@ -493,16 +510,19 @@ export function ScreenshotsPage({ project, catalogue, selection, onSelectionChan
                   if (found) updateCreative({ ...creative, background: found.background });
                 }}
               />
-              <LocaleTextFields
-                heading={en.screenshots.phrasesHeading}
-                locales={editOptions}
-                values={creative.phrases}
-                label={en.screenshots.phraseLabel}
-                hint={en.screenshots.phraseHint(catalogue.maxPhrase)}
-                maxLength={catalogue.maxPhrase}
-                onChange={(locale, text) => updateCreative({ ...creative, phrases: { ...creative.phrases, [locale]: text } })}
-              />
-              <p className="max-w-prose text-sm text-base-content/70">{en.screenshots.headerUsesShots}</p>
+              {/* Phrases only when an image of this purpose draws one (event images have no own text). */}
+              {creativeImages.some((image) => image.text) ? (
+                <LocaleTextFields
+                  heading={en.screenshots.phrasesHeading}
+                  locales={editOptions}
+                  values={creative.phrases}
+                  label={en.screenshots.phraseLabel}
+                  hint={en.screenshots.phraseHint(catalogue.maxPhrase)}
+                  maxLength={catalogue.maxPhrase}
+                  onChange={(locale, text) => updateCreative({ ...creative, phrases: { ...creative.phrases, [locale]: text } })}
+                />
+              ) : null}
+              <p className="max-w-prose text-sm text-base-content/70">{purpose === 'feature' ? en.screenshots.featureUsesShots : en.screenshots.headerUsesShots}</p>
               <p className="text-sm text-base-content/70" aria-live="off">
                 {creativeSaveState === 'saving' ? en.screenshots.saving : creativeSaveState === 'saved' ? en.screenshots.saved : ''}
               </p>
@@ -517,20 +537,22 @@ export function ScreenshotsPage({ project, catalogue, selection, onSelectionChan
         </section>
       ) : null}
 
-      {step === 'preview' && purpose === 'header' ? (
+      {step === 'preview' && isCreativePurpose(purpose) ? (
         <section aria-labelledby="step-preview" className="flex flex-col gap-4">
           <h2 id="step-preview" tabIndex={-1} className="text-xl font-semibold focus:outline-none">
             {en.steps.preview}
           </h2>
           <LocaleSelector label={en.screenshots.editLocaleLabel} mode="single" options={editOptions} value={[editLocale]} onChange={([id]) => id && setEditLocale(id)} />
           {usesFallback ? <StatusAlert tone="info" title={en.screenshots.fallbackNote(localeName(project.sourceLocale))} /> : null}
-          <ToggleField label={en.screenshots.showSafeArea} checked={showSafeArea} onChange={setShowSafeArea} />
-          {showSafeArea ? <p className="max-w-prose text-sm text-base-content/70">{en.screenshots.safeAreaHint}</p> : null}
+          <ToggleField label={purpose === 'header' ? en.screenshots.showSafeArea : en.screenshots.showKeyArea} checked={showSafeArea} onChange={setShowSafeArea} />
+          {showSafeArea ? (
+            <p className="max-w-prose text-sm text-base-content/70">{purpose === 'header' ? en.screenshots.safeAreaHint : en.screenshots.keyAreaHint}</p>
+          ) : null}
           {shownEntries.length === 0 ? (
             <StatusAlert tone="info" title={en.screenshots.headerNeedsShots(localeName(project.sourceLocale))} />
           ) : (
-            <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3" aria-busy={Object.keys(creativePreviews).length < catalogue.creativeImages.length}>
-              {catalogue.creativeImages.map((image) => {
+            <ul className="grid grid-cols-1 items-start gap-3 sm:grid-cols-2 lg:grid-cols-3" aria-busy={Object.keys(creativePreviews).length < creativeImages.length}>
+              {creativeImages.map((image) => {
                 const preview = creativePreviews[image.specId];
                 const key = creativeLabelKey(image.specId);
                 const name = key ? en.screenshots.creativeAssets[key] : image.name;
@@ -551,7 +573,7 @@ export function ScreenshotsPage({ project, catalogue, selection, onSelectionChan
                           ),
                         })}
                     title={name}
-                    size={en.screenshots.creativeSize(width, height, image.safeArea.width, image.safeArea.height)}
+                    size={en.screenshots.creativeSize(width, height, image.safeArea.width, image.safeArea.height, image.storeSafeArea)}
                     {...(status ? { status } : {})}
                     messages={preview === 'failed' ? [en.screenshots.previewFailed] : (loaded?.warnings.map((w) => w.message) ?? [])}
                     {...(loaded && showSafeArea ? { guide: safeAreaPercent(safeAreaShares(image.size, image.safeArea)) } : {})}
@@ -568,7 +590,7 @@ export function ScreenshotsPage({ project, catalogue, selection, onSelectionChan
         </section>
       ) : null}
 
-      {step === 'preview' && purpose !== 'header' && sets ? (
+      {step === 'preview' && !isCreativePurpose(purpose) && sets ? (
         <section aria-labelledby="step-preview" className="flex flex-col gap-6">
           <h2 id="step-preview" tabIndex={-1} className="text-xl font-semibold focus:outline-none">
             {en.steps.preview}
@@ -702,7 +724,7 @@ export function ScreenshotsPage({ project, catalogue, selection, onSelectionChan
           <p className="max-w-prose">{en.screenshots.generateHint}</p>
           <div className="flex flex-wrap items-center gap-3">
             <BusyButton primary busy={generateState !== null} busyLabel={en.screenshots.generatingShort} onClick={() => void generate()}>
-              {purpose === 'frame' ? en.screenshots.generateFramed : purpose === 'header' ? en.screenshots.generateHeader : en.screenshots.generate}
+              {generateLabel}
             </BusyButton>
             <a href={sectionHref('export')} className="btn min-h-11">
               {en.screenshots.toExport}

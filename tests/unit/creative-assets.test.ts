@@ -2,7 +2,7 @@
 import sharp from 'sharp';
 import { describe, expect, test } from 'vitest';
 import { exportChecklist } from '../../src/core/export/index.js';
-import { CREATIVE_IMAGES, generateCreativeAssets, renderCreativePreview } from '../../src/core/generators/creative-assets.js';
+import { CREATIVE_IMAGES, creativeGeometry, generateCreativeAssets, renderCreativePreview } from '../../src/core/generators/creative-assets.js';
 import { creativeLayout, outerAspect, renderCreativeAsset, type CreativeInput } from '../../src/core/screenshots/index.js';
 import { getSpec, inspectImageBytes, validateMedia, type Rect } from '../../src/core/specs/index.js';
 import {
@@ -22,10 +22,11 @@ const PHRASES = creativePhrases();
 const LOCALES = ['de-DE', 'tr-TR'] as const;
 
 /** A workspace with German and Turkish only, one screenshot for German and phrases for both. */
-async function creativeWorkspace(options: { phrases?: Record<string, string>; apple?: boolean } = {}): Promise<Workspace> {
+async function creativeWorkspace(options: { phrases?: Record<string, string>; apple?: boolean; google?: boolean } = {}): Promise<Workspace> {
   const workspace = await workspaceFactory();
   const project = projectInputFactory({ sourceLocale: 'de-DE', locales: [...LOCALES] }) as { targets: Record<string, { enabled: boolean }> };
   if (options.apple === false) project.targets.apple!.enabled = false;
+  if (options.google === false) project.targets.google!.enabled = false;
   const saved = await saveProject(workspace, project);
   if (!saved.ok) throw new Error(saved.errors.join('; '));
   await saveInput(workspace, 'de-DE', { kind: 'screenshot', locale: 'de-DE', originalName: 'start.png', bytes: await appScreenshot(590, 1278) });
@@ -55,11 +56,10 @@ function scaledInput(specId: string, width: number, phrase: string, screenshots:
 }
 
 describe('The creative layout keeps the key art inside the art safe area', () => {
-  for (const { specId } of CREATIVE_IMAGES) {
-    test(`places phrase and device of ${specId} inside the safe area and the side devices outside it`, () => {
-      const spec = getSpec(specId);
-      const size = spec.dimensions.kind === 'fixed' ? spec.dimensions.sizes[0]! : spec.defaultSize!;
-      const safe = spec.safeArea!;
+  for (const image of CREATIVE_IMAGES) {
+    test(`places phrase and device of ${image.specId} inside the key-art area and the side devices outside it`, () => {
+      const { safeArea: safe, ...size } = creativeGeometry(image);
+      if (image.keyArea === undefined) expect(safe).toEqual(getSpec(image.specId).safeArea);
       for (const hasText of [true, false]) {
         const layout = creativeLayout(size.width, size.height, safe, outerAspect('iphone', 2556 / 1179), hasText);
         expect(within(layout.device, safe)).toBe(true);
@@ -67,8 +67,11 @@ describe('The creative layout keeps the key art inside the art safe area', () =>
           expect(layout.text && within(layout.text, safe)).toBe(true);
           expect(layout.text!.x + layout.text!.width).toBeLessThanOrEqual(layout.device.x);
         } else expect(layout.text).toBeNull();
-        expect(layout.sides.filter((side) => side.x < safe.x).length).toBeGreaterThan(0);
-        expect(layout.sides.filter((side) => side.x > safe.x).length).toBeGreaterThan(0);
+        // The event details page is too narrow for side devices; every other image has some on both sides.
+        if (image.specId !== 'apple.event.details-image') {
+          expect(layout.sides.filter((side) => side.x < safe.x).length).toBeGreaterThan(0);
+          expect(layout.sides.filter((side) => side.x > safe.x).length).toBeGreaterThan(0);
+        }
         for (const side of layout.sides) {
           const overlaps = side.x < safe.x + safe.width && side.x + side.width > safe.x;
           expect(overlaps).toBe(false);
@@ -79,6 +82,22 @@ describe('The creative layout keeps the key art inside the art safe area', () =>
       }
     });
   }
+});
+
+describe('The creative layout centres phrase and key device as one group', () => {
+  test('moves a short phrase and the device towards each other and keeps both inside the key area', () => {
+    const image = CREATIVE_IMAGES.find((candidate) => candidate.specId === 'google.feature-graphic')!;
+    const { safeArea: safe, ...size } = creativeGeometry(image);
+    const aspect = outerAspect('iphone', 2556 / 1179);
+    const wide = creativeLayout(size.width, size.height, safe, aspect, true);
+    const short = creativeLayout(size.width, size.height, safe, aspect, true, 120);
+    expect(wide.textShift).toBe(0);
+    expect(short.textShift).toBeCloseTo((short.text!.width - 120) / 2, 5);
+    expect(short.device.x).toBeCloseTo(wide.device.x - short.textShift, 5);
+    expect(short.text!.x + short.textShift + 120).toBeLessThanOrEqual(short.device.x);
+    expect(within(short.device, safe)).toBe(true);
+    expect(short.text!.x + short.textShift).toBeGreaterThanOrEqual(safe.x);
+  });
 });
 
 describe('renderCreativeAsset draws the header image', () => {
@@ -169,8 +188,35 @@ describe('generateCreativeAssets writes the header, search and universal images 
   test('asks to enable the App Store and rejects specs that are not creative images', async () => {
     await expect(generateCreativeAssets(await creativeWorkspace({ apple: false }))).rejects.toThrow(/Enable the App Store/);
     const workspace = await creativeWorkspace();
-    await expect(renderCreativePreview(workspace, { locale: 'de-DE', specId: 'apple.icon' })).rejects.toThrow(/not a header or search image/);
+    await expect(renderCreativePreview(workspace, { locale: 'de-DE', specId: 'apple.icon' })).rejects.toThrow(/not a store artwork image/);
   });
+});
+
+describe('generateCreativeAssets writes the feature graphic and the in-app event images per locale', () => {
+  test('writes a valid feature graphic with the phrase and event images without text, de-DE and tr-TR', async () => {
+    const workspace = await creativeWorkspace();
+    const result = await generateCreativeAssets(workspace, { group: 'feature' });
+    expect(result.warnings).toEqual([]);
+    expect(result.entries.map((e) => e.specId).sort()).toEqual(
+      ['apple.event.card-image', 'apple.event.card-image', 'apple.event.details-image', 'apple.event.details-image', 'google.feature-graphic', 'google.feature-graphic'],
+    );
+    const read = (locale: string, specId: string) => sharp(`${workspace.outputDir}/${result.entries.find((e) => e.locale === locale && e.specId === specId)!.path}`).toBuffer();
+    for (const entry of result.entries) {
+      const props = await inspectImageBytes(await sharp(`${workspace.outputDir}/${entry.path}`).toBuffer());
+      expect(validateMedia(getSpec(entry.specId), props), entry.path).toEqual([]);
+    }
+    // Same screenshots (Turkish falls back to German): the phrase is the only difference, so event images without
+    // own text are identical across languages and the feature graphics are not.
+    expect((await read('de-DE', 'apple.event.card-image')).equals(await read('tr-TR', 'apple.event.card-image'))).toBe(true);
+    expect((await read('de-DE', 'google.feature-graphic')).equals(await read('tr-TR', 'google.feature-graphic'))).toBe(false);
+  }, 120_000);
+
+  test('makes only the images of enabled stores and fails when neither store is enabled', async () => {
+    const appleOnly = await generateCreativeAssets(await creativeWorkspace({ google: false }), { group: 'feature', locales: 'de-DE' });
+    expect(appleOnly.entries.map((e) => e.specId).sort()).toEqual(['apple.event.card-image', 'apple.event.details-image']);
+    await expect(generateCreativeAssets(await creativeWorkspace({ google: false, apple: false }), { group: 'feature' })).rejects.toThrow(/Enable Google Play or the App Store/);
+    await expect(generateCreativeAssets(await creativeWorkspace(), { group: 'banner' as 'feature' })).rejects.toThrow(/group must be one of/);
+  }, 60_000);
 });
 
 describe('The creative API', () => {
