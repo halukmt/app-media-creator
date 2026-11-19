@@ -119,6 +119,46 @@ test.describe('The Screenshots section', () => {
     expect(results.violations.filter((v) => v.impact === 'serious' || v.impact === 'critical')).toEqual([]);
   });
 
+  test('keeps edits blocked after an apply whose reload failed, until a later reload shows the applied texts (#87)', async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await page.goto('/#/screenshots');
+    await page.getByRole('button', { name: /Preview and edit/ }).first().click();
+    await page.getByRole('group', { name: /Language to edit/ }).locator('label', { hasText: 'German' }).click();
+    const headline = page.getByLabel('Headline', { exact: true }).first();
+    await expect(headline).toHaveValue('Mechanismus 1');
+
+    // The reload right after the apply fails once.
+    let failNext = true;
+    await page.route('**/api/screenshots', async (route) => {
+      if (route.request().method() === 'GET' && failNext) {
+        failNext = false;
+        await route.fulfill({ status: 500, contentType: 'application/json', body: JSON.stringify({ error: 'Temporary failure' }) });
+      } else await route.continue();
+    });
+    await page.getByRole('button', { name: 'Apply variant A' }).click();
+    await page.getByRole('dialog').getByRole('button', { name: 'Apply variant A' }).click();
+    await expect(page.getByRole('alert').filter({ hasText: 'The screenshots could not be loaded.' })).toBeVisible();
+
+    // The page still shows the old text and refuses edits, so nothing can save it over the applied one.
+    await headline.fill('Old text typed now');
+    await expect(headline).toHaveValue('Mechanismus 1');
+    await expect(page.getByText('Changes are paused until the applied headlines are loaded.')).toBeVisible();
+    // The server keeps the applied text.
+    const stored = (await (await page.request.get('/api/screenshots')).json()) as { sets: Record<string, { headline: string }[]> };
+    expect(stored.sets['de-DE']?.[0]?.headline).toBe('Ergebnis 1');
+
+    // Recovery through another reload than "Try again": an upload reloads the sets and clears the error.
+    await page.getByRole('button', { name: 'Upload', exact: true }).click();
+    await uploadFor(page, 'German', 'third.png');
+    await expect(page.getByRole('alert').filter({ hasText: 'The screenshots could not be loaded.' })).toHaveCount(0);
+    await page.getByRole('button', { name: /Preview and edit/ }).first().click();
+    await page.getByRole('group', { name: /Language to edit/ }).locator('label', { hasText: 'German' }).click();
+    await expect(headline).toHaveValue('Ergebnis 1');
+    await expect(page.getByText('Changes are paused until the applied headlines are loaded.')).toHaveCount(0);
+    await headline.fill('Ergebnis eins');
+    await expect(headline).toHaveValue('Ergebnis eins');
+  });
+
   /** Opens the purpose step and picks the App Store header and search images. */
   async function chooseHeader(page: Page) {
     await page.goto('/#/screenshots');

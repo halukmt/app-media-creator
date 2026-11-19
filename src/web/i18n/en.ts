@@ -217,6 +217,7 @@ export const en = {
       confirmBody: (languages: string) => `Replaces the headlines and sublines for ${languages}.`,
       applied: (variant: string, languages: string) => `Variant ${variant} applied for ${languages}.`,
       applyFailed: 'The headlines could not be applied.',
+      editsPaused: 'Changes are paused until the applied headlines are loaded. If loading failed, choose Try again above.',
       prepareFailed: 'The AI job could not be prepared.',
       forLocales: (languages: string) => `Job for ${languages}`,
       missingLocales: (languages: string) => `No headlines for ${languages} in this result.`,
