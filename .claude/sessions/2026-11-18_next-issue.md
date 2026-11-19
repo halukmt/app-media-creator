@@ -246,3 +246,11 @@
   1 %, gradients still cut. Second review: edge-touching wordmarks → 60 % best corner. Tests for each case.
 - Flaky unit test cause captured: `TestTimeoutError` 20 s in framed-screenshots → #72 (Backlog, P2/XS).
 - Codex on PR #71: no findings.
+
+## #74 Greyscale logo rasters (Codex on #73) — done (PR #75)
+
+- Codex P2 on PR #73: `analyseBackground` read RGBA without converting greyscale. Taken right away (shared code, own
+  regression). Not reproducible with sharp 0.35.5 (raw output already 4 channels for 8/16-bit grey PNG and grey JPEG).
+- `readRgba(pipeline)` (sRGB, alpha, 8-bit, length check) now used by `logoPalette`, `analyseBackground`,
+  `renderSilhouette`. CHANGELOG under Changed (hardening).
+- #72 (20 s timeout in framed-screenshots) hit 3 of the last 5 full runs → raised to Ready, P1.

@@ -63,3 +63,15 @@ rendered from one logo.
 #### Scenario: Cropped wordmark
 - **WHEN** the monochrome layer is generated from an opaque JPEG wordmark whose letters touch the top and bottom edge on white
 - **THEN** the letters are opaque and the white between them is transparent
+
+### Requirement: Greyscale logos in silhouettes
+Every pixel analysis of a logo raster (palette, background analysis, silhouette cut) SHALL read the pixels as 8-bit
+sRGB with alpha, so greyscale and 16-bit logos are handled like colour logos.
+
+#### Scenario: Greyscale logo on white
+- **WHEN** the monochrome layer is generated from an opaque one-channel greyscale PNG with a dark block on white
+- **THEN** the block is opaque and the white around it is transparent
+
+#### Scenario: 16-bit greyscale raster
+- **WHEN** a 16-bit greyscale PNG is read for analysis
+- **THEN** the pixels come as 4 bytes per pixel with the grey value in each colour channel
