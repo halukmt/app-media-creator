@@ -12,10 +12,12 @@ interface Props {
   rows?: number;
   required?: boolean;
   maxLength?: number;
+  /** Language of the text (spell-check and pronunciation), e.g. tr-TR for a Turkish headline. */
+  lang?: string;
 }
 
 /** A labelled text input or textarea with hint and error, wired for screen readers. */
-export function TextField({ label, value, onChange, hint, error, multiline = false, rows = 4, required, maxLength }: Props) {
+export function TextField({ label, value, onChange, hint, error, multiline = false, rows = 4, required, maxLength, lang }: Props) {
   const id = useId();
   const hintId = `${id}-hint`;
   const errorId = `${id}-error`;
@@ -25,6 +27,7 @@ export function TextField({ label, value, onChange, hint, error, multiline = fal
     value,
     required,
     maxLength,
+    lang,
     'aria-invalid': error ? true : undefined,
     'aria-describedby': describedBy,
   };

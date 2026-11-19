@@ -1,10 +1,27 @@
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { outputPath, registerOutputs, type OutputEntry, type RegisterOptions } from '../export/manifest.js';
-import { resolveLocales, type LocaleId, type LocaleSelection } from '../locales/index.js';
-import { cardDefaultsForSpec, loadUserFrame, renderScreenshotCard, type CardWarningCode, type FrameKind, type UserFrame } from '../screenshots/index.js';
-import { SCREENSHOT_MATRIX, getSpec, type Target } from '../specs/index.js';
-import { effectiveSet, listScreenshots, originalInputName, readProject, readScreenshotSets, type Workspace } from '../workspace/index.js';
+import { isLocaleId, resolveLocales, type LocaleId, type LocaleSelection } from '../locales/index.js';
+import {
+  cardDefaultsForSpec,
+  loadUserFrame,
+  renderScreenshotCard,
+  type CardInput,
+  type CardWarningCode,
+  type FrameKind,
+  type UserFrame,
+} from '../screenshots/index.js';
+import { SCREENSHOT_MATRIX, getSpec, type SpecEntry, type Target } from '../specs/index.js';
+import {
+  effectiveSet,
+  listScreenshots,
+  originalInputName,
+  readProject,
+  readScreenshotSets,
+  type CardStyle,
+  type ScreenshotEntry,
+  type Workspace,
+} from '../workspace/index.js';
 import { GeneratorError } from './logo.js';
 import { assertValidOutputs } from './outputs.js';
 
@@ -40,6 +57,96 @@ async function withContext<T>(label: string, work: () => Promise<T>): Promise<T>
   }
 }
 
+/** Loads the user bezel of each device's default frame once into `into`. */
+async function loadUserFrames(workspace: Workspace, devices: readonly string[], into: Map<FrameKind, UserFrame | null>): Promise<void> {
+  for (const specId of devices) {
+    const frame = cardDefaultsForSpec(getSpec(specId)).frame;
+    if (!into.has(frame)) into.set(frame, await withContext(`frames/user/${frame}`, () => loadUserFrame(workspace.userFramesDir, frame)));
+  }
+}
+
+/** The card for one slot on one device: project style, the slot's overrides, and the device's defaults. */
+function cardInputFor(
+  spec: SpecEntry,
+  entry: ScreenshotEntry,
+  style: CardStyle,
+  screenshot: Uint8Array,
+  userFrames: ReadonlyMap<FrameKind, UserFrame | null>,
+): CardInput {
+  const defaults = cardDefaultsForSpec(spec);
+  const frame: FrameKind = entry.frame === 'none' ? 'none' : defaults.frame;
+  return {
+    ...defaults,
+    frame,
+    layout: entry.layout ?? style.layout,
+    background: entry.background ?? style.background,
+    headline: entry.headline,
+    subline: entry.subline,
+    screenshot,
+    userFrame: frame === 'none' ? null : (userFrames.get(frame) ?? null),
+  };
+}
+
+export interface CardPreviewRequest {
+  locale: string;
+  /** Screenshot spec id of a matrix device. */
+  device: string;
+  /** Position in the locale's effective set, starting at 0. */
+  index: number;
+  /** Width of the preview image in pixels (default 360). */
+  width?: number;
+}
+
+export interface PreviewWarning {
+  code: CardWarningCode | 'not-exported';
+  message: string;
+}
+
+export interface CardPreview {
+  png: Buffer;
+  width: number;
+  height: number;
+  warnings: PreviewWarning[];
+  fallbackInput: boolean;
+}
+
+const PREVIEW_WIDTH = 360;
+
+/**
+ * Renders one card small for the UI preview, from the saved sets: same layout logic as the real card, at a reduced
+ * size with the same aspect ratio, so text fitting and warnings match the full-size card.
+ */
+export async function renderCardPreview(workspace: Workspace, request: CardPreviewRequest): Promise<CardPreview> {
+  if (!isLocaleId(request.locale)) throw new GeneratorError(`${String(request.locale)} is not a supported locale`);
+  const target = (['apple', 'google'] as const).find((t) => SCREENSHOT_MATRIX[t].includes(request.device));
+  if (!target) throw new GeneratorError(`${String(request.device)} is not a device of the device matrix`);
+  const width = request.width ?? PREVIEW_WIDTH;
+  if (!Number.isInteger(request.index) || request.index < 0) throw new GeneratorError('index must be a whole number from 0');
+  if (!Number.isInteger(width) || width < 100 || width > 1200) throw new GeneratorError('width must be whole pixels from 100 to 1200');
+
+  const project = await readProject(workspace);
+  const screenshots = await listScreenshots(workspace);
+  const sets = await readScreenshotSets(workspace, screenshots);
+  const entry = effectiveSet(sets, request.locale, project.sourceLocale, screenshots)[request.index];
+  if (!entry) throw new GeneratorError(`There is no screenshot ${request.index + 1} for ${request.locale}`);
+
+  const spec = getSpec(request.device);
+  const userFrames = new Map<FrameKind, UserFrame | null>();
+  await loadUserFrames(workspace, [request.device], userFrames);
+  const full = cardInputFor(spec, entry, sets.style, await readFile(path.join(workspace.root, entry.input)), userFrames);
+  const height = Math.round((width * full.height) / full.width);
+  const card = await withContext(entry.input, () =>
+    // The text share limit is relative, so it applies unchanged to the smaller preview.
+    renderScreenshotCard({ ...full, width, height }),
+  );
+  // The store takes only the first maxCount screenshots; say so instead of showing a card that is never exported.
+  const warnings: PreviewWarning[] = [...card.warnings];
+  if (spec.maxCount !== undefined && request.index >= spec.maxCount) {
+    warnings.push({ code: 'not-exported', message: `${spec.name} takes only the first ${spec.maxCount} screenshots; this one is not exported` });
+  }
+  return { png: card.png, width, height, warnings, fallbackInput: entry.fallbackInput };
+}
+
 /**
  * Renders the store screenshot cards: for every selected language, every enabled store device of the matrix that the
  * project picked, and every screenshot of the language's set (up to the device's catalogue maximum). Languages
@@ -66,10 +173,7 @@ export async function generateScreenshotCards(workspace: Workspace, options: Scr
 
   // User bezels are loaded once per frame kind for the whole run.
   const userFrames = new Map<FrameKind, UserFrame | null>();
-  for (const specId of devices) {
-    const frame = cardDefaultsForSpec(getSpec(specId)).frame;
-    if (!userFrames.has(frame)) userFrames.set(frame, await withContext(`frames/user/${frame}`, () => loadUserFrame(workspace.userFramesDir, frame)));
-  }
+  await loadUserFrames(workspace, devices, userFrames);
 
   const bytes = new Map<string, Buffer>();
   const rendered = new Map<string, { png: Buffer; warnings: { code: CardWarningCode; message: string }[] }>();
@@ -85,7 +189,6 @@ export async function generateScreenshotCards(workspace: Workspace, options: Scr
     }
     for (const specId of devices) {
       const spec = getSpec(specId);
-      const defaults = cardDefaultsForSpec(spec);
       const used = entries.slice(0, spec.maxCount ?? entries.length);
       if (spec.minCount !== undefined && used.length < spec.minCount) {
         result.warnings.push({
@@ -96,21 +199,12 @@ export async function generateScreenshotCards(workspace: Workspace, options: Scr
       }
       for (const [index, entry] of used.entries()) {
         if (!bytes.has(entry.input)) bytes.set(entry.input, await readFile(path.join(workspace.root, entry.input)));
-        // Fallback locales share screenshot and texts with the source locale: render each distinct card once.
-        const key = JSON.stringify([specId, entry.input, entry.headline, entry.subline]);
+        const input = cardInputFor(spec, entry, sets.style, bytes.get(entry.input)!, userFrames);
+        // Fallback locales share screenshot, texts and style with the source locale: render each distinct card once.
+        const key = JSON.stringify([specId, entry.input, entry.headline, entry.subline, input.layout, input.background, input.frame]);
         let card = rendered.get(key);
         if (!card) {
-          card = await withContext(`${entry.input} (${spec.name}, ${locale})`, () =>
-            renderScreenshotCard({
-              ...defaults,
-              layout: sets.style.layout,
-              background: sets.style.background,
-              headline: entry.headline,
-              subline: entry.subline,
-              screenshot: bytes.get(entry.input)!,
-              userFrame: userFrames.get(defaults.frame) ?? null,
-            }),
-          );
+          card = await withContext(`${entry.input} (${spec.name}, ${locale})`, () => renderScreenshotCard(input));
           rendered.set(key, card);
         }
         const file: RegisterOptions = {
@@ -130,7 +224,8 @@ export async function generateScreenshotCards(workspace: Workspace, options: Scr
   }
 
   const allFiles = [...perLocale.values()].flat();
-  if (allFiles.length === 0) throw new GeneratorError(`Upload screenshots for ${project.sourceLocale} first`);
+  // Only a project without any screenshot is an error; languages without one are skipped and still cleaned up below.
+  if (screenshots.length === 0) throw new GeneratorError(`Upload screenshots for ${project.sourceLocale} first`);
   await withContext('Screenshot cards', () => assertValidOutputs(allFiles));
 
   for (const [locale, files] of perLocale) {

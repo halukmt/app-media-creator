@@ -32,7 +32,7 @@ export function ChecklistCard({ title, status, items, locales }: Props) {
   function messages(item: ChecklistItem) {
     if (item.messages.length === 0) return null;
     return (
-      <ul className="flex flex-col gap-1 text-sm [overflow-wrap:anywhere]">
+      <ul className="flex flex-col gap-1 text-sm wrap-anywhere">
         {item.messages.map((message, index) => (
           <li key={index}>
             <span className="font-semibold">{en.status[message.level]}:</span> {message.text}

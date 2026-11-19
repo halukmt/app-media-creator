@@ -1,6 +1,7 @@
 import { Hono } from 'hono';
 import { LOCALES } from '../core/locales/index.js';
 import { getSpec, type Target } from '../core/specs/index.js';
+import { cardSizeForSpec } from '../core/screenshots/index.js';
 import { deviceOptions } from '../core/workspace/index.js';
 
 export interface CatalogueDevice {
@@ -8,6 +9,8 @@ export interface CatalogueDevice {
   name: string;
   required: boolean;
   condition?: string;
+  /** Pixel size the cards are rendered at for this device. */
+  size: { width: number; height: number };
 }
 
 export interface Catalogue {
@@ -18,7 +21,8 @@ export interface Catalogue {
 function devicesOf(target: Target): CatalogueDevice[] {
   return deviceOptions(target).map((id) => {
     const spec = getSpec(id);
-    return { id, name: spec.name, required: spec.required, ...(spec.condition ? { condition: spec.condition } : {}) };
+    const { width, height } = cardSizeForSpec(spec);
+    return { id, name: spec.name, required: spec.required, ...(spec.condition ? { condition: spec.condition } : {}), size: { width, height } };
   });
 }
 

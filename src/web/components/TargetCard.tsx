@@ -3,6 +3,7 @@ import type { CatalogueDevice } from '../api';
 import { en } from '../i18n/en';
 import { FieldError } from './FieldError';
 import { RequiredBadge } from './RequiredBadge';
+import { ToggleField } from './ToggleField';
 
 interface Props {
   title: string;
@@ -57,16 +58,7 @@ export function TargetCard({ title, enabled, onEnabledChange, devices, selected,
         <h3 id={`${id}-title`} className="card-title text-base">
           {title}
         </h3>
-        <label className="flex min-h-11 cursor-pointer items-center gap-3">
-          <input
-            type="checkbox"
-            role="switch"
-            className="toggle toggle-success"
-            checked={enabled}
-            onChange={(event) => onEnabledChange(event.target.checked)}
-          />
-          <span>{en.target.enabled(title)}</span>
-        </label>
+        <ToggleField label={en.target.enabled(title)} checked={enabled} onChange={onEnabledChange} />
         {devices.length === 0 ? (
           <p className="text-sm text-base-content/70">{en.target.noDevices}</p>
         ) : (

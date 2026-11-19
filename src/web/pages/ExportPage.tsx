@@ -3,6 +3,7 @@ import { ApiError, downloadExport, fetchChecklist, type CatalogueLocale, type Ch
 import { BusyButton } from '../components/BusyButton';
 import { ChecklistCard } from '../components/ChecklistCard';
 import { ConfirmDialog } from '../components/ConfirmDialog';
+import { ProgressStatus } from '../components/ProgressStatus';
 import { SectionEmptyState } from '../components/SectionEmptyState';
 import { StatusAlert } from '../components/StatusAlert';
 import { en } from '../i18n/en';
@@ -117,10 +118,7 @@ export function ExportPage({ project, locales, selection, onSelectionChange, foc
         {/* Mounted live regions; only the loading line and the one-line summary are announced, never the lists. */}
         <div role="status">
           {loading ? (
-            <p className="flex items-center gap-3">
-              <span className="loading loading-spinner" aria-hidden="true" />
-              {en.export.checking}
-            </p>
+            <ProgressStatus label={en.export.checking} />
           ) : null}
           {!loading && checklist && summary && !noTarget ? (
             <StatusAlert announce={false} tone={OVERALL_TONE[checklist.status]} title={en.export.overall[checklist.status]}>
@@ -143,7 +141,7 @@ export function ExportPage({ project, locales, selection, onSelectionChange, foc
         </div>
         {checklist && checklist.problems.length > 0 ? (
           <StatusAlert announce={false} tone="error" title={en.export.problemsTitle}>
-            <ul className="list-disc pl-5 [overflow-wrap:anywhere]">
+            <ul className="list-disc pl-5 wrap-anywhere">
               {checklist.problems.map((problem, index) => (
                 <li key={index}>{problem}</li>
               ))}
