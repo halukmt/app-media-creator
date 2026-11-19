@@ -129,7 +129,13 @@ export function frameSvg(kind: FrameKind, x: number, y: number, box: FrameBox, s
     const plate = `<rect x="${n(x)}" y="${n(y)}" width="${n(box.outerWidth)}" height="${n(box.outerHeight)}" rx="${n(s.radius)}" fill="#ffffff"${filter}/>`;
     return `<defs>${clip}${shadow}</defs>${plate}${content}`;
   }
+  const parts = frameParts(kind, x, y, box, filter);
+  return `<defs>${clip}${shadow}</defs>${parts.body}${content}${parts.cutout}`;
+}
 
+/** The body (with an optional filter attribute) and the cutouts on the screen of a generic frame. */
+function frameParts(kind: Exclude<FrameKind, 'none'>, x: number, y: number, box: FrameBox, filter = ''): { body: string; cutout: string } {
+  const s = box.screen;
   const g = GEOMETRY[kind];
   const radius = box.outerWidth * g.radius;
   const rim = Math.max(1, box.outerWidth * 0.006);
@@ -151,7 +157,22 @@ export function frameSvg(kind: FrameKind, x: number, y: number, box: FrameBox, s
     const cy = y + s.y + s.height + (s.width * g.bottom) / 2;
     cutout = `<circle cx="${n(centreX)}" cy="${n(cy)}" r="${n(r)}" fill="none" stroke="${RIM}" stroke-width="${n(rim * 1.5)}"/>`;
   }
-  return `<defs>${clip}${shadow}</defs>${body}${content}${cutout}`;
+  return { body, cutout };
+}
+
+/**
+ * The frame drawn over a video that plays in the screen (#21): the body with the rounded screen cut out, and the
+ * cutouts (island, punch hole) on top. No shadow: that belongs under the device, below the video. Empty for `none`.
+ */
+export function frameOverlaySvg(kind: FrameKind, x: number, y: number, box: FrameBox, id: string): string {
+  if (kind === 'none') return '';
+  const s = box.screen;
+  const parts = frameParts(kind, x, y, box);
+  const hole =
+    `<mask id="${id}-hole" maskUnits="userSpaceOnUse" x="${n(x)}" y="${n(y)}" width="${n(box.outerWidth)}" height="${n(box.outerHeight)}">` +
+    `<rect x="${n(x)}" y="${n(y)}" width="${n(box.outerWidth)}" height="${n(box.outerHeight)}" fill="#fff"/>` +
+    `<rect x="${n(x + s.x)}" y="${n(y + s.y)}" width="${n(s.width)}" height="${n(s.height)}" rx="${n(s.radius)}" fill="#000"/></mask>`;
+  return `<defs>${hole}</defs><g mask="url(#${id}-hole)">${parts.body}</g>${parts.cutout}`;
 }
 
 /** An official bezel the user placed in `frames/user/`: the PNG plus where its transparent screen area is. */

@@ -16,7 +16,9 @@ export type AssetGroup =
   /** App screenshots in a device frame for websites (no store requirement). */
   | 'mockup'
   /** Variants of the logo itself (monochrome, inverse, square mark). */
-  | 'logo';
+  | 'logo'
+  /** App videos in a device frame on a background, for websites and social posts (no store requirement). */
+  | 'video';
 
 /** `document` covers files of an asset set that are not media, e.g. a web app manifest or an HTML snippet. */
 export type MediaKind = 'image' | 'video' | 'document';

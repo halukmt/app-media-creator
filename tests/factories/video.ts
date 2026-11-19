@@ -29,8 +29,10 @@ export function recordingBytes(options: { seconds?: number; width?: number; heig
 }
 
 /** ffprobe JSON as the probe reads it; override what a test needs. */
-export function probeJsonFactory(options: { width?: number; height?: number; rotation?: number; fps?: string; duration?: string; audio?: boolean } = {}): string {
-  const { width = 886, height = 1920, rotation, fps = '30/1', duration = '20.000000', audio = true } = options;
+export function probeJsonFactory(
+  options: { width?: number; height?: number; rotation?: number; fps?: string; duration?: string; videoDuration?: string; audio?: boolean } = {},
+): string {
+  const { width = 886, height = 1920, rotation, fps = '30/1', duration = '20.000000', videoDuration, audio = true } = options;
   return JSON.stringify({
     streams: [
       {
@@ -40,6 +42,7 @@ export function probeJsonFactory(options: { width?: number; height?: number; rot
         height,
         avg_frame_rate: fps,
         r_frame_rate: fps,
+        ...(videoDuration !== undefined ? { duration: videoDuration } : {}),
         ...(rotation !== undefined ? { side_data_list: [{ rotation }] } : {}),
       },
       ...(audio ? [{ codec_type: 'audio', codec_name: 'aac', channels: 2 }] : []),

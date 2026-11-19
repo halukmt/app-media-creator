@@ -85,6 +85,8 @@ describe('parseProbe reads ffprobe\'s answer', () => {
     expect(parseProbe(probeJsonFactory({ fps: '30000/1001' })).fps).toBeCloseTo(29.97, 2);
     expect(parseProbe(probeJsonFactory({ width: 1920, height: 886, rotation: -90 }))).toMatchObject({ width: 886, height: 1920 });
     expect(parseProbe(probeJsonFactory({ audio: false })).audioChannels).toBeUndefined();
+    // The video track can end before the container.
+    expect(parseProbe(probeJsonFactory({ videoDuration: '19.5' })).videoSeconds).toBe(19.5);
   });
 
   test('rejects a file without a video track or a readable duration', () => {
