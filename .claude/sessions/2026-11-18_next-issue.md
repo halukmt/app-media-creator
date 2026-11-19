@@ -306,3 +306,16 @@
   `selectExportLocales` → fixed. Generators expand "all" to all catalogue locales instead of project locales → #81
   (Backlog, P2/S).
 - Codex on PR #80: no findings.
+
+## #15 AI job folder contract and watcher — done (PR #83)
+
+- `src/core/jobs/`: `createJob` (brief, claims, images, ffmpeg frames via execFile, JSON Schemas from zod), `readJob`
+  (all-or-nothing validation, forbidden claims, warnings), `applyHeadlines` (from the current effective set, only
+  texts change; `applied.json` with a hash of headlines.json), `listJobs(limit)`.
+- Server: `/api/jobs`, `/api/jobs/:id`, `/apply`, `/api/jobs/events` (SSE from a debounced recursive fs.watch, error
+  handler). UI: `AiJobPanel`, `CommandBox`, `HeadlineVariantsCard` in the Screenshots preview step.
+- Code review found real apply bugs (dropped slots, lost overrides, reverted edits) → fixed with tests.
+- DaisyUI gotchas: `.mockup-code pre { width: max-content }` and `.list-row` column flow / `> * { grid-row-start: 1 }`.
+- CodeQL flagged `byte % 36` (biased random) → `crypto.randomInt`.
+- Bash heredocs with apostrophes / template literals failed twice → scripts via the Write tool.
+- Codex on PR #82: no findings. Next: #16 (amc-copy skill), #24 (store texts).
