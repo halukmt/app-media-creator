@@ -29,6 +29,10 @@ entries left under `[Unreleased]` is rejected by `npm run check:release`.
 - Logo section: upload a logo, choose the App Store, Google Play, web and social packs, a background from the presets or the logo colours and a tagline per language, generate everything in one run and check each asset with its validation state before exporting. (#10)
 - Icon variants for preview and test installs: environments in the Project screen (folder name, label, colour, badge or blueprint style) give App Store, Android and favicon sets of their own next to the unchanged production icons, checked in the export checklist and documented for Xcode, Expo, Android flavors and staging sites. (#34)
 
+### Changed
+
+- Every logo is read as 8-bit colour with transparency before its pixels are analysed, so greyscale and 16-bit logos are handled like colour logos in silhouettes and palettes. (#74)
+
 ### Fixed
 
 - Generated files with dots in their name stay in the export, and a failed ZIP write returns an error instead of stopping the tool. (#35)

@@ -5,10 +5,10 @@ import { describe, expect, test } from 'vitest';
 import { exportChecklist } from '../../src/core/export/index.js';
 import { clampLogoScale, generateAppStoreIcons } from '../../src/core/generators/app-store-icons.js';
 import { GeneratorError } from '../../src/core/generators/logo.js';
-import { logoPalette, renderLogoSquare, type LogoSource } from '../../src/core/generators/render.js';
+import { logoPalette, readRgba, renderLogoSquare, type LogoSource } from '../../src/core/generators/render.js';
 import { getSpec, inspectImage, validateMedia } from '../../src/core/specs/index.js';
 import { saveInput, type Workspace } from '../../src/core/workspace/index.js';
-import { twoColourPng } from '../factories/logos.js';
+import { greyscalePng, twoColourPng } from '../factories/logos.js';
 import { svgBytes, workspaceFactory } from '../factories/workspace.js';
 
 async function withLogo(bytes: Uint8Array, name: string): Promise<Workspace> {
@@ -113,6 +113,18 @@ describe('Rendering helpers for icons', () => {
       .toBuffer();
     const palette = await logoPalette({ bytes: grey, isSvg: false, width: 40, height: 40 });
     expect(palette).toEqual(['#3c3c3c']);
+  });
+
+  test('reads one-channel and 16-bit greyscale images as 8-bit RGBA with 4 bytes per pixel (#74)', async () => {
+    const grey8 = Buffer.from(await greyscalePng());
+    const grey16 = await sharp(grey8).toColourspace('grey16').png().toBuffer();
+    for (const bytes of [grey8, grey16]) {
+      const { data, width, height } = await readRgba(sharp(bytes));
+      expect(data.length).toBe(width * height * 4);
+      expect([...data.subarray(0, 4)]).toEqual([255, 255, 255, 255]); // white corner
+      const centre = (150 * width + 150) * 4;
+      expect([...data.subarray(centre, centre + 4)]).toEqual([30, 30, 30, 255]); // the dark block
+    }
   });
 
   test('lists red first and blue among the palette colours of a mostly red logo', async () => {
