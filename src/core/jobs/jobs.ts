@@ -1,4 +1,4 @@
-import { createHash, randomBytes } from 'node:crypto';
+import { createHash, randomInt } from 'node:crypto';
 import { existsSync } from 'node:fs';
 import { copyFile, lstat, mkdir, readFile, readdir } from 'node:fs/promises';
 import path from 'node:path';
@@ -125,7 +125,8 @@ function commandFor(folder: string): string {
 function newId(now: Date): string {
   const pad = (value: number) => String(value).padStart(2, '0');
   const stamp = `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}-${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`;
-  const tag = [...randomBytes(4)].map((byte) => 'abcdefghijklmnopqrstuvwxyz0123456789'[byte % 36]).join('');
+  // Unbiased: randomInt picks each character uniformly from the 36 allowed.
+  const tag = Array.from({ length: 4 }, () => 'abcdefghijklmnopqrstuvwxyz0123456789'[randomInt(36)]).join('');
   return `${stamp}-${tag}`;
 }
 
