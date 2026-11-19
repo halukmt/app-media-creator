@@ -24,6 +24,7 @@ import { OptionGroup, type Option } from '../components/OptionGroup';
 import { PreviewCard } from '../components/PreviewCard';
 import { ProgressStatus } from '../components/ProgressStatus';
 import { SectionEmptyState } from '../components/SectionEmptyState';
+import { SaveStatus } from '../components/SaveStatus';
 import { StatusAlert } from '../components/StatusAlert';
 import { LocaleTextFields } from '../components/LocaleTextFields';
 import { en } from '../i18n/en';
@@ -336,10 +337,7 @@ export function LogoPage({ project, catalogue, selection, onSelectionChange, foc
               onChange={(locale, text) => update({ ...settings, taglines: { ...settings.taglines, [locale]: text } })}
             />
           ) : null}
-          <p className="text-sm text-base-content/70" aria-live="off">
-            {saveState === 'saving' ? en.logo.saving : saveState === 'saved' ? en.logo.saved : ''}
-          </p>
-          <div role="alert">{saveState === 'failed' ? <StatusAlert announce={false} tone="error" title={en.logo.saveFailed} /> : null}</div>
+          <SaveStatus state={saveState} failedText={en.logo.saveFailed} />
           <div>
             <button type="button" className="btn btn-primary min-h-11" onClick={() => goTo('preview')}>
               {en.logo.previewHeading} →

@@ -9,6 +9,7 @@ import { catalogueRoutes } from './catalogue-routes.js';
 import { exportRoutes } from './export-routes.js';
 import { generateRoutes } from './generate-routes.js';
 import { jobsRoutes } from './jobs-routes.js';
+import { storeTextsRoutes } from './store-texts-routes.js';
 import { workspaceRoutes } from './workspace-routes.js';
 
 export interface AppOptions {
@@ -36,6 +37,7 @@ export function createApp({ webRoot, packageInfo, workspace }: AppOptions): Hono
     app.route('/api', exportRoutes(workspace));
     app.route('/api', generateRoutes(workspace));
     app.route('/api', jobsRoutes(workspace));
+    app.route('/api', storeTextsRoutes(workspace));
   }
 
   app.all('/api/*', (c) => c.json({ error: 'Not found' }, 404));

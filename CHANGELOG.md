@@ -32,6 +32,7 @@ entries left under `[Unreleased]` is rejected by `npm run check:release`.
 - Google Play feature graphic with your phrase and App Store in-app event card and details images without text, per language, from the same background and phrases as the header images. (#19)
 - AI job folders: the Screenshots section prepares a job with your screenshots, texts, claims and video frames, shows the command to run in Claude Code, updates live when the result arrives, compares variant A and B per language and applies one; invalid AI results are reported and never applied. (#15)
 - Claude Code skill `amc-copy` (`npx skills add halukmt/app-media-creator --skill amc-copy`): writes storytelling screenshot headlines for an AI job in every language, variant A outcome-first and B mechanism-first, following the copy rules and your claims, with a built-in check; the brief gives copy limits per card layout. (#16)
+- Store texts section: App Store and Google Play listing texts per language with live character and byte counters and the store checks, autosave, the AI job with the new skill `amc-store-texts` (keywords per language, light humanizer pass on long texts), and the texts in the export as `<store>/store-texts/<store locale code>/NN-<field>.txt` in paste order. (#24)
 
 ### Changed
 

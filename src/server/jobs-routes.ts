@@ -1,8 +1,8 @@
 import { watch, type FSWatcher } from 'node:fs';
 import { Hono, type Context } from 'hono';
 import { streamSSE } from 'hono/streaming';
-import { JOB_ID, JobError, applyHeadlines, createJob, listJobs, readJob, type CreateJobOptions } from '../core/jobs/index.js';
-import { ProjectFileError, type Workspace } from '../core/workspace/index.js';
+import { JOB_ID, JobError, applyJob, createJob, isJobTask, listJobs, readJob, type CreateJobOptions } from '../core/jobs/index.js';
+import { ProjectFileError, StoreTextsFileError, type Workspace } from '../core/workspace/index.js';
 import { readOptionalJsonObject } from './json-body.js';
 
 /** Changes within this time are reported once: an AI writes a result in several steps. */
@@ -44,6 +44,7 @@ export function watchJobs(jobsDir: string, onChange: (id: string) => void): () =
 function jobError(c: Context, error: unknown) {
   if (error instanceof JobError) return c.json({ error: error.message }, error.status);
   if (error instanceof ProjectFileError) return c.json({ error: 'project.json in the workspace is invalid', problems: error.problems }, 500);
+  if (error instanceof StoreTextsFileError) return c.json({ error: error.message, problems: error.problems }, 500);
   throw error;
 }
 
@@ -67,21 +68,25 @@ export function jobsRoutes(workspace: Workspace): Hono {
     };
   };
 
-  // ?limit=1 for the newest job only (the Screenshots page); without it all jobs.
+  // ?task=copy&limit=1 for the newest job of one section; without them all jobs.
   api.get('/jobs', async (c) => {
     const limit = Number(c.req.query('limit'));
-    return c.json(await listJobs(workspace, Number.isInteger(limit) && limit > 0 ? limit : Infinity));
+    const task = c.req.query('task');
+    if (task !== undefined && !isJobTask(task)) return c.json({ error: 'task must be copy or store-texts' }, 400);
+    return c.json(await listJobs(workspace, Number.isInteger(limit) && limit > 0 ? limit : Infinity, task));
   });
 
   api.post('/jobs', async (c) => {
     const parsed = await readOptionalJsonObject(c);
     if (!parsed.ok) return c.json({ error: parsed.error }, 400);
-    const { locales } = parsed.body;
+    const { locales, task } = parsed.body;
+    if (task !== undefined && !isJobTask(task)) return c.json({ error: 'task must be copy or store-texts' }, 400);
     if (locales !== undefined && typeof locales !== 'string' && !(Array.isArray(locales) && locales.every((l) => typeof l === 'string'))) {
       return c.json({ error: 'locales must be "all", a locale id or a list of locale ids' }, 400);
     }
     try {
-      return c.json(await createJob(workspace, locales !== undefined ? ({ locales } as CreateJobOptions) : {}), 201);
+      const options: CreateJobOptions = { ...(task !== undefined ? { task } : {}), ...(locales !== undefined ? { locales: locales as CreateJobOptions['locales'] } : {}) };
+      return c.json(await createJob(workspace, options), 201);
     } catch (error) {
       return jobError(c, error);
     }
@@ -109,10 +114,9 @@ export function jobsRoutes(workspace: Workspace): Hono {
   api.post('/jobs/:id/apply', async (c) => {
     const parsed = await readOptionalJsonObject(c);
     if (!parsed.ok) return c.json({ error: parsed.error }, 400);
-    const { variant } = parsed.body;
-    if (variant !== 'A' && variant !== 'B') return c.json({ error: 'variant must be A or B' }, 400);
     try {
-      return c.json(await applyHeadlines(workspace, c.req.param('id'), variant));
+      // Store text jobs apply as a whole; headline jobs apply one variant.
+      return c.json(await applyJob(workspace, c.req.param('id'), parsed.body.variant));
     } catch (error) {
       return jobError(c, error);
     }
