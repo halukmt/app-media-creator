@@ -58,6 +58,8 @@ export interface LogoOutput {
   /** Catalogue name of the asset. */
   name: string;
   locale?: string;
+  /** Non-production environment of an icon variant; absent for production. */
+  environment?: string;
   pack: LogoPack;
   /** Measured pixel size; absent for documents (manifest, HTML, ICO, SVG). */
   width?: number;
@@ -78,6 +80,7 @@ export async function listLogoOutputs(workspace: Workspace): Promise<LogoOutput[
       specId: entry.specId,
       name: getSpec(entry.specId).name,
       ...(entry.locale ? { locale: entry.locale } : {}),
+      ...(entry.environment ? { environment: entry.environment } : {}),
       pack,
     };
     const file = path.join(workspace.outputDir, entry.path);

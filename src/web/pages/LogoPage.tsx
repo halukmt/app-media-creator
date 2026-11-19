@@ -403,9 +403,15 @@ export function LogoPage({ project, catalogue, selection, onSelectionChange, foc
                         key={group.key}
                         checkered
                         {...(group.largest
-                          ? { media: <img src={outputFileUrl(group.largest.path, PREVIEW_WIDTH, outputVersion)} alt={en.logo.previewAlt(group.name)} className="h-auto! w-full rounded object-contain" /> }
+                          ? { media: <img src={outputFileUrl(group.largest.path, PREVIEW_WIDTH, outputVersion)} alt={en.logo.previewAlt(group.environment ? `${group.name} (${group.environment})` : group.name)} className="h-auto! w-full rounded object-contain" /> }
                           : {})}
-                        title={group.locale ? `${group.name} · ${localeName(group.locale)}` : group.name}
+                        title={
+                          group.locale
+                            ? `${group.name} · ${localeName(group.locale)}`
+                            : group.environment
+                              ? `${group.name} · ${en.export.environment(group.environment)}`
+                              : group.name
+                        }
                         size={size}
                         {...(checked ? { status: checked.status } : {})}
                         messages={checked?.messages ?? []}

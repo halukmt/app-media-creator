@@ -57,6 +57,10 @@ test.describe('The Logo section', () => {
         'web/shared/favicons/favicon.ico',
         'web/de-DE/og-image/01-og-image.png',
         'web/tr-TR/whatsapp-preview/01-whatsapp-preview.jpg',
+        // Icon variants of the default preview environment.
+        'apple/preview/icon/app-icon.png',
+        'google/preview/android-res/mipmap-xxxhdpi/ic_launcher.png',
+        'web/preview/favicons/favicon.ico',
       ]),
     );
   });

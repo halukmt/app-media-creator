@@ -3,6 +3,7 @@ import { lstat, mkdir, readFile, realpath, rename, rm, writeFile } from 'node:fs
 import path from 'node:path';
 import { getLocale, isLocaleId, type LocaleId } from '../locales/index.js';
 import { getSpec, type SpecEntry } from '../specs/index.js';
+import { isEnvironmentId } from '../workspace/project.js';
 import type { Workspace } from '../workspace/workspace.js';
 
 /** One generated file, registered by the generator that wrote it. */
@@ -16,6 +17,8 @@ export interface OutputEntry {
   name: string;
   /** Optional folder below the asset folder, e.g. an Android density folder `mipmap-hdpi`. */
   subfolder?: string;
+  /** Non-production environment (e.g. `preview`) of an icon variant; absent for production files. */
+  environment?: string;
   /** Path relative to the output folder, with forward slashes. */
   path: string;
   /** True when the file was made from the source-language input because the locale had none. */
@@ -101,13 +104,16 @@ export interface OutputPathOptions {
   extension: string;
   /** One extra folder level below the asset folder: lower-case letters, digits and dashes. */
   subfolder?: string;
+  /** Non-production environment: the file goes to `<target>/<environment>/…` instead of `<target>/shared/…`. */
+  environment?: string;
 }
 
 const SUBFOLDER = /^[a-z0-9][a-z0-9-]{0,40}$/;
 
 /**
  * Path of a generated file relative to the output folder.
- * Localized: `<target>/<locale>/<segment>/NN-name.ext`; shared: `<target>/shared/<segment>/name.ext`.
+ * Localized: `<target>/<locale>/<segment>/NN-name.ext`; shared: `<target>/shared/<segment>/name.ext`; a shared asset of
+ * a non-production environment: `<target>/<environment>/<segment>/name.ext` (environments are lower-case, locales are not).
  * Throws when a localized asset has no locale or a shared asset gets one.
  */
 export function outputPath(spec: SpecEntry, options: OutputPathOptions): string {
@@ -122,12 +128,17 @@ export function outputPath(spec: SpecEntry, options: OutputPathOptions): string 
   }
   const sub = options.subfolder ? `/${options.subfolder}` : '';
   if (spec.localized) {
+    if (options.environment !== undefined) throw new Error(`${spec.id} is localized and has no environment variants`);
     if (!options.locale) throw new Error(`${spec.id} is localized and needs a locale`);
     const locale = getLocale(options.locale).id;
     const nn = String(options.order).padStart(2, '0');
     return `${spec.target}/${locale}/${segmentFor(spec)}${sub}/${nn}-${name}.${extension}`;
   }
   if (options.locale) throw new Error(`${spec.id} is shared and must not have a locale`);
+  if (options.environment !== undefined) {
+    if (!isEnvironmentId(options.environment)) throw new Error(`Invalid environment: ${options.environment}`);
+    return `${spec.target}/${options.environment}/${segmentFor(spec)}${sub}/${name}.${extension}`;
+  }
   return `${spec.target}/shared/${segmentFor(spec)}${sub}/${name}.${extension}`;
 }
 
@@ -144,6 +155,7 @@ function checkEntry(raw: unknown): OutputEntry | string {
     const spec = getSpec(entry.specId);
     if (entry.locale !== undefined && !isLocaleId(entry.locale)) return `${entry.path}: unsupported locale`;
     if (entry.subfolder !== undefined && typeof entry.subfolder !== 'string') return `${entry.path}: subfolder must be text`;
+    if (entry.environment !== undefined && typeof entry.environment !== 'string') return `${entry.path}: environment must be text`;
     const extension = path.posix.extname(entry.path).slice(1);
     const expected = outputPath(spec, {
       ...(entry.locale ? { locale: entry.locale } : {}),
@@ -151,6 +163,7 @@ function checkEntry(raw: unknown): OutputEntry | string {
       name: entry.name,
       extension,
       ...(entry.subfolder !== undefined ? { subfolder: entry.subfolder } : {}),
+      ...(entry.environment !== undefined ? { environment: entry.environment } : {}),
     });
     if (expected !== entry.path) return `${entry.path}: does not match the output layout (expected ${expected})`;
     return {
@@ -159,6 +172,7 @@ function checkEntry(raw: unknown): OutputEntry | string {
       order: Number(entry.order),
       name: entry.name,
       ...(entry.subfolder !== undefined ? { subfolder: entry.subfolder } : {}),
+      ...(entry.environment !== undefined ? { environment: entry.environment } : {}),
       path: entry.path,
       fallbackInput: entry.fallbackInput === true,
     };
@@ -199,7 +213,8 @@ export interface RegisterBatchOptions {
   /**
    * Sets this batch regenerates completely: every earlier entry of these specs and locales that the batch does not
    * write again is removed (with its file), e.g. a position 03 after a screenshot was deleted. Use undefined in
-   * `locales` for shared assets.
+   * `locales` for shared assets. Entries of every environment count, so a batch that writes production and all
+   * configured environments also removes the files of an environment that was removed from the project.
    */
   replaceSets?: { specIds: readonly string[]; locales: readonly (LocaleId | undefined)[] };
 }
@@ -228,6 +243,7 @@ export function registerOutputs(
         order: options.order,
         name: cleanOutputName(options.name),
         ...(options.subfolder !== undefined ? { subfolder: options.subfolder } : {}),
+        ...(options.environment !== undefined ? { environment: options.environment } : {}),
         path: relative,
         fallbackInput: options.fallbackInput ?? false,
       };
@@ -275,7 +291,11 @@ export function registerOutputs(
       // The subfolder is part of the position: 1x / 2x or density folders hold parallel sets.
       const samePosition = (e: OutputEntry) =>
         e.path === entry.path ||
-        (e.specId === entry.specId && e.locale === entry.locale && e.subfolder === entry.subfolder && e.order === entry.order);
+        (e.specId === entry.specId &&
+          e.locale === entry.locale &&
+          e.environment === entry.environment &&
+          e.subfolder === entry.subfolder &&
+          e.order === entry.order);
       for (const old of entries.filter(samePosition)) {
         if (old.path !== entry.path) {
           const oldFile = path.join(workspace.outputDir, old.path);

@@ -2,6 +2,8 @@ import sharp from 'sharp';
 import { registerOutputs, type OutputEntry, type RegisterOptions } from '../export/manifest.js';
 import { getSpec, type Size } from '../specs/index.js';
 import { readProject, type Workspace } from '../workspace/workspace.js';
+import type { Environment } from '../workspace/project.js';
+import { SAFE_RADIUS, variantRenderer } from './environments.js';
 import { GeneratorError, loadNewestLogo } from './logo.js';
 import { assertValidOutputs, fixedSizes } from './outputs.js';
 import { encodeIco, isHexColor, renderLogoSquare, type HexColor, type LogoSource } from './render.js';
@@ -34,6 +36,20 @@ async function iconSvg(logo: LogoSource, light: HexColor, dark: HexColor): Promi
     '',
   ].join('\n');
   return Buffer.from(svg, 'utf8');
+}
+
+/** icon.svg of an environment: the rendered variant embedded as a PNG inside the rounded square. */
+function variantIconSvg(png: Buffer): Buffer {
+  return Buffer.from(
+    [
+      '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">',
+      '<clipPath id="r"><rect width="512" height="512" rx="96"/></clipPath>',
+      `<image href="data:image/png;base64,${png.toString('base64')}" width="512" height="512" clip-path="url(#r)"/>`,
+      '</svg>',
+      '',
+    ].join('\n'),
+    'utf8',
+  );
 }
 
 function webManifest(name: string, background: HexColor, theme: HexColor, iconSizes: Size[], maskable: Size): Buffer {
@@ -71,7 +87,8 @@ function headSnippet(theme: HexColor, icoSize: Size): Buffer {
 }
 
 /**
- * Generates the favicon and web app icon set from the newest uploaded logo into `web/shared/favicons/`.
+ * Generates the favicon and web app icon set from the newest uploaded logo into `web/shared/favicons/`, and the same
+ * set per non-production environment into `web/<environment>/favicons/` (for staging sites).
  * All files are rendered and validated first and then registered together, so a failure leaves the previous set
  * untouched. Throws GeneratorError when no logo was uploaded or the logo cannot be read.
  */
@@ -134,6 +151,61 @@ export async function generateWebIcons(workspace: Workspace, options: WebIconOpt
     { specId: 'web.head-snippet', name: 'head', extension: 'html', bytes: headSnippet(theme, icoSizes.at(-1)!), order: 1 },
   ];
 
+  for (const environment of project.environments) {
+    files.push(...(await variantFiles(environment)));
+  }
+
   await assertValidOutputs(files);
-  return registerOutputs(workspace, files);
+  // A full set per run: files of environments that were removed from the project go away.
+  return registerOutputs(workspace, files, { replaceSets: { specIds: [...new Set(files.map((f) => f.specId))], locales: [undefined] } });
+
+  async function variantFiles(environment: Environment): Promise<RegisterOptions[]> {
+    const variant = variantRenderer(logo, environment);
+    const common = { environment: environment.id, order: 1 };
+    const variantIco = encodeIco(
+      await Promise.all(icoSizes.map(async ({ width }) => ({ size: width, png: await variant.standalone(width, width, SAFE_RADIUS.icon) }))),
+    );
+    return [
+      { ...common, specId: 'web.favicon-ico', name: 'favicon', extension: 'ico', bytes: variantIco },
+      {
+        ...common,
+        specId: 'web.icon-svg',
+        name: 'icon',
+        extension: 'svg',
+        bytes: variantIconSvg(await variant.opaque(512, 400, background, SAFE_RADIUS.icon)),
+      },
+      {
+        ...common,
+        specId: 'web.apple-touch-icon',
+        name: 'apple-touch-icon',
+        extension: 'png',
+        bytes: await variant.opaque(touch!.width, Math.round(touch!.width * TOUCH_ARTWORK_RATIO), background, SAFE_RADIUS.icon),
+      },
+      ...(await Promise.all(
+        manifestSizes.map(async ({ width }, index) => ({
+          ...common,
+          specId: 'web.manifest-icon',
+          name: `icon-${width}`,
+          extension: 'png',
+          bytes: await variant.standalone(width, Math.round(width * (1 - 2 * MANIFEST_MARGIN)), SAFE_RADIUS.icon),
+          order: index + 1,
+        })),
+      )),
+      {
+        ...common,
+        specId: 'web.maskable-icon',
+        name: `icon-maskable-${maskable!.width}`,
+        extension: 'png',
+        bytes: await variant.opaque(maskable!.width, maskableBox, background, SAFE_RADIUS.maskable),
+      },
+      {
+        ...common,
+        specId: 'web.webmanifest',
+        name: 'site',
+        extension: 'webmanifest',
+        bytes: webManifest(`${project.name} (${environment.badge})`, background, theme, manifestSizes, maskable!),
+      },
+      { ...common, specId: 'web.head-snippet', name: 'head', extension: 'html', bytes: headSnippet(theme, icoSizes.at(-1)!) },
+    ];
+  }
 }

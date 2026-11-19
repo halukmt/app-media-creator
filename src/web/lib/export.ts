@@ -43,7 +43,11 @@ export function sortByStatus<T extends { status: CheckStatus }>(items: readonly 
 }
 
 export interface AssetGroup<T> {
+  /** Unique per asset and environment. */
+  key: string;
   specId: string;
+  /** Non-production environment of icon variants; absent for production. */
+  environment?: string;
   /** Worst status of the group's items. */
   status: CheckStatus;
   items: T[];
@@ -53,13 +57,15 @@ export interface AssetGroup<T> {
  * Groups checklist items by asset (spec id), keeping the first-seen order of assets and of the items inside.
  * The group status is the worst item status, so an asset with one missing language shows as an error.
  */
-export function groupBySpec<T extends { specId: string; status: CheckStatus }>(items: readonly T[]): AssetGroup<T>[] {
+export function groupBySpec<T extends { specId: string; environment?: string; status: CheckStatus }>(items: readonly T[]): AssetGroup<T>[] {
   const groups = new Map<string, AssetGroup<T>>();
   for (const item of items) {
-    const group = groups.get(item.specId) ?? { specId: item.specId, status: 'ok', items: [] };
+    // Icon variants of an environment are their own asset, next to the production one.
+    const key = item.environment ? `${item.specId}|${item.environment}` : item.specId;
+    const group = groups.get(key) ?? { key, specId: item.specId, ...(item.environment ? { environment: item.environment } : {}), status: 'ok', items: [] };
     group.items.push(item);
     if (STATUS_ORDER[item.status] < STATUS_ORDER[group.status]) group.status = item.status;
-    groups.set(item.specId, group);
+    groups.set(key, group);
   }
   return [...groups.values()];
 }

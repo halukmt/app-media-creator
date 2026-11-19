@@ -31,7 +31,7 @@ const folder = (workspace: Workspace) => path.join(workspace.outputDir, 'web/sha
 describe('generateWebIcons builds the favicon set from the logo', () => {
   test('writes every file into web/shared/favicons and the checklist has no errors for them', async () => {
     const workspace = await withLogo(svgBytes(), 'logo.svg');
-    const entries = await generateWebIcons(workspace);
+    const entries = (await generateWebIcons(workspace)).filter((e) => e.environment === undefined);
     expect(entries.map((e) => path.posix.basename(e.path)).sort()).toEqual([
       'apple-touch-icon.png',
       'favicon.ico',
@@ -103,7 +103,7 @@ describe('generateWebIcons builds the favicon set from the logo', () => {
   test('renders a large SVG logo without a huge intermediate image', async () => {
     const big = new TextEncoder().encode('<svg xmlns="http://www.w3.org/2000/svg" width="4000" height="4000"><circle cx="2000" cy="2000" r="1800" fill="#09f"/></svg>');
     const workspace = await withLogo(big, 'big.svg');
-    const entries = await generateWebIcons(workspace);
+    const entries = (await generateWebIcons(workspace)).filter((e) => e.environment === undefined);
     expect(entries).toHaveLength(8);
   });
 

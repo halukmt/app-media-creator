@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
-import { ApiError, saveProject, type Catalogue, type ProjectSettings, type TargetSettings } from '../api';
+import { ApiError, saveProject, type Catalogue, type Environment, type ProjectSettings, type TargetSettings } from '../api';
 import { BusyButton } from '../components/BusyButton';
+import { EnvironmentCard } from '../components/EnvironmentCard';
 import { LocaleSelector } from '../components/LocaleSelector';
+import type { Option } from '../components/OptionGroup';
 import { PageHeader } from '../components/PageHeader';
 import { StatusAlert } from '../components/StatusAlert';
 import { TargetCard } from '../components/TargetCard';
@@ -26,6 +28,7 @@ interface FormState {
   locales: string[];
   allowed: string;
   forbidden: string;
+  environments: Environment[];
 }
 
 const TARGETS: readonly TargetId[] = ['apple', 'google', 'web'];
@@ -39,6 +42,7 @@ function toForm(project: ProjectSettings): FormState {
     locales: project.locales,
     allowed: listToLines(project.claims.allowed),
     forbidden: listToLines(project.claims.forbidden),
+    environments: project.environments,
   };
 }
 
@@ -50,8 +54,23 @@ function toProject(form: FormState): ProjectSettings {
     sourceLocale: form.sourceLocale,
     locales: form.locales,
     claims: { allowed: linesToList(form.allowed), forbidden: linesToList(form.forbidden) },
+    environments: form.environments,
   };
 }
+
+/** A new environment: the first of dev, beta, staging that is not used yet. */
+function nextEnvironment(existing: readonly Environment[]): Environment {
+  const candidates: Environment[] = [
+    { id: 'preview', badge: 'PREVIEW', color: 'orange', style: 'badge' },
+    { id: 'dev', badge: 'DEV', color: 'purple', style: 'blueprint' },
+    { id: 'beta', badge: 'BETA', color: 'green', style: 'badge' },
+    { id: 'staging', badge: 'STAGING', color: 'blue', style: 'badge' },
+    { id: 'test', badge: 'TEST', color: 'red', style: 'badge' },
+  ];
+  return candidates.find((candidate) => !existing.some((e) => e.id === candidate.id)) ?? { id: '', badge: '', color: 'gray', style: 'badge' };
+}
+
+const environmentHeadingId = (index: number) => `project-environment-${index}`;
 
 type SaveState = { kind: 'idle' } | { kind: 'saving' } | { kind: 'saved' } | { kind: 'failed'; errors: GroupedErrors };
 
@@ -74,6 +93,47 @@ export function ProjectPage({ catalogue, project, onSaved, focusHeading }: Props
 
   function updateTarget(target: TargetId, patch: Partial<TargetSettings>) {
     update({ targets: { ...form.targets, [target]: { ...form.targets[target], ...patch } } });
+  }
+
+  const [environmentNote, setEnvironmentNote] = useState('');
+  const canAddEnvironment = form.environments.length < catalogue.maxEnvironments;
+  const colorOptions: Option[] = catalogue.environmentColors.map(({ id, color }) => ({ id, label: en.project.environmentColors[id], swatch: color }));
+  const styleOptions: Option[] = (['badge', 'blueprint'] as const).map((id) => ({
+    id,
+    label: en.project.environmentStyles[id].label,
+    description: en.project.environmentStyles[id].description,
+  }));
+
+  function focusLater(elementId: string) {
+    requestAnimationFrame(() => document.getElementById(elementId)?.focus());
+  }
+
+  function updateEnvironment(index: number, patch: Partial<Environment>) {
+    update({ environments: form.environments.map((environment, i) => (i === index ? { ...environment, ...patch } : environment)) });
+  }
+
+  function addEnvironment() {
+    if (!canAddEnvironment) return;
+    update({ environments: [...form.environments, nextEnvironment(form.environments)] });
+    setEnvironmentNote(en.project.environmentAdded);
+    focusLater(environmentHeadingId(form.environments.length));
+  }
+
+  function removeEnvironment(index: number) {
+    const next = form.environments.filter((_, i) => i !== index);
+    update({ environments: next });
+    setEnvironmentNote(en.project.environmentRemoved);
+    // Focus the card that moved into this place, the one before it, or the section heading.
+    focusLater(next.length === 0 ? 'project-environments' : environmentHeadingId(Math.min(index, next.length - 1)));
+  }
+
+  function environmentErrors(index: number): Partial<Record<keyof Environment, string>> {
+    const result: Partial<Record<keyof Environment, string>> = {};
+    for (const field of ['id', 'badge', 'color', 'style'] as const) {
+      const message = fieldError(errors, `environments.${index}.${field}`);
+      if (message) result[field] = message;
+    }
+    return result;
   }
 
   // After a failed save, move focus to the first field marked invalid (it may be far above the button).
@@ -164,6 +224,44 @@ export function ProjectPage({ catalogue, project, onSaved, focusHeading }: Props
                 error={fieldError(errors, `targets.${target}`)}
               />
             ))}
+          </div>
+        </section>
+
+        <section aria-labelledby="project-environments" className="flex flex-col gap-4">
+          <h2 id="project-environments" tabIndex={-1} className="text-xl font-semibold focus:outline-none">
+            {en.project.environmentsHeading}
+          </h2>
+          <p className="max-w-prose text-base-content/70">{en.project.environmentsIntro}</p>
+          <p className="sr-only" role="status">
+            {environmentNote}
+          </p>
+          {form.environments.length === 0 ? <p>{en.project.noEnvironments}</p> : null}
+          <ol className="grid grid-cols-1 gap-3 xl:grid-cols-2">
+            {form.environments.map((environment, index) => (
+              <li key={index}>
+                <EnvironmentCard
+                  position={index}
+                  values={environment}
+                  headingId={environmentHeadingId(index)}
+                  onChange={(patch) => updateEnvironment(index, patch)}
+                  onRemove={() => removeEnvironment(index)}
+                  colorOptions={colorOptions}
+                  styleOptions={styleOptions}
+                  errors={environmentErrors(index)}
+                />
+              </li>
+            ))}
+          </ol>
+          <div className="flex flex-wrap items-center gap-3">
+            <button
+              type="button"
+              className="btn btn-outline min-h-11"
+              aria-disabled={!canAddEnvironment}
+              onClick={addEnvironment}
+            >
+              {en.project.addEnvironment}
+            </button>
+            <span className="text-sm text-base-content/70">{en.project.maxEnvironments(catalogue.maxEnvironments)}</span>
           </div>
         </section>
 

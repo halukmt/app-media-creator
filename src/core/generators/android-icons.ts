@@ -1,8 +1,9 @@
 import sharp from 'sharp';
 import { registerOutputs, type OutputEntry, type RegisterOptions } from '../export/manifest.js';
 import { ANDROID_DENSITIES } from '../specs/index.js';
-import type { Workspace } from '../workspace/workspace.js';
+import { readProject, type Workspace } from '../workspace/workspace.js';
 import { clampLogoScale } from './app-store-icons.js';
+import { SAFE_RADIUS, variantRenderer } from './environments.js';
 import { GeneratorError, loadNewestLogo } from './logo.js';
 import { assertValidOutputs, fixedSizes, squareSize } from './outputs.js';
 import { isHexColor, rasterizeLogo, renderLogoSquare, renderSilhouette, type HexColor } from './render.js';
@@ -41,7 +42,9 @@ function sizesPerDensity(specId: string): number[] {
 
 /**
  * Generates the Google Play icon and the Android launcher resources (adaptive layers per density, legacy icons and
- * ic_launcher.xml) from the newest uploaded logo. All files are rendered and validated, then registered as one batch.
+ * ic_launcher.xml) from the newest uploaded logo, plus the launcher resources per non-production environment
+ * (google/<environment>/android-res/...; the Play icon is a store asset and has no variants). All files are rendered
+ * and validated, then registered as one batch.
  * Throws GeneratorError for a missing or unreadable logo or an invalid colour.
  */
 export async function generateAndroidIcons(workspace: Workspace, options: AndroidIconOptions = {}): Promise<OutputEntry[]> {
@@ -98,6 +101,44 @@ export async function generateAndroidIcons(workspace: Workspace, options: Androi
     bytes: Buffer.from(ADAPTIVE_XML, 'utf8'),
   });
 
+  const { environments } = await readProject(workspace);
+  for (const environment of environments) {
+    const variant = variantRenderer(logo, environment);
+    const perDensityVariant = await Promise.all(
+      ANDROID_DENSITIES.map(async (density, index) => {
+        const subfolder = `mipmap-${density}`;
+        const order = index + 1;
+        const fg = foreground[index]!;
+        const bgSize = backgroundSizes[index]!;
+        const legacySize = legacy[index]!;
+        const [fgBytes, bgBytes, legacyBytes] = await Promise.all([
+          variant.transparent(fg, Math.floor(fg * ADAPTIVE_LOGO_SHARE), SAFE_RADIUS.adaptive),
+          variant.backgroundLayer(bgSize, background),
+          variant.opaque(legacySize, Math.round(legacySize * scale), background, SAFE_RADIUS.icon),
+        ]);
+        // The themed (monochrome) icon is one colour by definition; it stays the production silhouette.
+        const mono = files.find((f) => f.specId === 'google.adaptive-icon.monochrome' && f.subfolder === subfolder)!;
+        const common = { environment: environment.id, subfolder, extension: 'png', order };
+        return [
+          { ...common, specId: 'google.adaptive-icon.foreground', name: 'ic_launcher_foreground', bytes: fgBytes },
+          { ...common, specId: 'google.adaptive-icon.background', name: 'ic_launcher_background', bytes: bgBytes },
+          { ...common, specId: 'google.adaptive-icon.monochrome', name: 'ic_launcher_monochrome', bytes: mono.bytes },
+          { ...common, specId: 'google.launcher-icon', name: 'ic_launcher', bytes: legacyBytes },
+        ] satisfies RegisterOptions[];
+      }),
+    );
+    files.push(...perDensityVariant.flat(), {
+      specId: 'google.adaptive-icon.xml',
+      environment: environment.id,
+      subfolder: 'mipmap-anydpi-v26',
+      name: 'ic_launcher',
+      extension: 'xml',
+      order: 1,
+      bytes: Buffer.from(ADAPTIVE_XML, 'utf8'),
+    });
+  }
+
   await assertValidOutputs(files);
-  return registerOutputs(workspace, files);
+  // A full set per run: files of environments that were removed from the project go away.
+  return registerOutputs(workspace, files, { replaceSets: { specIds: [...new Set(files.map((f) => f.specId))], locales: [undefined] } });
 }
