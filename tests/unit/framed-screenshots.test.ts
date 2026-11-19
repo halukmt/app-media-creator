@@ -131,6 +131,23 @@ describe('generateFramedScreenshots writes website screenshots per locale', () =
 });
 
 describe('A user bezel gets the same shadow as the generic frames', () => {
+  test('keeps semi-transparent bezel pixels as transparent as in the bezel file, apart from the shadow', async () => {
+    const dir = mkdtempSync(path.join(tmpdir(), 'amc-frames-'));
+    // A red ring at 50 % alpha with an empty screen opening.
+    const bezel = await sharp({ create: { width: 100, height: 200, channels: 4, background: { r: 255, g: 0, b: 0, alpha: 0.5 } } })
+      .composite([{ input: { create: { width: 80, height: 180, channels: 4, background: { r: 0, g: 0, b: 0, alpha: 1 } } }, left: 10, top: 10, blend: 'dest-out' }])
+      .png()
+      .toBuffer();
+    writeFileSync(path.join(dir, 'ipad.png'), bezel);
+    writeFileSync(path.join(dir, 'ipad.json'), JSON.stringify({ width: 100, height: 200, screen: { x: 10, y: 10, width: 80, height: 180 } }));
+    const png = await renderFramedScreenshot({ screenshot: await appScreenshot(160, 360), frame: 'ipad', deviceWidth: 400, userFramesDir: dir });
+    const margin = ((await inspectImageBytes(png)).width - 400) / 2;
+    // Middle of the left ring: 50 % artwork plus a faint shadow beneath; drawn twice it would be 75 % or more.
+    const alpha = await alphaAt(png, Math.round(margin + 20), Math.round(margin + 400));
+    expect(alpha).toBeGreaterThan(128);
+    expect(alpha).toBeLessThan(180);
+  });
+
   test('draws a shadow below the bezel inside the margin', async () => {
     const dir = mkdtempSync(path.join(tmpdir(), 'amc-frames-'));
     const bezel = await sharp({ create: { width: 100, height: 200, channels: 4, background: '#202020' } })
