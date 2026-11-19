@@ -218,3 +218,21 @@
 - Codex finding on PR #67. `validateProject` rejects labels with characters missing in the icon font
   (`cardFont(800).missing`), error at `environments.<n>.badge`; Project screen shows it at the field (e2e).
 - Ready list empty after this run; loop stopped.
+
+## Backlog prioritised by Haluk's go (2026-11-19)
+
+- Order: #48, #63, #70 (new: no default `preview` environment) → M4 (#18, #19) → M6/M3 (#24 raised to P1, #15, #16)
+  → M5 video → small items (#42, #64, #30, #47) → M7. Ready now: #48, #63, #70, #18, #19, #30.
+- Haluk does not want a direct store upload feature and needs no upload checkpoint (tests uploads from his app repo).
+- Codex on PR #69: no findings.
+
+## #48 Download guard on the Export page — done (PR #71)
+
+- `ExportPage` keeps the running download's `AbortController` in a ref; the checklist effect's cleanup aborts it on a
+  selection / project change and on unmount; the selection is compared by content (`localeKey`). One download at a time.
+- E2E holds `/api/export` back via `page.route`, waits for `requestfailed`, verified to fail on the old code.
+  Playwright does not click an `aria-disabled` button without `force: true`.
+- Limit: the server still finishes an aborted `createExport`; noted on #47.
+- One unit-test failure under full-suite load (`framed-screenshots` "removes the files of a deleted screenshot"),
+  green alone and on rerun — second flaky occurrence after #34; watch, file an issue if it repeats.
+- CI e2e took 6m19s again (usually ~1–2 min).

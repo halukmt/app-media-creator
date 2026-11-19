@@ -123,6 +123,18 @@ confirmation before downloading; cancelling SHALL not download anything.
 - **WHEN** required assets are missing and the user chooses Download and then cancels
 - **THEN** no file is downloaded
 
+### Requirement: A download belongs to its selection
+The Export section SHALL run at most one ZIP download at a time. When the selected languages or the saved project
+change while a download runs, the section SHALL abort it, SHALL NOT save its ZIP and SHALL NOT show its result.
+
+#### Scenario: Languages change during a download
+- **WHEN** the user starts the download for German and selects Turkish before the ZIP has arrived
+- **THEN** no ZIP is saved, no success message is shown and the Download button is active for the new selection
+
+#### Scenario: Second start while a download runs
+- **WHEN** a download is running and the user activates Download again
+- **THEN** no second export request is sent
+
 ### Requirement: Screenshots section
 The Screenshots section SHALL guide through the steps Upload, Purpose, Preview and edit, and Export. Later steps SHALL
 be unavailable, with a reason, until a screenshot is uploaded. The user SHALL be able to upload screenshots for a chosen
