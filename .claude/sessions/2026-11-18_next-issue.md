@@ -212,3 +212,9 @@
 - UI: `EnvironmentCard` on the Project screen; Logo preview "Icon set" filter; docs/icon-variants.md.
 - One unit-test run had a single unexplained failure (likely a timeout under load); 3 reruns and CI green. Watch.
 - Ready list is now empty (Backlog: #30, #42, #47, #48, #63, #64, M3–M7).
+
+## #68 Environment labels without glyphs — done (PR #69)
+
+- Codex finding on PR #67. `validateProject` rejects labels with characters missing in the icon font
+  (`cardFont(800).missing`), error at `environments.<n>.badge`; Project screen shows it at the field (e2e).
+- Ready list empty after this run; loop stopped.
