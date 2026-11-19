@@ -262,3 +262,13 @@
   environments, checklist/ZIP without variants, e2e empty Project section and no Logo filter.
 - Accepted: pre-#34 project files without the field that generated preview icons now read as none (unreleased tool).
 - Codex on PR #75: no findings.
+
+## #72 Unit test timeout — done (PR #78)
+
+- Cause: image tests take 5–8× longer in a full local run (parallel workers, Windows Defender scanning written PNGs);
+  the framed-screenshots test (4 s alone) hit 20 s. Global `testTimeout` 60 s; per-test 30/60 s overrides removed.
+- Measured: `sharp.concurrency(1)` 213 s, `--maxWorkers=4` 409 s (both worse than ~135 s). Mitigation only → #77
+  (Backlog, P2/S: smaller fixtures, one temp root for an antivirus exclusion).
+- The machine was heavily loaded (another project's Playwright server and tsc, Defender, WMI): e2e failed 3 unrelated
+  heading checks with default workers; `--workers=2` all 57 green. If local e2e flakes again, check machine load first.
+- Codex on PR #76: no findings.
