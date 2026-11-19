@@ -43,6 +43,8 @@ entries left under `[Unreleased]` is rejected by `npm run check:release`.
 
 ### Fixed
 
+- Leaving Screenshots, a lost edit of the screenshot sets stays reported when the header image settings were saved
+  at the same time. (#103)
 - An edit made just before leaving Logo, Screenshots or Store texts is saved before Export or the reopened section
   reads the data, and an edit that could not be saved after leaving is reported with a link back. (#98)
 - Generators and AI jobs read the locale selection "all" as the project's locales and reject locales outside the

@@ -54,6 +54,8 @@ const SAVE_DELAY = 600;
 const PREVIEW_WIDTH = 240;
 /** Id of the production icon set in the icon set filter (environment ids never equal it). */
 const PRODUCTION = 'production';
+/** The logo settings as the pending-saves tracker names them (#98). */
+const LOGO_SETTINGS = { section: 'logo', document: 'logo-settings' } as const;
 
 /** The Logo section: upload the logo, choose packs, background and taglines, generate everything, preview, export. */
 export function LogoPage({ project, catalogue, selection, onSelectionChange, focusHeading }: Props) {
@@ -125,7 +127,7 @@ export function LogoPage({ project, catalogue, selection, onSelectionChange, foc
   // Settings are saved shortly after each change; generate and leaving the page send pending changes first.
   const [queue] = useState(() => ({ current: createSaveQueue<LogoSettings>(saveLogoSettings, () => {
       setSaveState('saved');
-      pendingSaves.reportSaved('logo');
+      pendingSaves.reportSaved(LOGO_SETTINGS);
     }) }));
   const flushSave = useCallback(async () => {
     if (saveTimer.current) {
@@ -140,7 +142,7 @@ export function LogoPage({ project, catalogue, selection, onSelectionChange, foc
     }
   }, []);
   // Leaving the section sends pending changes; they are tracked, so other pages wait and a failure is reported (#98).
-  useEffect(() => () => pendingSaves.track('logo', flushSave()), [flushSave]);
+  useEffect(() => () => pendingSaves.track(LOGO_SETTINGS, flushSave()), [flushSave]);
 
   function update(next: LogoSettings) {
     setSettings(next);

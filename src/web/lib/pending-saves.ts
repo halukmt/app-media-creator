@@ -6,23 +6,32 @@
 import type { SectionId } from './sections.js';
 
 /**
- * What happened to a section's edits: the save after leaving failed, or was dropped because the data changed
- * elsewhere; or a later save in that section worked (the earlier loss is then out of date).
+ * One saved document of a section. A section can save several (Screenshots: the sets and the header image settings),
+ * so outcomes are kept per document: a save of one never clears the loss of another (#103).
+ */
+export interface SaveSource {
+  section: SectionId;
+  document: string;
+}
+
+/**
+ * What happened to a document's edits: the save after leaving failed, or was dropped because the data changed
+ * elsewhere; or a later save of that document worked (the earlier loss is then out of date).
  */
 export type SaveOutcome = 'failed' | 'dropped' | 'saved';
 
 export interface PendingSaves {
-  /** Tracks a save started while leaving `section`; a rejection is reported to every subscriber. */
-  track(section: SectionId, save: Promise<unknown>): void;
+  /** Tracks a save started while leaving a section; a rejection is reported to every subscriber. */
+  track(source: SaveSource, save: Promise<unknown>): void;
   /**
    * Resolves once every save tracked so far has settled, whether it worked or not, or after `maxWait` ms at the
    * latest: a save that never answers must not keep other pages from loading. Never rejects.
    */
   settled(maxWait?: number): Promise<void>;
-  /** A section stored its edits: subscribers drop an earlier loss report for it. */
-  reportSaved(section: SectionId): void;
+  /** A document was stored: subscribers drop an earlier loss report for that document. */
+  reportSaved(source: SaveSource): void;
   /** Calls `listener` for every outcome reported; returns the unsubscribe function. */
-  subscribe(listener: (section: SectionId, outcome: SaveOutcome) => void): () => void;
+  subscribe(listener: (source: SaveSource, outcome: SaveOutcome) => void): () => void;
 }
 
 /** A save that was dropped because the stored data changed elsewhere: also a lost edit after leaving. */
@@ -36,15 +45,15 @@ const MAX_WAIT = 10_000;
 
 export function createPendingSaves(): PendingSaves {
   const running = new Set<Promise<void>>();
-  const listeners = new Set<(section: SectionId, outcome: SaveOutcome) => void>();
-  const emit = (section: SectionId, outcome: SaveOutcome) => {
-    for (const listener of listeners) listener(section, outcome);
+  const listeners = new Set<(source: SaveSource, outcome: SaveOutcome) => void>();
+  const emit = (source: SaveSource, outcome: SaveOutcome) => {
+    for (const listener of listeners) listener(source, outcome);
   };
   return {
-    track(section, save) {
+    track(source, save) {
       const settledSave = save.then(
         () => undefined,
-        (error: unknown) => emit(section, error instanceof DroppedSaveError ? 'dropped' : 'failed'),
+        (error: unknown) => emit(source, error instanceof DroppedSaveError ? 'dropped' : 'failed'),
       );
       running.add(settledSave);
       void settledSave.then(() => running.delete(settledSave));
@@ -57,8 +66,8 @@ export function createPendingSaves(): PendingSaves {
       });
       return Promise.race([Promise.all([...running]).then(() => undefined), timeout]).finally(() => clearTimeout(timer));
     },
-    reportSaved(section) {
-      emit(section, 'saved');
+    reportSaved(source) {
+      emit(source, 'saved');
     },
     subscribe(listener) {
       listeners.add(listener);
@@ -69,3 +78,29 @@ export function createPendingSaves(): PendingSaves {
 
 /** The one tracker of the running app. */
 export const pendingSaves = createPendingSaves();
+
+/** A document whose last edit was lost after leaving its section. */
+export interface LostEdit extends SaveSource {
+  reason: Exclude<SaveOutcome, 'saved'>;
+}
+
+/**
+ * The lost edits after an outcome: a loss replaces the document's earlier entry, a save removes it. A save with nothing
+ * to remove returns `lost` itself, so React skips the render (every autosave reports a save).
+ */
+export function withOutcome<T extends readonly LostEdit[]>(lost: T, source: SaveSource, outcome: SaveOutcome): T | LostEdit[] {
+  const others = lost.filter((entry) => entry.document !== source.document || entry.section !== source.section);
+  if (outcome === 'saved') return others.length === lost.length ? lost : others;
+  return [...others, { ...source, reason: outcome }];
+}
+
+/** One message per section, in the order the sections were first reported; a failure wins over a conflict. */
+export function lostSections(lost: readonly LostEdit[]): { section: SectionId; reason: LostEdit['reason'] }[] {
+  const sections: { section: SectionId; reason: LostEdit['reason'] }[] = [];
+  for (const entry of lost) {
+    const known = sections.find((item) => item.section === entry.section);
+    if (!known) sections.push({ section: entry.section, reason: entry.reason });
+    else if (entry.reason === 'failed') known.reason = 'failed';
+  }
+  return sections;
+}
