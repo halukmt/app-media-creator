@@ -12,4 +12,4 @@
 
 ## Review log
 
-- `/code-review` results are recorded here after the review.
+- **/code-review:** no findings.
