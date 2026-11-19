@@ -445,23 +445,30 @@ export async function applyHeadlines(workspace: Workspace, id: string, variant: 
   if (state.status === 'invalid') throw new JobError(`Job ${id} has invalid results: ${state.errors.join('; ')}`, 409);
   if (!state.headlines) throw new JobError(`Job ${id} has no headlines yet`, 409);
   const project = await readProject(workspace);
-  const screenshots = await listScreenshots(workspace);
-  const sets = await readScreenshotSets(workspace, screenshots);
-  const next = { ...sets, sets: { ...sets.sets } };
-  const applied: LocaleId[] = [];
-  for (const [locale, { slots }] of Object.entries(state.headlines.locales) as [LocaleId, HeadlinesResult['locales'][string]][]) {
-    const byInput = new Map(slots.map((slot) => [slot.input, slot[variant]]));
-    const current = effectiveSet(sets, locale, project.sourceLocale, screenshots);
-    if (!current.some((entry) => byInput.has(entry.input))) continue;
-    next.sets[locale] = current.map(({ fallbackInput: _fallback, ...entry }): ScreenshotEntry => {
-      const text = byInput.get(entry.input);
-      return text ? { ...entry, headline: text.headline, subline: text.subline ?? '' } : entry;
-    });
-    applied.push(locale);
+  const headlines = state.headlines;
+  // Read, change and save the current sets; when a page saved in between (conflict), start again from its version.
+  let applied: LocaleId[] = [];
+  for (let attempt = 1; ; attempt += 1) {
+    const screenshots = await listScreenshots(workspace);
+    const sets = await readScreenshotSets(workspace, screenshots);
+    const next = { ...sets, sets: { ...sets.sets } };
+    applied = [];
+    for (const [locale, { slots }] of Object.entries(headlines.locales) as [LocaleId, HeadlinesResult['locales'][string]][]) {
+      const byInput = new Map(slots.map((slot) => [slot.input, slot[variant]]));
+      const current = effectiveSet(sets, locale, project.sourceLocale, screenshots);
+      if (!current.some((entry) => byInput.has(entry.input))) continue;
+      next.sets[locale] = current.map(({ fallbackInput: _fallback, ...entry }): ScreenshotEntry => {
+        const text = byInput.get(entry.input);
+        return text ? { ...entry, headline: text.headline, subline: text.subline ?? '' } : entry;
+      });
+      applied.push(locale);
+    }
+    if (applied.length === 0) throw new JobError(`None of the screenshots of job ${id} are in the sets any more`, 409);
+    const saved = await saveScreenshotSets(workspace, next);
+    if (saved.ok) break;
+    if (!saved.conflict) throw new JobError(`The headlines no longer fit the screenshots: ${saved.errors.join('; ')}`, 409);
+    if (attempt >= 3) throw new JobError('The screenshot sets keep changing; try applying again', 409);
   }
-  if (applied.length === 0) throw new JobError(`None of the screenshots of job ${id} are in the sets any more`, 409);
-  const saved = await saveScreenshotSets(workspace, next);
-  if (!saved.ok) throw new JobError(`The headlines no longer fit the screenshots: ${saved.errors.join('; ')}`, 409);
   // The fingerprint of the text that was validated and applied, not of the file as it is now.
   await writeJsonAtomic(path.join(state.folder, 'applied.json'), { variant, at: new Date().toISOString(), headlines: headlinesHash });
   return { locales: applied };

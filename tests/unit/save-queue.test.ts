@@ -15,6 +15,20 @@ describe('The save queue stores the latest edits one save at a time', () => {
     expect(queue.hasPending()).toBe(false);
   });
 
+  test('drops a pending version on discard, so a conflicting edit is never sent again (#85)', async () => {
+    const save = vi.fn(async (_doc: string) => {
+      throw new Error('conflict');
+    });
+    const queue = createSaveQueue(save);
+    queue.schedule('stale');
+    await expect(queue.flush()).rejects.toThrow('conflict');
+    expect(queue.hasPending()).toBe(true);
+    queue.discard();
+    expect(queue.hasPending()).toBe(false);
+    await queue.flush().catch(() => undefined);
+    expect(save).toHaveBeenCalledTimes(1);
+  });
+
   test('rejects a failed flush and keeps the edits for the next attempt', async () => {
     let fail = true;
     const save = vi.fn(async (_doc: string) => {

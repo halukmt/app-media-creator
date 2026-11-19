@@ -16,6 +16,7 @@ import {
   saveScreenshotSets,
   type StoredInput,
   type Workspace,
+  type ScreenshotSets,
 } from '../../src/core/workspace/index.js';
 import { createApp } from '../../src/server/app.js';
 import { packageInfoFactory } from '../factories/package-info.js';
@@ -61,9 +62,11 @@ describe('Screenshot sets follow the uploads', () => {
       { input: a.path, headline: 'Erste', subline: '' },
       { input: b.path, headline: 'Zweite', subline: 'Mehr' },
     ];
-    await saveScreenshotSets(workspace, sets);
-    sets.sets['de-DE'] = [...sets.sets['de-DE'].reverse()];
-    const saved = await saveScreenshotSets(workspace, sets);
+    const first = await saveScreenshotSets(workspace, sets);
+    if (!first.ok) throw new Error(first.errors.join('; '));
+    // The next save is based on the revision the first one stored.
+    const reordered = { ...first.sets, sets: { 'de-DE': [...first.sets.sets['de-DE']!].reverse() } };
+    const saved = await saveScreenshotSets(workspace, reordered);
     expect(saved.ok).toBe(true);
     expect((await readScreenshotSets(workspace)).sets['de-DE']).toEqual([
       { input: b.path, headline: 'Zweite', subline: 'Mehr' },
@@ -117,6 +120,34 @@ describe('Screenshot sets follow the uploads', () => {
     await saveScreenshotSets(workspace, sets);
     const c = await upload(workspace, 'de-DE', 'c.png');
     expect((await readScreenshotSets(workspace)).sets['de-DE']?.map((e) => e.input)).toEqual([a.path, c.path]);
+  });
+
+  test('counts revisions and lets only one of two saves based on the same revision through (#85)', async () => {
+    const workspace = await smallProject();
+    const start = await upload(workspace, 'de-DE', 'start.png');
+    const base = await readScreenshotSets(workspace);
+    expect(base.revision).toBe(0);
+    const edit = (headline: string) => ({ ...base, sets: { 'de-DE': [{ input: start.path, headline, subline: '' }] } });
+    const [a, b] = await Promise.all([saveScreenshotSets(workspace, edit('A')), saveScreenshotSets(workspace, edit('B'))]);
+    expect([a.ok, b.ok]).toEqual([true, false]);
+    expect(!b.ok && b.conflict).toBe(true);
+    const stored = await readScreenshotSets(workspace);
+    expect([stored.revision, stored.sets['de-DE']?.[0]?.headline]).toEqual([1, 'A']);
+    // Internal callers without a revision save unconditionally and still count up.
+    const { revision: _r, ...unconditional } = edit('C');
+    expect((await saveScreenshotSets(workspace, unconditional)).ok).toBe(true);
+    expect((await readScreenshotSets(workspace)).revision).toBe(2);
+  });
+
+  test('still appends an upload that the saving page had not seen yet (#85)', async () => {
+    const workspace = await smallProject();
+    const start = await upload(workspace, 'de-DE', 'start.png');
+    const page = await readScreenshotSets(workspace);
+    // Another tab uploads; uploads do not change the revision, so this page's save still passes.
+    const later = await upload(workspace, 'de-DE', 'later.png');
+    const saved = await saveScreenshotSets(workspace, { ...page, sets: { 'de-DE': [{ input: start.path, headline: 'Start', subline: '' }] } });
+    expect(saved.ok).toBe(true);
+    expect((await readScreenshotSets(workspace)).sets['de-DE']?.map((e) => e.input)).toEqual([start.path, later.path]);
   });
 
   test('rejects an unknown layout and a colour that is not #rrggbb', async () => {
@@ -235,9 +266,27 @@ describe('The screenshots API reads, saves and generates sets', () => {
 
   test('rejects invalid sets with 400 and the field errors', async () => {
     const app = appFor(await smallProject());
-    const response = await app.request('/api/screenshots', json({ style: defaultScreenshotSets().style, sets: { 'de-DE': [{ input: '../../x', headline: '', subline: '' }] } }));
+    const response = await app.request('/api/screenshots', json({ revision: 0, style: defaultScreenshotSets().style, sets: { 'de-DE': [{ input: '../../x', headline: '', subline: '' }] } }));
     expect(response.status).toBe(400);
     expect(((await response.json()) as { errors: string[] }).errors[0]).toContain('is not an uploaded screenshot');
+  });
+
+  test('requires the revision a save is based on and answers 409 with the current sets when it is outdated (#85)', async () => {
+    const workspace = await smallProject();
+    const start = await upload(workspace, 'de-DE', 'start.png');
+    const app = appFor(workspace);
+    const sets = (await (await app.request('/api/screenshots')).json()) as ScreenshotSets;
+    const { revision: _r, ...withoutRevision } = sets;
+    expect((await app.request('/api/screenshots', json(withoutRevision))).status).toBe(400);
+
+    // Tab 1 saves; tab 2 still holds the earlier revision.
+    const first = await app.request('/api/screenshots', json({ ...sets, sets: { 'de-DE': [{ input: start.path, headline: 'Tab 1', subline: '' }] } }));
+    expect(((await first.json()) as ScreenshotSets).revision).toBe(sets.revision + 1);
+    const stale = await app.request('/api/screenshots', json({ ...sets, sets: { 'de-DE': [{ input: start.path, headline: 'Tab 2', subline: '' }] } }));
+    expect(stale.status).toBe(409);
+    const body = (await stale.json()) as { errors: string[]; current: ScreenshotSets };
+    expect(body.errors[0]).toMatch(/changed elsewhere/);
+    expect(body.current.sets['de-DE']?.[0]?.headline).toBe('Tab 1');
   });
 
   test('answers the generate request with 400 when nothing is uploaded', async () => {

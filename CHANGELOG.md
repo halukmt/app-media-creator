@@ -55,4 +55,5 @@ entries left under `[Unreleased]` is rejected by `npm run check:release`.
 - Applying AI headlines can no longer be overwritten by an edit made at the same moment, a rewritten AI result is not mistaken for the applied one, and a broken result folder shows as an invalid job instead of an error. (#84)
 - After a failed reload following an AI apply, any later successful reload (not only "Try again") makes the screenshot texts editable again. (#87)
 - When pending screenshot edits cannot be saved before applying AI headlines, the apply buttons work again and edits are not shown as paused. (#89)
+- Screenshot edits saved from an older version (another tab, or a page open while AI headlines were applied) are refused instead of overwriting newer changes; the page loads the current version and says so. (#85)
 

@@ -8,6 +8,8 @@ export interface SaveQueue<T> {
   flush(): Promise<void>;
   /** True while a version waits to be saved (also after a failed save). */
   hasPending(): boolean;
+  /** Drops the waiting version, e.g. after a conflict: it is based on data that changed elsewhere. */
+  discard(): void;
 }
 
 export function createSaveQueue<T>(save: (document: T) => Promise<unknown>, onSaved?: () => void): SaveQueue<T> {
@@ -27,6 +29,11 @@ export function createSaveQueue<T>(save: (document: T) => Promise<unknown>, onSa
     },
     hasPending() {
       return pending !== null;
+    },
+    discard() {
+      pending = null;
+      // The refused save is settled: a later flush with nothing new must not fail with it again.
+      last = Promise.resolve();
     },
     flush() {
       const next = pending;

@@ -183,6 +183,8 @@ export interface ScreenshotEntry {
 
 export interface ScreenshotSets {
   version: 1;
+  /** Stored version; a save names the revision it is based on (409 when the sets changed elsewhere). */
+  revision: number;
   style: { layout: CardLayout; background: Background };
   sets: Partial<Record<string, ScreenshotEntry[]>>;
   known: string[];

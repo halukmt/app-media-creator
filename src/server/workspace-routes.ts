@@ -77,8 +77,15 @@ export function workspaceRoutes(workspace: Workspace): Hono {
     } catch {
       return c.json({ errors: ['The request body must be JSON'] }, 400);
     }
+    // The UI names the revision its document is based on; without it an older tab could overwrite newer changes.
+    if (typeof body !== 'object' || body === null || typeof (body as { revision?: unknown }).revision !== 'number') {
+      return c.json({ errors: ['revision: the revision the changes are based on is required'] }, 400);
+    }
     const result = await saveScreenshotSets(workspace, body);
-    return result.ok ? c.json(result.sets) : c.json({ errors: result.errors }, 400);
+    if (result.ok) return c.json(result.sets);
+    // 409 with the current sets, so the page can show what changed instead of keeping a stale copy.
+    if (result.conflict) return c.json({ errors: result.errors, current: await readScreenshotSets(workspace) }, 409);
+    return c.json({ errors: result.errors }, 400);
   });
 
   api.post(
