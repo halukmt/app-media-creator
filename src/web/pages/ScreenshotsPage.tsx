@@ -100,6 +100,21 @@ export function ScreenshotsPage({ project, catalogue, selection, onSelectionChan
   const [aiJob, setAiJob] = useState<AiJob | null>(null);
   const [aiBusy, setAiBusy] = useState<'prepare' | 'A' | 'B' | null>(null);
   const [aiMessage, setAiMessage] = useState<AiJobMessage | null>(null);
+  // Every change of the shown job counts; a fetched job is kept only if nothing changed the panel since it was asked
+  // for (a newer job, an optimistic "applied", or a newer fetch).
+  const jobVersion = useRef(0);
+  const showJob = useCallback((job: AiJob | null) => {
+    jobVersion.current += 1;
+    setAiJob(job);
+  }, []);
+  const refreshJob = useCallback((id: string) => {
+    const version = (jobVersion.current += 1);
+    void fetchJob(id)
+      .then((fetched) => {
+        if (version === jobVersion.current) setAiJob(fetched);
+      })
+      .catch(() => undefined);
+  }, []);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const creativeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -121,14 +136,17 @@ export function ScreenshotsPage({ project, catalogue, selection, onSelectionChan
       setCreativeLoadFailed(true);
     }
   }, []);
-  const reload = useCallback(async () => {
+  /** Loads uploads and sets; resolves false when that failed (the error is shown). */
+  const reload = useCallback(async (): Promise<boolean> => {
     try {
       const [nextInputs, nextSets] = await Promise.all([fetchInputs(), fetchScreenshots()]);
       setInputs(nextInputs.filter((input) => input.kind === 'screenshot'));
       setSets(nextSets);
       setLoadError(null);
+      return true;
     } catch (error) {
       setLoadError(messagesOf(error));
+      return false;
     }
   }, []);
 
@@ -139,9 +157,9 @@ export function ScreenshotsPage({ project, catalogue, selection, onSelectionChan
       .catch(() => setBackgrounds({ presets: [], palette: [] }));
     void loadCreative();
     fetchJobs(1)
-      .then((jobs) => setAiJob(latestCopyJob(jobs)))
-      .catch(() => setAiJob(null));
-  }, [reload, loadCreative]);
+      .then((jobs) => showJob(latestCopyJob(jobs)))
+      .catch(() => showJob(null));
+  }, [reload, loadCreative, showJob]);
 
   // The newest AI job is followed through the server's event stream, also after an invalid or applied result (the AI
   // may write again into the same folder); a result written while the page was closed is in the list above.
@@ -149,17 +167,14 @@ export function ScreenshotsPage({ project, catalogue, selection, onSelectionChan
   useEffect(() => {
     if (!aiJobId) return undefined;
     const events = new EventSource(JOB_EVENTS_URL);
-    const refresh = () =>
-      void fetchJob(aiJobId)
-        .then(setAiJob)
-        .catch(() => undefined);
+    const refresh = () => refreshJob(aiJobId);
     events.addEventListener('job', (event) => {
       if ((event as MessageEvent<string>).data === aiJobId) refresh();
     });
     // After a dropped connection the browser reconnects; changes in between are fetched once.
     events.addEventListener('open', refresh);
     return () => events.close();
-  }, [aiJobId]);
+  }, [aiJobId, refreshJob]);
 
   // Devices the project picked for the stores that are enabled.
   const devices = useMemo(() => {
@@ -206,12 +221,21 @@ export function ScreenshotsPage({ project, catalogue, selection, onSelectionChan
     }
   }, []);
 
-  function updateSets(next: ScreenshotSets) {
+  // While AI headlines are applied and the sets reloaded, edits are not taken: a save of the older document queued in
+  // that time would overwrite the applied headlines (#84).
+  const applyingAi = useRef(false);
+  // Set when the reload after an apply failed; the next successful reload ("Try again") releases the lock.
+  const keepLockedUntilReload = useRef(false);
+
+  /** Takes an edit and queues its save; returns false while AI headlines are applied (the edit is not taken). */
+  function updateSets(next: ScreenshotSets): boolean {
+    if (applyingAi.current) return false;
     setSets(next);
     queue.current.schedule(next);
     setSaveState('saving');
     if (saveTimer.current) clearTimeout(saveTimer.current);
     saveTimer.current = setTimeout(() => void flushSave().catch(() => undefined), SAVE_DELAY);
+    return true;
   }
   // Leaving the section sends a pending edit instead of dropping it.
   useEffect(() => () => void flushSave().catch(() => undefined), [flushSave]);
@@ -244,10 +268,19 @@ export function ScreenshotsPage({ project, catalogue, selection, onSelectionChan
   }
   useEffect(() => () => void flushCreative().catch(() => undefined), [flushCreative]);
 
-  function updateEntries(entries: ScreenshotEntry[]) {
-    if (!sets) return;
-    updateSets({ ...sets, sets: { ...sets.sets, [editLocale]: entries } });
+  function updateEntries(entries: ScreenshotEntry[]): boolean {
+    if (!sets) return false;
+    return updateSets({ ...sets, sets: { ...sets.sets, [editLocale]: entries } });
   }
+
+  // The edit lock of an apply is released only after the reloaded sets are rendered, so no handler of an earlier
+  // render (holding the pre-apply texts) can queue a save.
+  const [releaseLock, setReleaseLock] = useState(false);
+  useEffect(() => {
+    if (!releaseLock) return;
+    applyingAi.current = false;
+    setReleaseLock(false);
+  }, [releaseLock, sets]);
 
   // Previews of the editing language on the chosen device, one request at a time; a newer version cancels the rest.
   useEffect(() => {
@@ -395,7 +428,7 @@ export function ScreenshotsPage({ project, catalogue, selection, onSelectionChan
     }
     setAiBusy('prepare');
     try {
-      setAiJob(await createCopyJob([...selection]));
+      showJob(await createCopyJob([...selection]));
     } catch (error) {
       setAiMessage({ action: 'prepare', tone: 'error', text: en.screenshots.ai.prepareFailed, details: messagesOf(error) });
     } finally {
@@ -406,28 +439,39 @@ export function ScreenshotsPage({ project, catalogue, selection, onSelectionChan
   async function applyAiJob(variant: 'A' | 'B') {
     if (!aiJob) return;
     setAiMessage(null);
-    try {
-      await flushSave();
-    } catch {
-      setAiMessage({ action: 'apply', tone: 'error', text: en.screenshots.saveFirst });
-      return;
-    }
+    // From here until the reloaded sets are rendered, no edit may queue a save (see updateSets).
+    applyingAi.current = true;
+    let applied = false;
     setAiBusy(variant);
     try {
-      await applyJob(aiJob.id, variant);
-    } catch (error) {
-      setAiMessage({ action: 'apply', tone: 'error', text: en.screenshots.ai.applyFailed, details: messagesOf(error) });
+      try {
+        await flushSave();
+      } catch {
+        setAiMessage({ action: 'apply', tone: 'error', text: en.screenshots.saveFirst });
+        return;
+      }
+      try {
+        await applyJob(aiJob.id, variant);
+        applied = true;
+      } catch (error) {
+        setAiMessage({ action: 'apply', tone: 'error', text: en.screenshots.ai.applyFailed, details: messagesOf(error) });
+        return;
+      }
+      // Applied on the server: show it at once, then load the new sets. A failed refresh must not read as a failed apply.
+      showJob({ ...aiJob, status: 'applied', applied: { variant, at: new Date().toISOString() } });
+      refreshJob(aiJob.id);
+      if (await reload()) {
+        setPreviewVersion((v) => v + 1);
+        setReleaseLock(true);
+      } else {
+        // The page still holds the old texts: edits stay blocked until "Try again" loads the applied ones.
+        keepLockedUntilReload.current = true;
+      }
+    } finally {
+      // Before the apply request, nothing changed on the server: edits may go on at once.
+      if (!applied) applyingAi.current = false;
       setAiBusy(null);
-      return;
     }
-    // Applied on the server: show it at once, then load the new sets. A failed refresh must not read as a failed apply.
-    setAiJob((current) => (current ? { ...current, status: 'applied', applied: { variant, at: new Date().toISOString() } } : current));
-    await reload();
-    setPreviewVersion((v) => v + 1);
-    void fetchJob(aiJob.id)
-      .then(setAiJob)
-      .catch(() => undefined);
-    setAiBusy(null);
   }
 
   const steps = [
@@ -486,7 +530,18 @@ export function ScreenshotsPage({ project, catalogue, selection, onSelectionChan
         {loadError ? (
           <StatusAlert announce={false} tone="error" title={en.screenshots.loadFailed}>
             {loadError.length > 0 ? <p>{loadError.join(' ')}</p> : null}
-            <button type="button" className="btn btn-sm min-h-11 mt-2" onClick={() => void reload()}>
+            <button
+              type="button"
+              className="btn btn-sm min-h-11 mt-2"
+              onClick={() =>
+                void reload().then((ok) => {
+                  if (ok && keepLockedUntilReload.current) {
+                    keepLockedUntilReload.current = false;
+                    setReleaseLock(true);
+                  }
+                })
+              }
+            >
               {en.app.retry}
             </button>
           </StatusAlert>
@@ -768,11 +823,10 @@ export function ScreenshotsPage({ project, catalogue, selection, onSelectionChan
                         updateEntries(ownEntries.map((e, i) => (i === index ? next : e)));
                       }}
                       onMove={(direction) => {
-                        updateEntries(moveEntry(ownEntries, index, direction));
-                        say(en.screenshots.moved(index + 1 + direction, ownEntries.length));
+                        if (updateEntries(moveEntry(ownEntries, index, direction))) say(en.screenshots.moved(index + 1 + direction, ownEntries.length));
                       }}
                       onRemove={() => {
-                        updateEntries(removeEntry(ownEntries, index));
+                        if (!updateEntries(removeEntry(ownEntries, index))) return;
                         say(en.screenshots.removed);
                         // The removed slot took the focus with it: move it to the next slot, or the list heading.
                         requestAnimationFrame(() => {
