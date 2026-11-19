@@ -189,3 +189,12 @@
   #63 empty monochrome layer for one-colour opaque logos (Backlog), #64 deferred polish (Backlog).
 - CI e2e back to 1m23s (the 7m48s on #61 did not repeat).
 - Next: #62, then #34.
+
+## #62 Clipped app name on share images — done (PR #66)
+
+- Root cause: opentype.js 2.0 `toPathData` → `roundDecimal` appends `"e+2"` to the decimal part as a string; a
+  decimal part like 5.7e-14 gives `NaN` (cached). librsvg stops the path at `NaN` → text cut off. Position/size
+  dependent, so it hit "Demo" without tagline but not "demo-repo".
+- Fix: own `pathData` in `fonts.ts` (shortest 2-decimal form, throws on non-finite / unknown commands); unit test bans
+  `toPathData` / `toSVG` in `src/`. Regression test verified to fail on old code. Goldens unchanged.
+- Next: #34 (only Ready issue left).
