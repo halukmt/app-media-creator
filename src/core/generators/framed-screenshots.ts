@@ -2,7 +2,7 @@ import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import sharp from 'sharp';
 import { registerOutputs, type OutputEntry, type RegisterOptions } from '../export/manifest.js';
-import { resolveLocales, type LocaleId, type LocaleSelection } from '../locales/index.js';
+import { selectProjectLocales, type LocaleId, type LocaleSelection } from '../locales/index.js';
 import { isFrameKind, loadUserFrame, renderFramedScreenshot, type FrameKind, type UserFrame } from '../screenshots/index.js';
 import { getSpec } from '../specs/index.js';
 import { listInputs, originalInputName, readProject, type StoredInput, type Workspace } from '../workspace/index.js';
@@ -76,7 +76,7 @@ export async function generateFramedScreenshots(workspace: Workspace, options: F
   const project = await readProject(workspace);
   let locales: LocaleId[];
   try {
-    locales = options.locales === undefined ? project.locales : resolveLocales(options.locales);
+    locales = selectProjectLocales(project.locales, options.locales);
   } catch (error) {
     throw new GeneratorError((error as Error).message);
   }

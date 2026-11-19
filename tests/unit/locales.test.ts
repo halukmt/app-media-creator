@@ -1,6 +1,6 @@
 // conventions: RULE-TESTING-3301
 import { describe, expect, test } from 'vitest';
-import { LOCALES, getLocale, resolveLocales } from '../../src/core/locales/index.js';
+import { LOCALES, getLocale, resolveLocales, selectProjectLocales } from '../../src/core/locales/index.js';
 
 describe('The locale catalogue lists the six media locales with their store codes', () => {
   test('contains the six locales in catalogue order', () => {
@@ -54,5 +54,25 @@ describe('resolveLocales turns one, several or all locales into an ordered list'
 
   test('rejects an empty selection', () => {
     expect(() => resolveLocales([])).toThrow('Select at least one locale');
+  });
+});
+
+describe('selectProjectLocales keeps a selection inside the project\'s locales', () => {
+  const project = ['tr-TR', 'de-DE'] as const;
+
+  test('reads no selection and "all" as the project\'s locales in catalogue order', () => {
+    expect(selectProjectLocales(project, undefined)).toEqual(['de-DE', 'tr-TR']);
+    expect(selectProjectLocales(project, 'all')).toEqual(['de-DE', 'tr-TR']);
+    expect(selectProjectLocales(project, ['all', 'de-DE'])).toEqual(['de-DE', 'tr-TR']);
+    expect(selectProjectLocales(project, ['tr-TR'])).toEqual(['tr-TR']);
+  });
+
+  test('rejects locales outside the project, unsupported locales and an empty list', () => {
+    expect(() => selectProjectLocales(project, 'fr-FR')).toThrow('fr-FR is not a locale of this project');
+    expect(() => selectProjectLocales(project, ['fr-FR', 'es-ES', 'de-DE'])).toThrow('es-ES, fr-FR are not locales of this project');
+    expect(() => selectProjectLocales(project, ['all', 'pt-BR'])).toThrow('pt-BR is not a supported locale');
+    expect(() => selectProjectLocales(project, [])).toThrow('Select at least one locale');
+    expect(() => selectProjectLocales(project, 5 as never)).toThrow('locales must be "all", a locale id or a list of locale ids');
+    expect(() => selectProjectLocales(project, [null] as never)).toThrow('locales must be');
   });
 });

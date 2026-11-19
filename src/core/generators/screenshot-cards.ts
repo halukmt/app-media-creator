@@ -1,7 +1,7 @@
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { outputPath, registerOutputs, type OutputEntry, type RegisterOptions } from '../export/manifest.js';
-import { isLocaleId, resolveLocales, type LocaleId, type LocaleSelection } from '../locales/index.js';
+import { isLocaleId, selectProjectLocales, type LocaleId, type LocaleSelection } from '../locales/index.js';
 import {
   cardDefaultsForSpec,
   loadUserFrame,
@@ -125,6 +125,7 @@ export async function renderCardPreview(workspace: Workspace, request: CardPrevi
   if (!Number.isInteger(width) || width < 100 || width > 1200) throw new GeneratorError('width must be whole pixels from 100 to 1200');
 
   const project = await readProject(workspace);
+  if (!project.locales.includes(request.locale)) throw new GeneratorError(`${request.locale} is not a locale of this project`);
   const screenshots = await listScreenshots(workspace);
   const sets = await readScreenshotSets(workspace, screenshots);
   const entry = effectiveSet(sets, request.locale, project.sourceLocale, screenshots)[request.index];
@@ -158,7 +159,7 @@ export async function generateScreenshotCards(workspace: Workspace, options: Scr
   const project = await readProject(workspace);
   let locales: LocaleId[];
   try {
-    locales = options.locales === undefined ? project.locales : resolveLocales(options.locales);
+    locales = selectProjectLocales(project.locales, options.locales);
   } catch (error) {
     throw new GeneratorError((error as Error).message);
   }

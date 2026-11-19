@@ -90,7 +90,7 @@ describe('generateShareImages writes share images per locale', () => {
     const workspace = await workspaceWithLogo();
     await expect(generateShareImages(workspace, { taglines: { 'pt-BR': 'Olá' } })).rejects.toThrow(/pt-BR is not a supported locale/);
     await expect(generateShareImages(workspace, { background: 'red' as `#${string}` })).rejects.toThrow(/background must be a colour/);
-    await expect(generateShareImages(workspace, { taglines: { 'fr-FR': 'Bonjour' } })).rejects.toThrow(/fr-FR is not a language of this project/);
+    await expect(generateShareImages(workspace, { taglines: { 'fr-FR': 'Bonjour' } })).rejects.toThrow(/fr-FR is not a locale of this project/);
   });
 });
 

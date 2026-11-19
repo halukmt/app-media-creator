@@ -2,7 +2,7 @@ import { createHash, randomInt } from 'node:crypto';
 import { existsSync } from 'node:fs';
 import { copyFile, lstat, mkdir, readFile, readdir } from 'node:fs/promises';
 import path from 'node:path';
-import { isLocaleId, resolveLocales, type LocaleId, type LocaleSelection } from '../locales/index.js';
+import { isLocaleId, selectProjectLocales, type LocaleId, type LocaleSelection } from '../locales/index.js';
 import type { CardLayout } from '../screenshots/index.js';
 import { checkStoreText, getStoreTextSpec, storeTextSpecs, type StoreTextSpec, type TextTarget } from '../specs/texts.js';
 import {
@@ -190,12 +190,10 @@ export async function createJob(workspace: Workspace, options: CreateJobOptions 
   if (task === 'store-texts' && textTargets.length === 0) throw new JobError('Turn on the App Store or Google Play in the project first');
   let locales: LocaleId[];
   try {
-    locales = options.locales === undefined ? project.locales : resolveLocales(options.locales);
+    locales = selectProjectLocales(project.locales, options.locales);
   } catch (error) {
     throw new JobError((error as Error).message);
   }
-  const outside = locales.filter((locale) => !project.locales.includes(locale));
-  if (outside.length > 0) throw new JobError(`${outside.join(', ')} ${outside.length === 1 ? 'is' : 'are'} not a language of this project`);
 
   const inputs = await listInputs(workspace);
   const screenshots = inputs.filter((input) => input.kind === 'screenshot');
