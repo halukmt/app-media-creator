@@ -52,15 +52,17 @@ export async function deviceSvg(options: DeviceOptions): Promise<{ svg: string; 
     const scale = box.width / userFrame.width;
     const s = userFrame.screen;
     const image = await screenImage(screenshot, box.x + s.x * scale, box.y + s.y * scale, s.width * scale, s.height * scale);
-    // The same drop shadow as the generic frames, cast by the bezel's own shape (its alpha channel).
-    const shadow = withShadow
-      ? `<defs><filter id="bezel-shadow" x="-20%" y="-20%" width="140%" height="140%"><feDropShadow dx="0" ` +
-        `dy="${n(box.width * SHADOW.offset)}" stdDeviation="${n(box.width * SHADOW.blur)}" flood-color="#000" flood-opacity="0.3"/></filter></defs>`
-      : '';
-    const bezel =
+    const bezelImage = (filter: string) =>
       `<image x="${n(box.x)}" y="${n(box.y)}" width="${n(box.width)}" height="${n(userFrame.height * scale)}" preserveAspectRatio="none" ` +
-      `${withShadow ? 'filter="url(#bezel-shadow)" ' : ''}href="data:image/png;base64,${userFrame.png.toString('base64')}"/>`;
-    return { svg: shadow + image + bezel, height: userFrame.height * scale };
+      `${filter}href="data:image/png;base64,${userFrame.png.toString('base64')}"/>`;
+    // Order: shadowed bezel, then the screenshot, then the plain bezel on top. The shadow the bezel casts into its own
+    // screen opening ends up beneath the screenshot, so it never darkens the screen content.
+    const shadowLayer = withShadow
+      ? `<defs><filter id="bezel-shadow" x="-20%" y="-20%" width="140%" height="140%"><feDropShadow dx="0" ` +
+        `dy="${n(box.width * SHADOW.offset)}" stdDeviation="${n(box.width * SHADOW.blur)}" flood-color="#000" flood-opacity="0.3"/></filter></defs>` +
+        bezelImage('filter="url(#bezel-shadow)" ')
+      : '';
+    return { svg: shadowLayer + image + bezelImage(''), height: userFrame.height * scale };
   }
   const screenWidth = screenWidthFor(kind, box.width);
   const frame = frameBox(kind, screenWidth, screenWidth * screenAspect);

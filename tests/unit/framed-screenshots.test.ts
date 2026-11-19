@@ -134,7 +134,7 @@ describe('A user bezel gets the same shadow as the generic frames', () => {
   test('draws a shadow below the bezel inside the margin', async () => {
     const dir = mkdtempSync(path.join(tmpdir(), 'amc-frames-'));
     const bezel = await sharp({ create: { width: 100, height: 200, channels: 4, background: '#202020' } })
-      .composite([{ input: { create: { width: 80, height: 180, channels: 4, background: { r: 0, g: 0, b: 0, alpha: 0 } } }, left: 10, top: 10, blend: 'dest-out' }])
+      .composite([{ input: { create: { width: 80, height: 180, channels: 4, background: { r: 0, g: 0, b: 0, alpha: 1 } } }, left: 10, top: 10, blend: 'dest-out' }])
       .png()
       .toBuffer();
     writeFileSync(path.join(dir, 'ipad.png'), bezel);
@@ -145,6 +145,13 @@ describe('A user bezel gets the same shadow as the generic frames', () => {
     const below = await alphaAt(png, Math.round(width / 2), height - Math.round((height - 800) / 2) + 6);
     expect(below).toBeGreaterThan(0);
     expect(below).toBeLessThan(255);
+
+    // Inside the screen opening, right next to its left edge: the white screenshot, not darkened by the shadow.
+    const margin = (width - 400) / 2;
+    const { data, info } = await sharp(png).raw().toBuffer({ resolveWithObject: true });
+    const at = (x: number, y: number) => data.subarray((y * info.width + x) * info.channels, (y * info.width + x) * info.channels + 3);
+    const inside = at(Math.round(margin + 10 * 4 + 2), Math.round(margin + 100 * 4));
+    expect(Math.min(...inside)).toBeGreaterThanOrEqual(250);
   });
 });
 

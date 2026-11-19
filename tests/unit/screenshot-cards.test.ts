@@ -145,7 +145,7 @@ describe('Device frames match the screenshot specs', () => {
     const dir = mkdtempSync(path.join(tmpdir(), 'amc-frames-'));
     // A magenta bezel of 100 × 200 with a transparent screen area inside.
     const bezel = await sharp({ create: { width: 100, height: 200, channels: 4, background: '#ff00ff' } })
-      .composite([{ input: { create: { width: 80, height: 180, channels: 4, background: { r: 0, g: 0, b: 0, alpha: 0 } } }, left: 10, top: 10, blend: 'dest-out' }])
+      .composite([{ input: { create: { width: 80, height: 180, channels: 4, background: { r: 0, g: 0, b: 0, alpha: 1 } } }, left: 10, top: 10, blend: 'dest-out' }])
       .png()
       .toBuffer();
     writeFileSync(path.join(dir, 'iphone.png'), bezel);
