@@ -90,6 +90,17 @@ Output: H.264 at 30 fps and 11 Mbps, stereo AAC (silence when the recording has 
 App Store Connect sets the poster frame per preview (default: the frame at 5 s); `GET /api/video/frame` shows a frame
 of a generated preview to choose it. Only real app footage belongs in a preview.
 
+### Device videos and looping header / search videos
+
+`POST /api/generate/embed-videos` puts each recording in a device frame on a background for websites and social
+posts: 9:16 (1080×1920), 16:9 (1920×1080) and 1:1 (1080×1080), with an optional line of text per language (`texts`),
+`frame`, `background` (default: the header image background) and `trim`. The recording's audio is kept.
+
+`POST /api/generate/loop-videos` makes the App Store's looping product page header (3840×1646) and search results
+(1920×1280) videos: the layout of the header and search images with the language's phrase, and the recording playing
+in the key-art device. The end crossfades into the start, so the loop has no jump; 30 fps, 5–30 s, no audio (the App
+Store plays them muted).
+
 ## Local development
 
 ```bash

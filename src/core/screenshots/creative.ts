@@ -2,7 +2,7 @@ import sharp from 'sharp';
 import type { Rect } from '../specs/index.js';
 import { backgroundSvg, isBackground, textColorFor, type Background } from './backgrounds.js';
 import { CardInputError, deviceSvg, screenshotInfo } from './device.js';
-import { DEFAULT_SCREEN_ASPECT, SHADOW, outerAspect, svgNumber as n, type UserFrame } from './frames.js';
+import { DEFAULT_SCREEN_ASPECT, SHADOW, frameBox, frameOverlaySvg, outerAspect, screenWidthFor, svgNumber as n, type UserFrame } from './frames.js';
 import { textBlockSvg, type TextWarning } from './text-block.js';
 
 /**
@@ -137,6 +137,8 @@ export interface CreativeResult {
   /** PNG without alpha channel, exactly `width` × `height`. */
   png: Buffer;
   warnings: TextWarning[];
+  /** The key-art device (outer box) and its screen aspect, for a video playing in it (#21); see keyScreen. */
+  key: { device: { x: number; y: number; width: number; height: number }; screenAspect: number };
 }
 
 /** Renders one creative asset; the text is drawn as paths, so the output is identical on every machine. */
@@ -182,6 +184,7 @@ export async function renderCreativeAsset(input: CreativeInput): Promise<Creativ
   await draw(layout.device, shots[0]!, 'key');
   const text = block ? (layout.textShift > 0 ? `<g transform="translate(${n(layout.textShift)} 0)">${block.svg}</g>` : block.svg) : '';
   const warnings: TextWarning[] = block ? block.warnings : [];
+  const key = { device: layout.device, screenAspect };
 
   const bg = backgroundSvg(input.background, width, height);
   const svg =
@@ -189,5 +192,28 @@ export async function renderCreativeAsset(input: CreativeInput): Promise<Creativ
     `<defs>${bg.defs}</defs><rect width="${width}" height="${height}" fill="${bg.fill}"/>${devices.join('')}${text}</svg>`;
   // `unlimited`: the SVG embeds the resized screenshots as large data URIs.
   const png = await sharp(Buffer.from(svg), { unlimited: true }).removeAlpha().png().toBuffer();
-  return { png, warnings };
+  return { png, warnings, key };
+}
+
+/**
+ * The screen of the key-art device in output pixels, and the frame to draw over a video playing in it: the generic
+ * frame with its screen cut out, or the user's bezel (whose screen opening is transparent).
+ */
+export function keyScreen(key: CreativeResult['key'], userFrame: UserFrame | null): { screen: Rect; overlay: string } {
+  const box = key.device;
+  const screenAspect = key.screenAspect;
+  if (userFrame) {
+    const scale = box.width / userFrame.width;
+    const s = userFrame.screen;
+    return {
+      screen: { x: box.x + s.x * scale, y: box.y + s.y * scale, width: s.width * scale, height: s.height * scale },
+      overlay:
+        `<image x="${n(box.x)}" y="${n(box.y)}" width="${n(box.width)}" height="${n(userFrame.height * scale)}" preserveAspectRatio="none" ` +
+        `href="data:image/png;base64,${userFrame.png.toString('base64')}"/>`,
+    };
+  }
+  const screenWidth = screenWidthFor('iphone', box.width);
+  const frame = frameBox('iphone', screenWidth, screenWidth * screenAspect);
+  const s = frame.screen;
+  return { screen: { x: box.x + s.x, y: box.y + s.y, width: s.width, height: s.height }, overlay: frameOverlaySvg('iphone', box.x, box.y, frame, 'key-overlay') };
 }

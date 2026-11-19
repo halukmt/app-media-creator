@@ -9,6 +9,7 @@ interface ProbeJson {
     width?: number;
     height?: number;
     avg_frame_rate?: string;
+    duration?: string;
     r_frame_rate?: string;
     channels?: number;
     tags?: { rotate?: string };
@@ -20,6 +21,8 @@ interface ProbeJson {
 /** Measured video properties, plus what the preview pipeline needs to know about the source. */
 export interface VideoProperties extends MediaProperties {
   durationSeconds: number;
+  /** Length of the video track, which can end before the container (e.g. longer audio). */
+  videoSeconds?: number;
   fps: number;
   /** Channels of the first audio track; undefined without audio. */
   audioChannels?: number;
@@ -53,6 +56,7 @@ export function parseProbe(json: string, bytes?: number): VideoProperties {
   const [width, height] = rotation === 90 ? [video.height, video.width] : [video.width, video.height];
   const duration = Number(data.format?.duration);
   const fps = frameRate(video.avg_frame_rate) ?? frameRate(video.r_frame_rate);
+  const videoSeconds = Number(video.duration);
   if (!Number.isFinite(duration) || duration <= 0) throw new Error('The video duration could not be measured');
   if (fps === undefined) throw new Error('The video frame rate could not be measured');
   return {
@@ -62,6 +66,7 @@ export function parseProbe(json: string, bytes?: number): VideoProperties {
     hasAlpha: false,
     bytes: bytes ?? Number(data.format?.size ?? 0),
     durationSeconds: duration,
+    ...(Number.isFinite(videoSeconds) && videoSeconds > 0 ? { videoSeconds } : {}),
     fps,
     ...(audio?.channels ? { audioChannels: audio.channels } : {}),
     ...(video.codec_name ? { videoCodec: video.codec_name } : {}),

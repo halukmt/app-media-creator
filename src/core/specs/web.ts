@@ -150,6 +150,33 @@ export const WEB_SPECS: readonly SpecEntry[] = [
     sourceUrl: FAVICON,
     notes: 'The link and meta tags to paste into the <head> of every page; written by this tool, no store limits.',
   },
+  ...(
+    [
+      ['vertical', 'Video in a device frame, 9:16 (Reels, Shorts, TikTok, stories)', 1080, 1920],
+      ['landscape', 'Video in a device frame, 16:9 (YouTube, websites)', 1920, 1080],
+      ['square', 'Video in a device frame, 1:1 (feeds)', 1080, 1080],
+    ] as const
+  ).map(
+    ([format, name, width, height]): SpecEntry => ({
+      id: `web.video.${format}`,
+      target: 'web',
+      group: 'video',
+      name,
+      kind: 'video',
+      required: false,
+      dimensions: fixed([width, height]),
+      formats: ['mp4'],
+      alpha: 'forbidden',
+      maxCount: 3,
+      // Loose limits: these files are not checked by a store.
+      video: { minSeconds: 1, maxSeconds: 60, maxFps: 60 },
+      localized: true,
+      verified: false,
+      sourceUrl: RESEARCH,
+      notes:
+        'Your app video on a styled background for posts and websites; written by this tool. Sizes are common network sizes from third-party guides, not store requirements.',
+    }),
+  ),
   ...(['png', 'webp'] as const).map(
     (format): SpecEntry => ({
       id: format === 'png' ? 'web.framed-screenshot' : 'web.framed-screenshot-webp',

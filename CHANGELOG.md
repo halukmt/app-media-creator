@@ -12,6 +12,8 @@ entries left under `[Unreleased]` is rejected by `npm run check:release`.
 
 ### Added
 
+- Device videos for web and social (9:16, 16:9, 1:1) with a line of text per language, and seamless, muted looping
+  App Store header and search videos with the recording playing in the key-art device. (#21)
 - App Store preview videos from screen recordings: trimmed, padded to 886×1920 (iPad 1200×1600), faded, with text
   cards per language and stereo audio, checked with ffprobe; the export checklist now measures videos. (#20)
 - Project setup: package scaffold, OpenSpec, GitHub issue workflow, Claude Code skills `next-issue` and `release`, CI. (#1)
