@@ -377,3 +377,53 @@ export function generateCreativeAssets(locales: readonly string[], group: Creati
     body: JSON.stringify({ locales, group }),
   });
 }
+
+/** One variant of a screenshot headline. */
+export interface CopyText {
+  headline: string;
+  subline: string;
+}
+
+/** An AI job folder as the server reports it (mirrors core JobState). */
+export interface AiJob {
+  id: string;
+  task: 'copy';
+  createdAt: string;
+  locales: string[];
+  folder: string;
+  /** What to run in Claude Code. */
+  command: string;
+  status: 'waiting' | 'ready' | 'invalid' | 'applied';
+  errors: string[];
+  warnings: string[];
+  headlines?: { version: 1; locales: Partial<Record<string, { slots: { input: string; A: CopyText; B: CopyText }[] }>> };
+  applied?: { variant: 'A' | 'B'; at: string };
+}
+
+/** Jobs, newest first; `limit` reads only that many (the page needs the newest one). */
+export function fetchJobs(limit?: number): Promise<AiJob[]> {
+  return request<AiJob[]>(limit ? `/api/jobs?limit=${limit}` : '/api/jobs');
+}
+
+export function fetchJob(id: string): Promise<AiJob> {
+  return request<AiJob>(`/api/jobs/${encodeURIComponent(id)}`);
+}
+
+export function createCopyJob(locales: readonly string[]): Promise<AiJob> {
+  return request<AiJob>('/api/jobs', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ locales }),
+  });
+}
+
+export function applyJob(id: string, variant: 'A' | 'B'): Promise<{ locales: string[] }> {
+  return request<{ locales: string[] }>(`/api/jobs/${encodeURIComponent(id)}/apply`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ variant }),
+  });
+}
+
+/** Path of the live event stream: event `job` with the id of a job whose files changed. */
+export const JOB_EVENTS_URL = '/api/jobs/events';

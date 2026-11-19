@@ -30,6 +30,7 @@ entries left under `[Unreleased]` is rejected by `npm run check:release`.
 - Icon variants for preview and test installs: environments in the Project screen (folder name, label, colour, badge or blueprint style) give App Store, Android and favicon sets of their own next to the unchanged production icons, checked in the export checklist and documented for Xcode, Expo, Android flavors and staging sites. (#34)
 - App Store product page header, search results and universal images per language: your first screenshot and a short phrase inside the art safe area, a row of devices across the rest, previews with a safe-area guide in the Screenshots section. (#18)
 - Google Play feature graphic with your phrase and App Store in-app event card and details images without text, per language, from the same background and phrases as the header images. (#19)
+- AI job folders: the Screenshots section prepares a job with your screenshots, texts, claims and video frames, shows the command to run in Claude Code, updates live when the result arrives, compares variant A and B per language and applies one; invalid AI results are reported and never applied. (#15)
 
 ### Changed
 

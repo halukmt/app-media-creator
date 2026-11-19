@@ -1,5 +1,6 @@
 // conventions: RULE-TESTING-3301
-import { readFileSync } from 'node:fs';
+import { readFileSync, writeFileSync } from 'node:fs';
+import path from 'node:path';
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type Page } from '@playwright/test';
 import { unzipSync } from 'fflate';
@@ -86,6 +87,36 @@ test.describe('The Screenshots section', () => {
     await page.keyboard.press('Enter');
     await expect(page.getByRole('status').filter({ hasText: 'Moved to position 2 of 2.' })).toBeVisible();
     await expect(page.getByLabel('Headline', { exact: true }).nth(1)).toHaveValue('Faire Teams in Sekunden');
+  });
+
+  test('prepares an AI job, shows the result live and applies variant B to the headlines (#15)', async ({ page, request }) => {
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await page.goto('/#/screenshots');
+    await page.getByRole('button', { name: /Preview and edit/ }).first().click();
+    await page.getByRole('button', { name: 'Prepare AI job' }).click();
+    await expect(page.getByText('Run this in Claude Code')).toBeVisible();
+    await expect(page.getByText(/\/amc-copy "/)).toBeVisible();
+    await expect(page.getByRole('status').filter({ hasText: 'Waiting for Claude Code…' })).toBeVisible();
+
+    // Play the part of the skill: write headlines.json for German into the job folder.
+    const [job] = (await (await request.get('/api/jobs')).json()) as { folder: string }[];
+    const brief = JSON.parse(readFileSync(path.join(job!.folder, 'brief.json'), 'utf8')) as { screenshots: Record<string, { input: string }[]> };
+    const slots = brief.screenshots['de-DE']!.map((slot, index) => ({
+      input: slot.input,
+      A: { headline: `Ergebnis ${index + 1}`, subline: '' },
+      B: { headline: `Mechanismus ${index + 1}`, subline: 'Mit einem Tipp' },
+    }));
+    writeFileSync(path.join(job!.folder, 'headlines.json'), JSON.stringify({ version: 1, locales: { 'de-DE': { slots } } }));
+
+    await expect(page.getByRole('status').filter({ hasText: 'Headlines are ready' })).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByRole('region', { name: 'German' }).getByText('Mechanismus 1')).toBeVisible();
+    await page.getByRole('button', { name: 'Apply variant B' }).click();
+    await page.getByRole('dialog').getByRole('button', { name: 'Apply variant B' }).click();
+    await expect(page.getByRole('status').filter({ hasText: 'Variant B applied for German.' })).toBeVisible();
+    await page.getByRole('group', { name: /Language to edit/ }).locator('label', { hasText: 'German' }).click();
+    await expect(page.getByLabel('Headline', { exact: true }).first()).toHaveValue('Mechanismus 1');
+    const results = await new AxeBuilder({ page }).analyze();
+    expect(results.violations.filter((v) => v.impact === 'serious' || v.impact === 'critical')).toEqual([]);
   });
 
   /** Opens the purpose step and picks the App Store header and search images. */

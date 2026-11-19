@@ -21,6 +21,12 @@ export const en = {
     retry: 'Try again',
     serverConnected: (version: string) => `Server ${version} connected`,
   },
+  common: {
+    copy: 'Copy',
+    copied: 'Copied',
+    selectedToCopy: 'Selected: press Ctrl+C (Cmd+C on a Mac) to copy',
+    cancel: 'Cancel',
+  },
   sections: {
     project: {
       title: 'Project',
@@ -192,6 +198,30 @@ export const en = {
     toExport: 'Open Export section',
   },
   screenshots: {
+    ai: {
+      heading: 'Write headlines with AI',
+      intro:
+        'Prepares a job folder for Claude Code with your screenshots, texts and claims. Run the command in your editor; the result appears here when the files are written.',
+      prepare: 'Prepare AI job',
+      preparing: 'Preparing…',
+      commandLabel: 'Run this in Claude Code',
+      waiting: 'Waiting for Claude Code…',
+      ready: 'Headlines are ready',
+      invalid: 'The AI result is not valid, nothing was applied',
+      warningsTitle: 'Check these points',
+      variant: (variant: string) => `Variant ${variant}`,
+      variantHint: 'A: outcome first. B: mechanism first.',
+      apply: (variant: string) => `Apply variant ${variant}`,
+      applying: 'Applying…',
+      confirmTitle: (variant: string) => `Apply variant ${variant}?`,
+      confirmBody: (languages: string) => `Replaces the headlines and sublines for ${languages}.`,
+      applied: (variant: string, languages: string) => `Variant ${variant} applied for ${languages}.`,
+      applyFailed: 'The headlines could not be applied.',
+      prepareFailed: 'The AI job could not be prepared.',
+      forLocales: (languages: string) => `Job for ${languages}`,
+      missingLocales: (languages: string) => `No headlines for ${languages} in this result.`,
+      slot: (position: number) => `Screenshot ${position}`,
+    },
     uploadLabel: 'Screenshots',
     uploadHint: 'PNG, JPEG or WebP, plain screenshots of your app. Up to 10 per language.',
     uploadLocaleLabel: 'Language of the screenshots',

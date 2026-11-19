@@ -8,6 +8,7 @@ import { localOnly } from './protection.js';
 import { catalogueRoutes } from './catalogue-routes.js';
 import { exportRoutes } from './export-routes.js';
 import { generateRoutes } from './generate-routes.js';
+import { jobsRoutes } from './jobs-routes.js';
 import { workspaceRoutes } from './workspace-routes.js';
 
 export interface AppOptions {
@@ -34,6 +35,7 @@ export function createApp({ webRoot, packageInfo, workspace }: AppOptions): Hono
     app.route('/api', workspaceRoutes(workspace));
     app.route('/api', exportRoutes(workspace));
     app.route('/api', generateRoutes(workspace));
+    app.route('/api', jobsRoutes(workspace));
   }
 
   app.all('/api/*', (c) => c.json({ error: 'Not found' }, 404));

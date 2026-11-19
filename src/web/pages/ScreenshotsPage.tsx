@@ -1,7 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ApiError,
+  JOB_EVENTS_URL,
+  applyJob,
+  createCopyJob,
   fetchBackgrounds,
+  fetchJob,
+  fetchJobs,
   fetchCreativeSettings,
   fetchInputs,
   fetchScreenshots,
@@ -14,6 +19,7 @@ import {
   saveCreativeSettings,
   saveScreenshots,
   uploadScreenshot,
+  type AiJob,
   type BackgroundPreset,
   type Catalogue,
   type CardLayout,
@@ -25,6 +31,7 @@ import {
   type ScreenshotSets,
   type StoredInput,
 } from '../api';
+import { AiJobPanel, type AiJobMessage } from '../components/AiJobPanel';
 import { BusyButton } from '../components/BusyButton';
 import { FileField } from '../components/FileField';
 import { LocaleSelector } from '../components/LocaleSelector';
@@ -38,6 +45,7 @@ import { StatusAlert } from '../components/StatusAlert';
 import { ToggleField } from '../components/ToggleField';
 import { en } from '../i18n/en';
 import { SectionLayout } from '../layouts/SectionLayout';
+import { latestCopyJob } from '../lib/ai-jobs';
 import { CREATIVE_PREVIEW_WIDTH, creativeLabelKey, isCreativePurpose, safeAreaPercent, safeAreaShares } from '../lib/creative';
 import type { CheckStatus } from '../lib/export';
 import { projectLocaleOptions, sourceLocaleFor } from '../lib/locale-selection';
@@ -89,6 +97,9 @@ export function ScreenshotsPage({ project, catalogue, selection, onSelectionChan
   const [creativePreviews, setCreativePreviews] = useState<Partial<Record<string, CreativePreviewResult | 'failed'>>>({});
   const [creativeLoadFailed, setCreativeLoadFailed] = useState(false);
   const [showSafeArea, setShowSafeArea] = useState(true);
+  const [aiJob, setAiJob] = useState<AiJob | null>(null);
+  const [aiBusy, setAiBusy] = useState<'prepare' | 'A' | 'B' | null>(null);
+  const [aiMessage, setAiMessage] = useState<AiJobMessage | null>(null);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const creativeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -127,7 +138,28 @@ export function ScreenshotsPage({ project, catalogue, selection, onSelectionChan
       .then(setBackgrounds)
       .catch(() => setBackgrounds({ presets: [], palette: [] }));
     void loadCreative();
+    fetchJobs(1)
+      .then((jobs) => setAiJob(latestCopyJob(jobs)))
+      .catch(() => setAiJob(null));
   }, [reload, loadCreative]);
+
+  // The newest AI job is followed through the server's event stream, also after an invalid or applied result (the AI
+  // may write again into the same folder); a result written while the page was closed is in the list above.
+  const aiJobId = aiJob?.id;
+  useEffect(() => {
+    if (!aiJobId) return undefined;
+    const events = new EventSource(JOB_EVENTS_URL);
+    const refresh = () =>
+      void fetchJob(aiJobId)
+        .then(setAiJob)
+        .catch(() => undefined);
+    events.addEventListener('job', (event) => {
+      if ((event as MessageEvent<string>).data === aiJobId) refresh();
+    });
+    // After a dropped connection the browser reconnects; changes in between are fetched once.
+    events.addEventListener('open', refresh);
+    return () => events.close();
+  }, [aiJobId]);
 
   // Devices the project picked for the stores that are enabled.
   const devices = useMemo(() => {
@@ -351,6 +383,52 @@ export function ScreenshotsPage({ project, catalogue, selection, onSelectionChan
   const layoutOptions: Option[] = LAYOUTS.map((layout) => ({ id: layout, label: en.screenshots.layouts[layout] }));
   const inheritOption: Option = { id: INHERIT, label: en.screenshots.inherit };
   const slotFrameOptions: Option[] = [inheritOption, { id: 'device', label: en.screenshots.frameDevice }, { id: 'none', label: en.screenshots.frameNone }];
+
+  async function prepareAiJob() {
+    setAiMessage(null);
+    // The job must contain what the user sees: send pending edits first.
+    try {
+      await flushSave();
+    } catch {
+      setAiMessage({ action: 'prepare', tone: 'error', text: en.screenshots.saveFirst });
+      return;
+    }
+    setAiBusy('prepare');
+    try {
+      setAiJob(await createCopyJob([...selection]));
+    } catch (error) {
+      setAiMessage({ action: 'prepare', tone: 'error', text: en.screenshots.ai.prepareFailed, details: messagesOf(error) });
+    } finally {
+      setAiBusy(null);
+    }
+  }
+
+  async function applyAiJob(variant: 'A' | 'B') {
+    if (!aiJob) return;
+    setAiMessage(null);
+    try {
+      await flushSave();
+    } catch {
+      setAiMessage({ action: 'apply', tone: 'error', text: en.screenshots.saveFirst });
+      return;
+    }
+    setAiBusy(variant);
+    try {
+      await applyJob(aiJob.id, variant);
+    } catch (error) {
+      setAiMessage({ action: 'apply', tone: 'error', text: en.screenshots.ai.applyFailed, details: messagesOf(error) });
+      setAiBusy(null);
+      return;
+    }
+    // Applied on the server: show it at once, then load the new sets. A failed refresh must not read as a failed apply.
+    setAiJob((current) => (current ? { ...current, status: 'applied', applied: { variant, at: new Date().toISOString() } } : current));
+    await reload();
+    setPreviewVersion((v) => v + 1);
+    void fetchJob(aiJob.id)
+      .then(setAiJob)
+      .catch(() => undefined);
+    setAiBusy(null);
+  }
 
   const steps = [
     { id: 'upload', label: en.steps.upload },
@@ -708,6 +786,17 @@ export function ScreenshotsPage({ project, catalogue, selection, onSelectionChan
               </ol>
             )}
           </section>
+          <AiJobPanel
+            job={aiJob}
+            order={project.locales}
+            localeName={localeName}
+            slotTitle={(_locale, input, index) => `${en.screenshots.ai.slot(index + 1)} · ${uploadName(input)}`}
+            preparing={aiBusy === 'prepare'}
+            applying={aiBusy === 'A' || aiBusy === 'B' ? aiBusy : null}
+            message={aiMessage}
+            onPrepare={() => void prepareAiJob()}
+            onApply={(variant) => void applyAiJob(variant)}
+          />
           <div>
             <button type="button" className="btn btn-primary min-h-11" onClick={() => goTo('export')}>
               {en.steps.export} →
