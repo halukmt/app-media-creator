@@ -11,7 +11,13 @@ export type ProjectField =
   | 'targets.google'
   | 'targets.web'
   | 'claims.allowed'
-  | 'claims.forbidden';
+  | 'claims.forbidden'
+  | `environments.${number}.${EnvironmentField}`;
+
+type EnvironmentField = 'id' | 'badge' | 'color' | 'style';
+const ENVIRONMENT_FIELDS: readonly EnvironmentField[] = ['id', 'badge', 'color', 'style'];
+/** Matches the server limit; error paths of further entries end up in `other`. */
+const MAX_ENVIRONMENT_ERRORS = 5;
 
 const FIELDS: readonly ProjectField[] = [
   'name',
@@ -22,6 +28,7 @@ const FIELDS: readonly ProjectField[] = [
   'targets.web',
   'claims.allowed',
   'claims.forbidden',
+  ...Array.from({ length: MAX_ENVIRONMENT_ERRORS }, (_, index) => ENVIRONMENT_FIELDS.map((field) => `environments.${index}.${field}` as const)).flat(),
 ];
 
 export interface GroupedErrors {

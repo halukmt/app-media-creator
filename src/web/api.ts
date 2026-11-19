@@ -17,6 +17,18 @@ export interface ProjectSettings {
   sourceLocale: string;
   locales: string[];
   claims: { allowed: string[]; forbidden: string[] };
+  environments: Environment[];
+}
+
+export type EnvironmentColor = 'orange' | 'purple' | 'green' | 'red' | 'blue' | 'gray';
+export type EnvironmentStyle = 'badge' | 'blueprint';
+
+/** A non-production install whose icons get a label (mirrors src/core/workspace/project.ts). */
+export interface Environment {
+  id: string;
+  badge: string;
+  color: EnvironmentColor;
+  style: EnvironmentStyle;
 }
 
 export interface CatalogueLocale {
@@ -36,6 +48,9 @@ export interface CatalogueDevice {
 export interface Catalogue {
   locales: CatalogueLocale[];
   devices: Record<TargetId, CatalogueDevice[]>;
+  environmentColors: { id: EnvironmentColor; color: string }[];
+  maxEnvironments: number;
+  maxBadgeLength: number;
 }
 
 /** An API error with the messages the server sent (validation errors or one error text). */
@@ -82,6 +97,7 @@ export interface ChecklistItem {
   name: string;
   required: boolean;
   locale?: string;
+  environment?: string;
   status: CheckStatus;
   messages: { level: 'error' | 'warning' | 'info'; text: string }[];
   files: string[];
@@ -244,6 +260,7 @@ export interface LogoOutput {
   specId: string;
   name: string;
   locale?: string;
+  environment?: string;
   pack: LogoPack;
   width?: number;
   height?: number;

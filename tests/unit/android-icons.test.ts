@@ -41,7 +41,7 @@ describe('generateAndroidIcons builds the Play icon and the launcher resources',
 
   test('writes every density folder with the sizes of the catalogue and a valid file each', async () => {
     const workspace = await withLogo(svgBytes(), 'logo.svg');
-    const entries = await generateAndroidIcons(workspace);
+    const entries = (await generateAndroidIcons(workspace)).filter((e) => e.environment === undefined);
     expect(entries).toHaveLength(1 + 5 * 4 + 1);
     expect((await inspectImage(res(workspace, 'mipmap-xxxhdpi/ic_launcher_foreground.png'))).width).toBe(432);
     expect((await inspectImage(res(workspace, 'mipmap-mdpi/ic_launcher.png'))).width).toBe(48);
@@ -108,7 +108,7 @@ describe('generateAndroidIcons builds the Play icon and the launcher resources',
 
   test('renders an SVG with a large declared canvas and rejects an absurd one', async () => {
     const large = await withLogo(squareSvg(16000), 'large.svg');
-    expect(await generateAndroidIcons(large)).toHaveLength(22);
+    expect((await generateAndroidIcons(large)).filter((e) => e.environment === undefined)).toHaveLength(22);
     // The upload already refuses an SVG that cannot be read at all; loadLogo also refuses canvases it cannot bound.
     await expect(withLogo(squareSvg(2_000_000), 'absurd.svg')).rejects.toThrow('A logo must be PNG, JPEG, WEBP, SVG');
     const file = path.join((await workspaceFactory()).root, 'wide.svg');

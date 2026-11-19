@@ -20,8 +20,10 @@ describe('The generate API builds the web icons', () => {
   test('generates the web icons and returns the registered files', async () => {
     const response = await post(await appFactory(true), JSON.stringify({ background: '#0079dd' }));
     expect(response.status).toBe(201);
-    const entries = (await response.json()) as { path: string }[];
-    expect(entries).toHaveLength(8);
+    const entries = (await response.json()) as { path: string; environment?: string }[];
+    // 8 production files plus the same set for the default preview environment.
+    expect(entries.filter((e) => !e.environment)).toHaveLength(8);
+    expect(entries.filter((e) => e.environment === 'preview')).toHaveLength(8);
     expect(entries[0]?.path).toBe('web/shared/favicons/favicon.ico');
   });
 
@@ -62,7 +64,9 @@ describe('The generate API builds the App Store icons and offers the logo palett
       body: JSON.stringify({ background: '#0079dd', logoScale: 0.6 }),
     });
     expect(response.status).toBe(201);
-    expect(((await response.json()) as unknown[]).length).toBe(5);
+    const entries = (await response.json()) as { environment?: string }[];
+    expect(entries.filter((e) => !e.environment)).toHaveLength(5);
+    expect(entries.filter((e) => e.environment === 'preview')).toHaveLength(5);
   });
 
   test('rejects a logo scale that is not a number and a missing logo', async () => {
@@ -86,7 +90,10 @@ describe('The generate API builds the Android icons', () => {
     const app = await appFactory(true);
     const response = await app.request('http://localhost:4790/api/generate/android-icons', { method: 'POST', body: JSON.stringify({ background: '#222222' }) });
     expect(response.status).toBe(201);
-    expect(((await response.json()) as unknown[]).length).toBe(22);
+    const entries = (await response.json()) as { environment?: string }[];
+    expect(entries.filter((e) => !e.environment)).toHaveLength(22);
+    // The Play icon is a store asset without variants.
+    expect(entries.filter((e) => e.environment === 'preview')).toHaveLength(21);
   });
 
   test('asks for a logo with 400 when none was uploaded', async () => {

@@ -23,6 +23,24 @@ export async function opaqueJpegLogo(): Promise<Uint8Array> {
   );
 }
 
+/** A transparent SVG logo: a green ring with a dark dot inside, nothing in the corners. */
+export function transparentSvg(): Uint8Array {
+  return new TextEncoder().encode(
+    '<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200" viewBox="0 0 200 200">' +
+      '<circle cx="100" cy="100" r="80" fill="none" stroke="#16a34a" stroke-width="28"/><circle cx="100" cy="100" r="30" fill="#111827"/></svg>',
+  );
+}
+
+/** A flat PNG logo without transparency: an orange block on a white background. */
+export async function flatPng(): Promise<Uint8Array> {
+  return Uint8Array.from(
+    await sharp({ create: { width: 300, height: 300, channels: 3, background: '#ffffff' } })
+      .composite([{ input: { create: { width: 180, height: 120, channels: 3, background: '#ea580c' } }, left: 60, top: 90 }])
+      .png()
+      .toBuffer(),
+  );
+}
+
 /** A square SVG filled edge to edge, declaring the given canvas size. */
 export function squareSvg(side: number, fill = '#0099ff'): Uint8Array {
   return new TextEncoder().encode(

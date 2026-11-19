@@ -10,6 +10,46 @@ export interface TargetSettings {
   devices: string[];
 }
 
+/** Colour presets of environment badges (no free colour picker). */
+export const ENVIRONMENT_COLORS = {
+  orange: '#c2410c',
+  purple: '#7c3aed',
+  green: '#15803d',
+  red: '#b91c1c',
+  blue: '#1d4ed8',
+  gray: '#4b5563',
+} as const;
+export type EnvironmentColor = keyof typeof ENVIRONMENT_COLORS;
+export const ENVIRONMENT_STYLES = ['badge', 'blueprint'] as const;
+export type EnvironmentStyle = (typeof ENVIRONMENT_STYLES)[number];
+export const MAX_ENVIRONMENTS = 5;
+export const MAX_BADGE_LENGTH = 10;
+
+/**
+ * A non-production install (preview, dev, beta) whose icons must look different from the production app. Production
+ * is implicit and always uses the normal icons.
+ */
+export interface Environment {
+  /** Folder name in the export: lower-case letters, digits and dashes; not "production" or "shared". */
+  id: string;
+  /** Short text on the icon, e.g. PREVIEW, DEV, BETA. */
+  badge: string;
+  color: EnvironmentColor;
+  style: EnvironmentStyle;
+}
+
+export function defaultEnvironments(): Environment[] {
+  return [{ id: 'preview', badge: 'PREVIEW', color: 'orange', style: 'badge' }];
+}
+
+const ENVIRONMENT_ID = /^[a-z][a-z0-9-]{0,19}$/;
+/** `shared` and the locale folders (`de-de` is `de-DE` on case-insensitive file systems) hold other files. */
+const RESERVED_ENVIRONMENTS = new Set(['production', 'shared', ...LOCALE_IDS.map((id) => id.toLowerCase())]);
+
+export function isEnvironmentId(value: string): boolean {
+  return ENVIRONMENT_ID.test(value) && !RESERVED_ENVIRONMENTS.has(value);
+}
+
 export interface ProjectSettings {
   version: typeof PROJECT_VERSION;
   name: string;
@@ -17,6 +57,8 @@ export interface ProjectSettings {
   sourceLocale: LocaleId;
   locales: LocaleId[];
   claims: { allowed: string[]; forbidden: string[] };
+  /** Non-production environments with their own icon variants. */
+  environments: Environment[];
 }
 
 /** Screenshot spec ids a target offers as device models: the device matrix the card renderer supports. */
@@ -36,6 +78,7 @@ export function defaultProject(name = 'My app'): ProjectSettings {
     sourceLocale: 'en-US',
     locales: [...LOCALE_IDS],
     claims: { allowed: [], forbidden: [] },
+    environments: defaultEnvironments(),
   };
 }
 
@@ -46,6 +89,13 @@ const targetSchema = z.object({
   devices: z.array(z.string()).max(50),
 });
 
+const environmentSchema = z.object({
+  id: z.string().trim().toLowerCase().refine(isEnvironmentId, 'must be lower-case letters, digits or dashes, start with a letter, and not be "production", "shared" or a language code'),
+  badge: z.string().trim().toUpperCase().min(1, 'Badge text is required').max(MAX_BADGE_LENGTH, `at most ${MAX_BADGE_LENGTH} characters`),
+  color: z.enum(Object.keys(ENVIRONMENT_COLORS) as [EnvironmentColor, ...EnvironmentColor[]]),
+  style: z.enum(ENVIRONMENT_STYLES),
+});
+
 /** Input schema: accepts the locale selection as "all", one id or a list. */
 const projectInputSchema = z.object({
   version: z.literal(PROJECT_VERSION).optional(),
@@ -54,6 +104,8 @@ const projectInputSchema = z.object({
   sourceLocale: z.string(),
   locales: z.union([z.string(), z.array(z.string())]),
   claims: z.object({ allowed: claimList, forbidden: claimList }),
+  /** Absent in project files written before environments existed: the default list. */
+  environments: z.array(environmentSchema).max(MAX_ENVIRONMENTS).optional(),
 });
 
 export type ProjectValidation = { ok: true; project: ProjectSettings } | { ok: false; errors: string[] };
@@ -94,6 +146,12 @@ export function validateProject(input: unknown): ProjectValidation {
     }
   }
 
+  const environments = data.environments ?? defaultEnvironments();
+  const ids = environments.map((environment) => environment.id);
+  for (const [index, id] of ids.entries()) {
+    if (ids.indexOf(id) !== index) errors.push(`environments.${index}.id: ${id} is used twice`);
+  }
+
   if (errors.length > 0) return { ok: false, errors };
 
   const unique = (list: string[]) => [...new Set(list)];
@@ -110,6 +168,7 @@ export function validateProject(input: unknown): ProjectValidation {
       sourceLocale: data.sourceLocale as LocaleId,
       locales,
       claims: { allowed: unique(data.claims.allowed), forbidden: unique(data.claims.forbidden) },
+      environments,
     },
   };
 }

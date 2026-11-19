@@ -49,7 +49,7 @@ export function ChecklistCard({ title, status, items, locales }: Props) {
     const files = group.items.reduce((sum, item) => sum + item.files.length, 0);
     const withMessages = group.items.filter((item) => item.messages.length > 0);
     return (
-      <li key={group.specId} className="list-row items-start px-0">
+      <li key={group.key} className="list-row items-start px-0">
         {/* Fixed column, so the text starts at the same place after every badge. */}
         <span className="w-18 shrink-0">
           <StatusBadge status={group.status} />
@@ -58,9 +58,10 @@ export function ChecklistCard({ title, status, items, locales }: Props) {
           <p className="flex flex-wrap items-center gap-2 font-medium">
             <span>{first.name}</span>
             {first.required ? <RequiredBadge /> : null}
+            {group.environment ? <RequiredBadge label={en.export.environment(group.environment)} /> : null}
           </p>
           <p className="text-sm text-base-content/70">
-            {localized ? '' : `${en.export.shared} · `}
+            {localized ? '' : `${group.environment ? en.export.environment(group.environment) : en.export.shared} · `}
             {en.export.fileCount(files)}
           </p>
           {localized ? (

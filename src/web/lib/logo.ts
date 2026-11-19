@@ -10,6 +10,7 @@ export interface OutputLike {
   specId: string;
   name: string;
   locale?: string;
+  environment?: string;
   width?: number;
   height?: number;
 }
@@ -18,6 +19,7 @@ export interface OutputGroup<T extends OutputLike> {
   key: string;
   name: string;
   locale?: string;
+  environment?: string;
   files: T[];
   /** The largest image of the group (the preview); absent when the group has only documents. */
   largest?: T;
@@ -32,8 +34,14 @@ export interface OutputGroup<T extends OutputLike> {
 export function groupOutputs<T extends OutputLike>(outputs: readonly T[]): OutputGroup<T>[] {
   const groups = new Map<string, OutputGroup<T>>();
   for (const output of outputs) {
-    const key = `${output.specId}|${output.locale ?? ''}`;
-    const group = groups.get(key) ?? { key, name: output.name, ...(output.locale ? { locale: output.locale } : {}), files: [] };
+    const key = `${output.specId}|${output.locale ?? ''}|${output.environment ?? ''}`;
+    const group = groups.get(key) ?? {
+      key,
+      name: output.name,
+      ...(output.locale ? { locale: output.locale } : {}),
+      ...(output.environment ? { environment: output.environment } : {}),
+      files: [],
+    };
     group.files.push(output);
     groups.set(key, group);
   }

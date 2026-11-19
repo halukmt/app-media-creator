@@ -1,6 +1,7 @@
 import sharp from 'sharp';
 import { registerOutputs, type OutputEntry, type RegisterOptions } from '../export/manifest.js';
-import type { Workspace } from '../workspace/workspace.js';
+import { readProject, type Workspace } from '../workspace/workspace.js';
+import { ICON_SAFE_RADIUS, variantRenderer } from './environments.js';
 import { GeneratorError, loadNewestLogo } from './logo.js';
 import { assertValidOutputs, squareSize } from './outputs.js';
 import { isHexColor, renderLogoSquare, type HexColor } from './render.js';
@@ -31,7 +32,8 @@ async function solid(size: number, background: HexColor): Promise<Buffer> {
 
 /**
  * Generates the App Store icon, its dark and tinted appearances and the Icon Composer layers from the newest uploaded
- * logo. All files are rendered and validated first, then registered as one batch.
+ * logo, plus the same set per non-production environment of the project (`apple/<environment>/…`). All files are
+ * rendered and validated first, then registered as one batch.
  * Throws GeneratorError for a missing or unreadable logo or an invalid colour.
  */
 export async function generateAppStoreIcons(workspace: Workspace, options: AppStoreIconOptions = {}): Promise<OutputEntry[]> {
@@ -63,6 +65,25 @@ export async function generateAppStoreIcons(workspace: Workspace, options: AppSt
     { specId: 'apple.icon-layer-background', name: 'background', extension: 'png', order: 1, bytes: layerBackground },
     { specId: 'apple.icon-layer-foreground', name: 'foreground', extension: 'png', order: 1, bytes: onTransparent },
   ];
+  const { environments } = await readProject(workspace);
+  for (const environment of environments) {
+    const variant = variantRenderer(logo, environment);
+    const [variantIcon, variantTransparent, variantBackground] = await Promise.all([
+      variant.opaque(size, logoBox, background, ICON_SAFE_RADIUS),
+      variant.transparent(size, logoBox, ICON_SAFE_RADIUS),
+      variant.backgroundLayer(size, background),
+    ]);
+    const variantTinted = await sharp(variantTransparent).greyscale().png().toBuffer();
+    const environmentId = environment.id;
+    files.push(
+      { specId: 'apple.icon', environment: environmentId, name: 'app-icon', extension: 'png', order: 1, bytes: variantIcon },
+      { specId: 'apple.icon-dark', environment: environmentId, name: 'app-icon-dark', extension: 'png', order: 1, bytes: variantTransparent },
+      { specId: 'apple.icon-tinted', environment: environmentId, name: 'app-icon-tinted', extension: 'png', order: 1, bytes: variantTinted },
+      { specId: 'apple.icon-layer-background', environment: environmentId, name: 'background', extension: 'png', order: 1, bytes: variantBackground },
+      { specId: 'apple.icon-layer-foreground', environment: environmentId, name: 'foreground', extension: 'png', order: 1, bytes: variantTransparent },
+    );
+  }
   await assertValidOutputs(files);
-  return registerOutputs(workspace, files);
+  // A full set per run: files of environments that were removed from the project go away.
+  return registerOutputs(workspace, files, { replaceSets: { specIds: [...new Set(files.map((f) => f.specId))], locales: [undefined] } });
 }

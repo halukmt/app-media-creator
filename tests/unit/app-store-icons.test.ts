@@ -26,7 +26,7 @@ async function pixel(filePath: string, left: number, top: number): Promise<numbe
 describe('generateAppStoreIcons builds the App Store icon set from the logo', () => {
   test('writes the icon, both appearances and both Icon Composer layers, all valid', async () => {
     const workspace = await withLogo(svgBytes(), 'logo.svg');
-    const entries = await generateAppStoreIcons(workspace, { background: '#0079dd' });
+    const entries = (await generateAppStoreIcons(workspace, { background: '#0079dd' })).filter((e) => e.environment === undefined);
     expect(entries.map((e) => e.path).sort()).toEqual([
       'apple/shared/icon-composer/background.png',
       'apple/shared/icon-composer/foreground.png',

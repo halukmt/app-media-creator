@@ -90,6 +90,40 @@ test.describe('The Project screen edits the workspace settings', () => {
     await expect(bar.getByRole('checkbox', { name: /^French/ })).toHaveCount(0);
   });
 
+  test('adds a blueprint environment, shows a field error for a reserved name and saves the fixed list', async ({ page, request }) => {
+    await page.setViewportSize({ width: 375, height: 900 });
+    await page.goto('/#/project');
+    await expect(page.getByRole('heading', { level: 3, name: 'Environment 1: PREVIEW' })).toBeVisible();
+    await page.getByRole('button', { name: 'Add environment' }).click();
+    const second = page.getByRole('region', { name: /^Environment 2:/ });
+    await expect(page.getByRole('heading', { level: 3, name: 'Environment 2: DEV' })).toBeFocused();
+    await second.getByLabel('Folder name').fill('shared');
+    await page.getByRole('button', { name: 'Save project' }).click();
+    await expect(page.getByRole('alert').filter({ hasText: 'could not be saved' })).toBeVisible();
+    await expect(second.getByLabel('Folder name')).toBeFocused();
+
+    await second.getByLabel('Folder name').fill('qa');
+    await second.getByLabel('Label on the icon').fill('qa');
+    await second.locator('label', { hasText: 'Green' }).click();
+    await page.getByRole('button', { name: 'Save project' }).click();
+    await expect(page.getByRole('status').filter({ hasText: 'Project saved.' })).toBeVisible();
+    const stored = (await (await request.get('/api/project')).json()) as { environments: unknown[] };
+    expect(stored.environments).toEqual([
+      { id: 'preview', badge: 'PREVIEW', color: 'orange', style: 'badge' },
+      { id: 'qa', badge: 'QA', color: 'green', style: 'blueprint' },
+    ]);
+
+    const results = await new AxeBuilder({ page }).include('#project-environments').analyze();
+    expect(results.violations.filter((v) => v.impact === 'serious' || v.impact === 'critical')).toEqual([]);
+    const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+    expect(overflow).toBeLessThanOrEqual(0);
+    await page.getByRole('heading', { level: 2, name: 'Preview and test installs' }).scrollIntoViewIfNeeded();
+    await page.screenshot({ path: 'test-results/screenshots/project-environments-375.png', fullPage: true });
+
+    await page.getByRole('button', { name: 'Remove environment QA' }).click();
+    await expect(page.getByRole('heading', { level: 3, name: 'Environment 1: PREVIEW' })).toBeFocused();
+  });
+
   test('names only enabled stores in an empty state', async ({ page, request }) => {
     const project = projectInputFactory();
     const targets = project.targets as Record<string, { enabled: boolean; devices: string[] }>;

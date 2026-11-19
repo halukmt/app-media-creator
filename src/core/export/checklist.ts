@@ -17,6 +17,8 @@ export interface ChecklistItem {
   required: boolean;
   /** Locale of a localized set; absent for shared assets. */
   locale?: LocaleId;
+  /** Non-production environment of an icon variant set; absent for production. */
+  environment?: string;
   status: CheckStatus;
   messages: CheckMessage[];
   /** Output paths of the files in this set. */
@@ -69,9 +71,10 @@ async function checkSet(
   chosen: boolean,
   input: ChecklistInput,
   locale?: LocaleId,
+  environment?: string,
 ): Promise<ChecklistItem> {
   const messages: CheckMessage[] = [];
-  const where = locale ? ` for ${locale}` : '';
+  const where = locale ? ` for ${locale}` : environment ? ` for ${environment}` : '';
   const measure = input.measure ?? inspectImage;
 
   if (files.length === 0) {
@@ -124,6 +127,7 @@ async function checkSet(
     name: spec.name,
     required: spec.required,
     ...(locale ? { locale } : {}),
+    ...(environment ? { environment } : {}),
     status: statusOf(messages),
     messages,
     files: files.map((f) => f.path),
@@ -155,7 +159,28 @@ export async function buildChecklist(input: ChecklistInput): Promise<Checklist> 
           items.push(await checkSet(spec, ofSpec.filter((e) => e.locale === locale), chosen.has(spec.id), input, locale));
         }
       } else {
-        items.push(await checkSet(spec, ofSpec, chosen.has(spec.id), input));
+        const production = ofSpec.filter((e) => e.environment === undefined);
+        items.push(await checkSet(spec, production, chosen.has(spec.id), input));
+        // Icon variants: one set per environment, checked like the production set, configured environments first in
+        // project order. Once an asset has variants, a configured environment without files is reported as missing.
+        const configured = input.project.environments.map((e) => e.id);
+        const registered = [...new Set(ofSpec.flatMap((e) => (e.environment ? [e.environment] : [])))];
+        const environments = [
+          ...(registered.length > 0 ? configured : []),
+          ...registered.filter((id) => !configured.includes(id)),
+        ];
+        for (const environment of environments) {
+          const files = ofSpec.filter((e) => e.environment === environment);
+          const item = await checkSet({ ...spec, required: false }, files, false, input, undefined, environment);
+          if (!configured.includes(environment)) {
+            item.messages.unshift({
+              level: 'warning',
+              text: `${environment} is no longer an environment of the project and is not exported; generate the icons again to delete its files`,
+            });
+            item.status = statusOf(item.messages);
+          }
+          items.push(item);
+        }
       }
     }
     targets.push({ target, status: worst(items.map((i) => i.status)), items });
@@ -182,7 +207,8 @@ export function checklistMarkdown(checklist: Checklist, projectName: string): st
   for (const target of checklist.targets) {
     lines.push(`## ${titles[target.target]}: ${icon[target.status]}`, '');
     for (const item of target.items) {
-      lines.push(`- **${icon[item.status]}** ${item.name}${item.locale ? ` (${item.locale})` : ''}: ${item.files.length} file(s)`);
+      const scope = item.locale ?? item.environment;
+      lines.push(`- **${icon[item.status]}** ${item.name}${scope ? ` (${scope})` : ''}: ${item.files.length} file(s)`);
       for (const message of item.messages) lines.push(`  - ${message.level}: ${message.text}`);
     }
     lines.push('');
