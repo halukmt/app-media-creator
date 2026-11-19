@@ -11,3 +11,4 @@ Timer and unmount flushes ignore the rejection; the page already shows "Changes 
 
 | Source | Finding | Severity | Decision | Status |
 |---|---|---|---|---|
+| code-review | A flush with nothing pending resolved although the save already running failed | major | `flush` returns the latest attempt when nothing new is pending; test | fixed |

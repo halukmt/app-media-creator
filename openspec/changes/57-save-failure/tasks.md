@@ -2,7 +2,7 @@
 
 ## 1. Fix
 
-- [x] 1.1 Save queue with failure handling; verify `tests/unit/save-queue.test.ts` (newest wins, failure keeps edits, newer edit during failure, nothing pending)
+- [x] 1.1 Save queue with failure handling; verify `tests/unit/save-queue.test.ts` (newest wins, failure keeps edits, newer edit during failure, failure of a running save, nothing pending)
 - [x] 1.2 Screenshots page stops upload and generate on a failed flush; verify `npm run check` and the screenshots e2e
 
 ## 2. Verification loop

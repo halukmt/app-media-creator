@@ -14,6 +14,9 @@ export function createSaveQueue<T>(save: (document: T) => Promise<unknown>, onSa
   let pending: { document: T } | null = null;
   // Settled chain of saves; never stays rejected, so later flushes still run.
   let chain: Promise<void> = Promise.resolve();
+  // The latest attempt itself: a flush with nothing new to send waits for it and fails with it, so a save that is
+  // still running (started by the debounce timer) cannot fail unnoticed.
+  let last: Promise<void> = Promise.resolve();
 
   return {
     schedule(document) {
@@ -24,7 +27,7 @@ export function createSaveQueue<T>(save: (document: T) => Promise<unknown>, onSa
     },
     flush() {
       const next = pending;
-      if (!next) return chain;
+      if (!next) return last;
       pending = null;
       const run = chain.then(async () => {
         try {
@@ -37,6 +40,9 @@ export function createSaveQueue<T>(save: (document: T) => Promise<unknown>, onSa
         }
       });
       chain = run.catch(() => undefined);
+      last = run;
+      // Nobody may await `last`; keep an unawaited rejection from being reported as unhandled.
+      run.catch(() => undefined);
       return run;
     },
   };

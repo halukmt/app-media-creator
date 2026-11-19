@@ -50,6 +50,24 @@ describe('The save queue stores the latest edits one save at a time', () => {
     expect(save.mock.calls.at(-1)).toEqual(['newer']);
   });
 
+  test('fails a flush with nothing new when the save already running fails', async () => {
+    let release: () => void = () => undefined;
+    const save = vi.fn(
+      () =>
+        new Promise<void>((_resolve, reject) => {
+          release = () => reject(new Error('offline'));
+        }),
+    );
+    const queue = createSaveQueue(save);
+    queue.schedule('edit');
+    void queue.flush().catch(() => undefined); // the debounce timer
+    await vi.waitFor(() => expect(save).toHaveBeenCalled());
+    const beforeGenerate = queue.flush(); // the Generate button, nothing new to send
+    release();
+    await expect(beforeGenerate).rejects.toThrow('offline');
+    expect(queue.hasPending()).toBe(true);
+  });
+
   test('resolves at once when nothing is pending', async () => {
     const save = vi.fn(async () => undefined);
     await createSaveQueue(save).flush();
