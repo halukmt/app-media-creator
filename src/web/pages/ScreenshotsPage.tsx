@@ -455,35 +455,38 @@ export function ScreenshotsPage({ project, catalogue, selection, onSelectionChan
     setEditsLocked(true);
     setAiBusy(variant);
     try {
-      try {
-        await flushSave();
-      } catch {
-        setAiMessage({ action: 'apply', tone: 'error', text: en.screenshots.saveFirst });
-        return;
-      }
-      try {
-        await applyJob(aiJob.id, variant);
-        // Applied on the server: show it at once. A failed refresh below must not read as a failed apply.
-        showJob({ ...aiJob, status: 'applied', applied: { variant, at: new Date().toISOString() } });
-      } catch (error) {
-        setAiMessage({ action: 'apply', tone: 'error', text: en.screenshots.ai.applyFailed, details: messagesOf(error) });
-      } finally {
-        // Also after an error: the server may have saved the headlines before the answer was lost. Only a reload
-        // started from now on shows the server's state and may release the lock.
-        lockedAfter.current = reloadCount.current;
-        refreshJob(aiJob.id);
-      }
+      await flushSave();
+    } catch {
+      // Nothing was sent: the page is as before. Only an earlier apply that still waits for its reload keeps edits
+      // paused, and that reload is tried now (#89).
+      setAiMessage({ action: 'apply', tone: 'error', text: en.screenshots.saveFirst });
+      applyRunning.current = false;
+      setAiBusy(null);
+      setEditsLocked(lockedAfter.current !== null);
+      if (lockedAfter.current !== null) void reload();
+      return;
+    }
+    try {
+      await applyJob(aiJob.id, variant);
+      // Applied on the server: show it at once. A failed refresh below must not read as a failed apply.
+      showJob({ ...aiJob, status: 'applied', applied: { variant, at: new Date().toISOString() } });
+    } catch (error) {
+      setAiMessage({ action: 'apply', tone: 'error', text: en.screenshots.ai.applyFailed, details: messagesOf(error) });
     } finally {
+      // Also after an error: the server may have saved the headlines before the answer was lost. Only a reload
+      // started from now on shows the server's state and may release the lock.
+      lockedAfter.current = reloadCount.current;
+      refreshJob(aiJob.id);
       applyRunning.current = false;
     }
     try {
       // Releases the lock when it succeeds; when it fails, the lock stays until a later reload succeeds (#87).
-      if (lockedAfter.current !== null) await reload();
-      else setEditsLocked(false);
+      await reload();
     } finally {
       setAiBusy(null);
     }
   }
+
 
   const steps = [
     { id: 'upload', label: en.steps.upload },

@@ -159,6 +159,39 @@ test.describe('The Screenshots section', () => {
     await expect(headline).toHaveValue('Ergebnis eins');
   });
 
+  test('leaves the apply buttons usable when saving pending edits fails before an apply (#89)', async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await page.goto('/#/screenshots');
+    await page.getByRole('button', { name: /Preview and edit/ }).first().click();
+    await page.getByRole('group', { name: /Language to edit/ }).locator('label', { hasText: 'German' }).click();
+    let applyRequests = 0;
+    page.on('request', (request) => {
+      if (request.method() === 'POST' && /\/api\/jobs\/[^/]+\/apply$/.test(request.url())) applyRequests += 1;
+    });
+    // Saves of the sets fail while this route is set.
+    await page.route('**/api/screenshots', async (route) => {
+      if (route.request().method() === 'PUT') await route.fulfill({ status: 500, contentType: 'application/json', body: JSON.stringify({ error: 'Disk full' }) });
+      else await route.continue();
+    });
+    try {
+      const headline = page.getByLabel('Headline', { exact: true }).first();
+      await headline.fill('Pending edit');
+      await page.getByRole('button', { name: 'Apply variant B' }).click();
+      await page.getByRole('dialog').getByRole('button', { name: 'Apply variant B' }).click();
+      await expect(page.getByRole('alert').filter({ hasText: 'Your latest changes could not be saved' }).first()).toBeVisible();
+      // Nothing was applied: no request, the dialog is closed, no paused note, both buttons ready, edits taken.
+      expect(applyRequests).toBe(0);
+      await expect(page.getByRole('dialog')).toBeHidden();
+      await expect(page.getByText('Changes are paused until the applied headlines are loaded.')).toHaveCount(0);
+      await expect(page.getByRole('button', { name: 'Apply variant A' })).not.toHaveAttribute('aria-disabled', 'true');
+      await expect(page.getByRole('button', { name: 'Apply variant B' })).not.toHaveAttribute('aria-disabled', 'true');
+      await headline.fill('Still editable');
+      await expect(headline).toHaveValue('Still editable');
+    } finally {
+      await page.unroute('**/api/screenshots');
+    }
+  });
+
   /** Opens the purpose step and picks the App Store header and search images. */
   async function chooseHeader(page: Page) {
     await page.goto('/#/screenshots');
