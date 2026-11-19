@@ -372,3 +372,15 @@
 - Brief slots carry `layout` + `limits` (`COPY_LIMITS`: text-top 30/40, text-top-large 26/40, text-bottom 34/44);
   `limitsFor` falls back for older briefs. Tool warnings name the slot.
 - `/code-review` 10 findings, all fixed. Next: #24 (store texts, P1 L).
+
+## #24 Store texts (PR #95, merged)
+
+- Catalogue `src/core/specs/texts.ts` (Apple keywords 100 bytes UTF-8; limits verified on developer.apple.com and
+  support.google.com), `store-texts.json` with revision (broken file throws `StoreTextsFileError`, never overwritten),
+  job task `store-texts` + skill `amc-store-texts` (humanizer Light adapted from ste80-humanizer, MIT notices),
+  `GET /api/jobs?task=`, `applyJob` dispatch by brief task, export `<store>/store-texts/<store code>/NN-<field>.txt`.
+- UI: generic `AiJobPanel`, `AiResultCard` (was HeadlineVariantsCard), `SaveStatus`, `StoreTextsCard`, TextField
+  counter/messages (frame is a div now). Store texts e2e runs in the serial chain after logo.
+- Reviews: code-review 10, design-critic 13 (fixed except a status badge per language), security clean.
+- New: #96 shared hooks (P2 S, Backlog), #97 task-haluk confirm "no step bar" (P1 XS, sub-issue of #24).
+- Lesson: node -e replacements inside bash double quotes eat backslashes and backticks; use a patch file.
