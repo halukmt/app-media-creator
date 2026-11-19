@@ -50,6 +50,19 @@ export async function croppedWordmarkJpeg(): Promise<Uint8Array> {
   return Uint8Array.from(await sharp({ create: { width: 600, height: 150, channels: 3, background: '#ffffff' } }).composite(bars).jpeg({ quality: 92 }).toBuffer());
 }
 
+/** An opaque one-channel greyscale PNG logo: a dark block (grey 30) on white. */
+export async function greyscalePng(): Promise<Uint8Array> {
+  return Uint8Array.from(
+    await sharp({ create: { width: 300, height: 300, channels: 3, background: '#ffffff' } })
+      .composite([{ input: { create: { width: 150, height: 150, channels: 3, background: '#1e1e1e' } }, left: 75, top: 75 }])
+      .greyscale()
+      .toColourspace('b-w')
+      .removeAlpha()
+      .png()
+      .toBuffer(),
+  );
+}
+
 /** A transparent SVG logo: a green ring with a dark dot inside, nothing in the corners. */
 export function transparentSvg(): Uint8Array {
   return new TextEncoder().encode(

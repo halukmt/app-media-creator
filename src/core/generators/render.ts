@@ -1,5 +1,5 @@
 import { readFile } from 'node:fs/promises';
-import sharp from 'sharp';
+import sharp, { type Sharp } from 'sharp';
 
 /** A colour as `#rrggbb`. */
 export type HexColor = `#${string}`;
@@ -106,22 +106,35 @@ export function encodeIco(images: { size: number; png: Buffer }[]): Buffer {
   return Buffer.concat([header, directory, ...images.map((image) => image.png)]);
 }
 
+/** 8-bit RGBA pixels of an image, with its size. */
+export interface RgbaPixels {
+  data: Buffer;
+  width: number;
+  height: number;
+}
+
+/**
+ * Reads the output of a sharp pipeline as 8-bit sRGB with alpha, 4 bytes per pixel, whatever the colour space and
+ * depth of the input (greyscale, 16-bit). Every pixel loop over logo rasters reads through this helper; it throws if
+ * the buffer does not have that layout, instead of letting a loop read the wrong bytes.
+ */
+export async function readRgba(pipeline: Sharp): Promise<RgbaPixels> {
+  const { data, info } = await pipeline.toColourspace('srgb').ensureAlpha().raw({ depth: 'uchar' }).toBuffer({ resolveWithObject: true });
+  if (info.channels !== 4 || data.length !== info.width * info.height * 4) {
+    throw new Error(`Expected 8-bit RGBA pixels, got ${info.channels} channels and ${data.length} bytes for ${info.width}×${info.height}`);
+  }
+  return { data, width: info.width, height: info.height };
+}
+
 /**
  * Up to five main colours of the logo, most frequent first, as suggestions for background colours.
  * Transparent pixels are ignored; colours are grouped in steps of 16 per channel and reported as the group average.
  */
 export async function logoPalette(logo: LogoSource, count = 5): Promise<HexColor[]> {
   const input = logo.isSvg ? sharp(logo.bytes, { density: svgDensity(logo, 64) }) : sharp(logo.bytes);
-  const { data, info } = await input
-    .autoOrient()
-    .resize(64, 64, { fit: 'inside' })
-    // Greyscale logos stay in the b-w colour space otherwise; the loop below expects RGBA.
-    .toColourspace('srgb')
-    .ensureAlpha()
-    .raw()
-    .toBuffer({ resolveWithObject: true });
+  const { data } = await readRgba(input.autoOrient().resize(64, 64, { fit: 'inside' }));
   const buckets = new Map<number, { n: number; r: number; g: number; b: number }>();
-  for (let i = 0; i < data.length; i += info.channels) {
+  for (let i = 0; i < data.length; i += 4) {
     const [r, g, b, a] = [data[i]!, data[i + 1]!, data[i + 2]!, data[i + 3]!];
     if (a < 128) continue;
     const key = ((r >> 4) << 8) | ((g >> 4) << 4) | (b >> 4);
@@ -194,13 +207,9 @@ function borderOffsets(width: number, height: number): number[] {
  */
 async function analyseBackground(logo: LogoSource): Promise<Rgb | null> {
   const input = logo.isSvg ? sharp(logo.bytes, { density: svgDensity(logo, ANALYSIS_BOX) }) : sharp(logo.bytes);
-  const { data, info } = await input
-    .autoOrient()
-    .resize(ANALYSIS_BOX, ANALYSIS_BOX, { fit: 'inside', withoutEnlargement: !logo.isSvg })
-    .ensureAlpha()
-    .raw()
-    .toBuffer({ resolveWithObject: true });
-  const { width, height } = info;
+  const { data, width, height } = await readRgba(
+    input.autoOrient().resize(ANALYSIS_BOX, ANALYSIS_BOX, { fit: 'inside', withoutEnlargement: !logo.isSvg }),
+  );
   const border = borderOffsets(width, height);
   const corners = [0, width - 1, (height - 1) * width, height * width - 1].map((pixel): Rgb => [data[pixel * 4]!, data[pixel * 4 + 1]!, data[pixel * 4 + 2]!]);
   let background: Rgb | null = null;
@@ -241,12 +250,12 @@ function logoBackground(logo: LogoSource): Promise<Rgb | null> {
  */
 export async function renderSilhouette(logo: LogoSource, options: { size: number; logoBox: number; color: HexColor }): Promise<Buffer> {
   const placed = await renderLogoSquare(logo, { size: options.size, logoBox: options.logoBox });
-  const { data, info } = await sharp(placed).raw().toBuffer({ resolveWithObject: true });
+  const { data, width, height } = await readRgba(sharp(placed));
   const background = await logoBackground(logo);
   if (background) {
     for (let i = 0; i < data.length; i += 4) if (colourDistance(data, i, background) < BACKGROUND_TOLERANCE) data[i + 3] = 0;
   }
-  const alpha = await sharp(data, { raw: { width: info.width, height: info.height, channels: 4 } })
+  const alpha = await sharp(data, { raw: { width, height, channels: 4 } })
     .extractChannel('alpha')
     .png()
     .toBuffer();

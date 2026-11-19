@@ -9,7 +9,7 @@ import { GeneratorError } from '../../src/core/generators/logo.js';
 import { loadLogo } from '../../src/core/generators/render.js';
 import { getSpec, inspectImage, validateMedia } from '../../src/core/specs/index.js';
 import { saveInput, type Workspace } from '../../src/core/workspace/index.js';
-import { croppedWordmarkJpeg, gradientJpeg, oneColourJpeg, opaqueJpegLogo, outlineJpeg, squareSvg, twoColourPng } from '../factories/logos.js';
+import { croppedWordmarkJpeg, gradientJpeg, greyscalePng, oneColourJpeg, opaqueJpegLogo, outlineJpeg, squareSvg, twoColourPng } from '../factories/logos.js';
 import { svgBytes, workspaceFactory } from '../factories/workspace.js';
 
 async function withLogo(bytes: Uint8Array, name: string): Promise<Workspace> {
@@ -140,6 +140,21 @@ describe('generateAndroidIcons builds the Play icon and the launcher resources',
     const alphaAt = (sourceX: number) => data[(row * info.width + left + Math.round((sourceX / 600) * box)) * 4 + 3];
     expect(alphaAt(85)).toBe(255);
     expect(alphaAt(155)).toBe(0);
+  });
+
+  test('cuts the white background out of a one-channel greyscale logo (#74)', async () => {
+    const logo = await greyscalePng();
+    expect((await sharp(logo).metadata()).channels).toBe(1);
+    const workspace = await withLogo(logo, 'grey.png');
+    await generateAndroidIcons(workspace);
+    const { data, info } = await rgba(res(workspace, 'mipmap-xxxhdpi/ic_launcher_monochrome.png'));
+    const box = Math.floor(info.width * ADAPTIVE_LOGO_SHARE);
+    const left = Math.round((info.width - box) / 2);
+    // Source coordinates of the 300 px logo, mapped into the logo box: block at 75–225, white around it.
+    const alphaAt = (sourceX: number, sourceY: number) =>
+      data[((left + Math.round((sourceY / 300) * box)) * info.width + left + Math.round((sourceX / 300) * box)) * 4 + 3];
+    expect(alphaAt(150, 150)).toBe(255); // the dark block in the middle
+    expect(alphaAt(30, 30)).toBe(0); // the white background, inside the logo box
   });
 
   test('writes ic_launcher.xml that references the three layers', async () => {
