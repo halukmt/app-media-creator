@@ -8,7 +8,7 @@ import { generateShareImages } from '../../src/core/generators/share-images.js';
 import { getSpec, inspectImageBytes, validateMedia } from '../../src/core/specs/index.js';
 import { saveInput, saveProject, type Workspace } from '../../src/core/workspace/index.js';
 import { createApp } from '../../src/server/app.js';
-import { twoColourPng } from '../factories/logos.js';
+import { oneColourJpeg, twoColourPng } from '../factories/logos.js';
 import { shareTaglines } from '../factories/screenshots.js';
 import { packageInfoFactory } from '../factories/package-info.js';
 import { projectInputFactory, workspaceFactory } from '../factories/workspace.js';
@@ -116,6 +116,20 @@ describe('Profile pictures, banners, signature and logo variants are shared by a
       const colours = new Set<string>();
       for (let i = 0; i < data.length; i += info.channels) if (data[i + 3]! > 200) colours.add(`${data[i]},${data[i + 1]},${data[i + 2]}`);
       expect([...colours]).toEqual([rgb.join(',')]);
+    }
+  }, 60_000);
+
+  test('keeps the shape of a one-colour opaque logo in the monochrome and inverse variants (#63)', async () => {
+    const workspace = await workspaceFactory();
+    await saveInput(workspace, 'de-DE', { kind: 'logo', originalName: 'mark.jpg', bytes: await oneColourJpeg() });
+    const { entries } = await generateShareImages(workspace, { locales: 'de-DE' });
+    for (const variant of ['web.logo.monochrome', 'web.logo.inverse']) {
+      const file = entries.find((e) => e.specId === variant)!.path;
+      const { data } = await sharp(read(workspace, file)).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
+      let opaque = 0;
+      for (let i = 3; i < data.length; i += 4) if (data[i] === 255) opaque += 1;
+      // The filled mark covers most of the 90 % logo box.
+      expect(opaque, variant).toBeGreaterThan((data.length / 4) * 0.7);
     }
   }, 60_000);
 

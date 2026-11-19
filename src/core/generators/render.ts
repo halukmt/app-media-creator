@@ -155,25 +155,96 @@ export async function rasterizeLogo(logo: LogoSource, box: number): Promise<Logo
 
 /** Colour distance below which a pixel of an opaque logo counts as its background. */
 const BACKGROUND_TOLERANCE = 48;
+/** Size the source logo is analysed at, once per logo, to decide whether it has a background to cut out. */
+const ANALYSIS_BOX = 512;
+/**
+ * Share of the border pixels that must have one corner's colour for it to count as a background. Below 1, so a mark
+ * that touches the edge (a tightly cropped wordmark) still has its background cut out.
+ */
+const BORDER_AGREEMENT = 0.6;
+/** Tighter colour distance for the border check: a background is one flat colour, not a gentle gradient. */
+const BORDER_TOLERANCE = 24;
+/** Share of all pixels that must differ from the background; below it the logo is that one colour and stays whole. */
+const MIN_MARK_SHARE = 0.001;
+
+type Rgb = readonly [number, number, number];
+
+function colourDistance(data: Buffer, index: number, colour: Rgb): number {
+  return Math.abs(data[index]! - colour[0]) + Math.abs(data[index + 1]! - colour[1]) + Math.abs(data[index + 2]! - colour[2]);
+}
+
+/** Byte offsets of the border pixels of a `width`×`height` RGBA raster (each pixel once). */
+function borderOffsets(width: number, height: number): number[] {
+  const offsets: number[] = [];
+  for (let x = 0; x < width; x += 1) {
+    offsets.push(x * 4);
+    if (height > 1) offsets.push(((height - 1) * width + x) * 4);
+  }
+  for (let y = 1; y < height - 1; y += 1) {
+    offsets.push(y * width * 4);
+    if (width > 1) offsets.push((y * width + width - 1) * 4);
+  }
+  return offsets;
+}
+
+/**
+ * The background colour of an opaque logo, or null when there is nothing to cut out: the logo has transparency, its
+ * border is not one flat colour (a gradient or photo mark), or it is that one colour throughout (a filled mark).
+ * The candidate is the corner colour most of the border shares, so one noisy or decorated corner does not decide.
+ */
+async function analyseBackground(logo: LogoSource): Promise<Rgb | null> {
+  const input = logo.isSvg ? sharp(logo.bytes, { density: svgDensity(logo, ANALYSIS_BOX) }) : sharp(logo.bytes);
+  const { data, info } = await input
+    .autoOrient()
+    .resize(ANALYSIS_BOX, ANALYSIS_BOX, { fit: 'inside', withoutEnlargement: !logo.isSvg })
+    .ensureAlpha()
+    .raw()
+    .toBuffer({ resolveWithObject: true });
+  const { width, height } = info;
+  const border = borderOffsets(width, height);
+  const corners = [0, width - 1, (height - 1) * width, height * width - 1].map((pixel): Rgb => [data[pixel * 4]!, data[pixel * 4 + 1]!, data[pixel * 4 + 2]!]);
+  let background: Rgb | null = null;
+  let best = 0;
+  for (const corner of corners) {
+    const agreeing = border.filter((offset) => colourDistance(data, offset, corner) < BORDER_TOLERANCE).length;
+    if (agreeing > best) [background, best] = [corner, agreeing];
+  }
+  if (!background || best < border.length * BORDER_AGREEMENT) return null;
+  // One pass for both: any transparency means the alpha already is the coverage; the mark must not be empty.
+  let mark = 0;
+  for (let i = 0; i < data.length; i += 4) {
+    if (data[i + 3]! < 255) return null;
+    if (colourDistance(data, i, background) >= BACKGROUND_TOLERANCE) mark += 1;
+  }
+  return mark >= width * height * MIN_MARK_SHARE ? background : null;
+}
+
+/** One analysis per logo source, shared by every size and variant rendered from it. */
+const backgrounds = new WeakMap<Buffer, Promise<Rgb | null>>();
+
+function logoBackground(logo: LogoSource): Promise<Rgb | null> {
+  let background = backgrounds.get(logo.bytes);
+  if (!background) {
+    background = analyseBackground(logo);
+    // A failed analysis is not kept, so a later render can try again.
+    background.catch(() => backgrounds.delete(logo.bytes));
+    backgrounds.set(logo.bytes, background);
+  }
+  return background;
+}
 
 /**
  * Renders a one-colour silhouette of the logo: the logo's coverage filled with `color` on transparency, centred in
- * `logoBox` on a `size` square. Used for Android monochrome (themed) icons. For logos without transparency the
- * colour of the logo's top-left corner counts as background, so a logo on a white JPEG background still works.
+ * `logoBox` on a `size` square. Used for Android monochrome (themed) icons, the web logo variants and blueprint icons.
+ * For an opaque logo whose border is one colour (a mark on a white JPEG background) that colour is cut out; the
+ * decision is made once per logo, so every size gives the same shape. Any other opaque logo keeps its full coverage.
  */
 export async function renderSilhouette(logo: LogoSource, options: { size: number; logoBox: number; color: HexColor }): Promise<Buffer> {
   const placed = await renderLogoSquare(logo, { size: options.size, logoBox: options.logoBox });
   const { data, info } = await sharp(placed).raw().toBuffer({ resolveWithObject: true });
-  const { isOpaque } = await sharp(logo.bytes).stats();
-  if (isOpaque) {
-    // The first covered pixel (top-left of the placed logo) gives the background colour.
-    let first = 0;
-    while (first < data.length && data[first + 3] === 0) first += 4;
-    const [br, bg, bb] = [data[first] ?? 0, data[first + 1] ?? 0, data[first + 2] ?? 0];
-    for (let i = 0; i < data.length; i += 4) {
-      const distance = Math.abs(data[i]! - br) + Math.abs(data[i + 1]! - bg) + Math.abs(data[i + 2]! - bb);
-      if (distance < BACKGROUND_TOLERANCE) data[i + 3] = 0;
-    }
+  const background = await logoBackground(logo);
+  if (background) {
+    for (let i = 0; i < data.length; i += 4) if (colourDistance(data, i, background) < BACKGROUND_TOLERANCE) data[i + 3] = 0;
   }
   const alpha = await sharp(data, { raw: { width: info.width, height: info.height, channels: 4 } })
     .extractChannel('alpha')
