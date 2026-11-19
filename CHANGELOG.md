@@ -52,4 +52,5 @@ entries left under `[Unreleased]` is rejected by `npm run check:release`.
 - A logo that is one solid colour or a gradient without transparency keeps its shape in the Android monochrome layer, the monochrome and inverse logo variants and blueprint icons instead of coming out empty or cut apart. (#63)
 - Unit tests that render many images no longer time out in a full local run on a busy machine. (#72)
 - App previews for the iPad 12.9" (2nd generation) accept 1200×1600 as well, and a language list with "all" plus an unsupported language is rejected instead of ignored. (#30)
+- Applying AI headlines can no longer be overwritten by an edit made at the same moment, a rewritten AI result is not mistaken for the applied one, and a broken result folder shows as an invalid job instead of an error. (#84)
 

@@ -1,5 +1,6 @@
 // conventions: RULE-TESTING-3301
 import { spawnSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -119,6 +120,16 @@ describe('readJob validates the results before anything is applied', () => {
     expect((await readJob(workspace, job.id)).errors.join(' ')).toMatch(/not an image of this job/);
   });
 
+  test('reports store-texts written as a file as an invalid result and keeps the job list working (#84)', async () => {
+    const workspace = await jobWorkspace();
+    const job = await createJob(workspace);
+    write(job.folder, 'store-texts', 'not a folder');
+    const state = await readJob(workspace, job.id);
+    expect(state.status).toBe('invalid');
+    expect(state.errors).toEqual(['store-texts: must be a folder with one folder per language']);
+    expect((await listJobs(workspace)).map((j) => j.status)).toEqual(['invalid']);
+  });
+
   test('refuses ids that are not job folders', async () => {
     const workspace = await jobWorkspace();
     await expect(readJob(workspace, '../project')).rejects.toThrow(/not a job id/);
@@ -166,9 +177,13 @@ describe('applyHeadlines writes one variant into the screenshot sets', () => {
     const workspace = await jobWorkspace();
     const job = await createJob(workspace);
     const inputs = brief(job.folder).screenshots['de-DE']!.map((s) => s.input);
-    write(job.folder, 'headlines.json', headlineVariants({ 'de-DE': inputs }));
+    const applied = JSON.stringify(headlineVariants({ 'de-DE': inputs }));
+    write(job.folder, 'headlines.json', applied);
     await applyHeadlines(workspace, job.id, 'A');
     expect((await readJob(workspace, job.id)).status).toBe('applied');
+    // The fingerprint is the one of the text that was validated and applied (#84).
+    const record = JSON.parse(readFileSync(path.join(job.folder, 'applied.json'), 'utf8')) as { headlines: string };
+    expect(record.headlines).toBe(createHash('sha256').update(applied).digest('hex'));
     write(job.folder, 'headlines.json', headlineVariants({ 'de-DE': inputs }, { longFirst: true }));
     expect((await readJob(workspace, job.id)).status).toBe('ready');
   });

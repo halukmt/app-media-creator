@@ -243,17 +243,19 @@ function issues(error: { issues: { path: PropertyKey[]; message: string }[] }, f
   return error.issues.map((issue) => `${file}${issue.path.length > 0 ? `.${issue.path.map(String).join('.')}` : ''}: ${issue.message}`);
 }
 
-/** Fingerprint of the headlines file, so a job counts as applied only for the exact result that was applied. */
-async function headlinesHash(folder: string, file: string): Promise<string | null> {
-  try {
-    return createHash('sha256').update(await readFile(path.join(folder, file))).digest('hex');
-  } catch {
-    return null;
-  }
+/** Fingerprint of a result text, so a job counts as applied only for the exact result that was applied. */
+function fingerprint(text: string): string {
+  return createHash('sha256').update(text).digest('hex');
 }
 
 /** The state of a job: its brief, and every result file present, validated. Invalid results are reported, not used. */
 export async function readJob(workspace: Workspace, id: string, projectSettings?: ProjectSettings): Promise<JobState> {
+  return (await inspectJob(workspace, id, projectSettings)).state;
+}
+
+/** readJob plus the fingerprint of the headlines text it validated (internal: used to record what was applied). */
+async function inspectJob(workspace: Workspace, id: string, projectSettings?: ProjectSettings): Promise<{ state: JobState; headlinesHash?: string }> {
+  let headlinesHash: string | undefined;
   const folder = jobFolder(workspace, id);
   let brief: Brief;
   try {
@@ -282,6 +284,7 @@ export async function readJob(workspace: Workspace, id: string, projectSettings?
     const raw = await readResult(folder, brief.results.headlines);
     if (raw !== undefined) {
       found = true;
+      headlinesHash = fingerprint(raw);
       const parsed = headlinesSchema.safeParse(JSON.parse(raw));
       if (!parsed.success) state.errors.push(...issues(parsed.error, 'headlines.json'));
       else {
@@ -316,15 +319,33 @@ export async function readJob(workspace: Workspace, id: string, projectSettings?
 
   // store-texts/<locale>/<field>.md
   const storeDir = path.join(folder, 'store-texts');
-  if (existsSync(storeDir)) {
-    const storeTexts: NonNullable<JobState['storeTexts']> = {};
-    for (const entry of await readdir(storeDir, { withFileTypes: true })) {
+  const storeTexts: NonNullable<JobState['storeTexts']> = {};
+  // Any problem with the folder itself (a file instead of a folder, unreadable) makes the job invalid, never an error.
+  try {
+    const info = await lstat(storeDir).catch((error: NodeJS.ErrnoException) => {
+      if (error.code === 'ENOENT') return null;
+      throw error;
+    });
+    // Links count as "not a folder": result files are read only as real files inside the job folder.
+    if (info && !info.isDirectory()) {
+      found = true;
+      state.errors.push('store-texts: must be a folder with one folder per language');
+    }
+    const entries = info?.isDirectory() ? await readdir(storeDir, { withFileTypes: true }) : [];
+    for (const entry of entries) {
       if (!entry.isDirectory() || !isLocaleId(entry.name) || !locales.includes(entry.name)) {
         state.errors.push(`store-texts/${entry.name}: not a language folder of this job`);
         continue;
       }
       const locale = entry.name;
-      for (const file of await readdir(path.join(storeDir, locale))) {
+      let files: string[];
+      try {
+        files = await readdir(path.join(storeDir, locale));
+      } catch {
+        state.errors.push(`store-texts/${locale}: cannot be read`);
+        continue;
+      }
+      for (const file of files) {
         found = true;
         const field = file.replace(/\.md$/, '') as StoreTextField;
         if (!file.endsWith('.md') || !STORE_TEXT_FIELDS.includes(field)) {
@@ -344,8 +365,11 @@ export async function readJob(workspace: Workspace, id: string, projectSettings?
         }
       }
     }
-    if (Object.keys(storeTexts).length > 0) state.storeTexts = storeTexts;
+  } catch {
+    found = true;
+    state.errors.push('store-texts: cannot be read');
   }
+  if (Object.keys(storeTexts).length > 0) state.storeTexts = storeTexts;
 
   // storyboard.json
   try {
@@ -375,6 +399,7 @@ export async function readJob(workspace: Workspace, id: string, projectSettings?
     state.status = 'invalid';
     // Nothing of an invalid job may be applied.
     delete state.headlines;
+    headlinesHash = undefined;
     delete state.storeTexts;
     delete state.storyboard;
   } else if (found) state.status = 'ready';
@@ -382,14 +407,14 @@ export async function readJob(workspace: Workspace, id: string, projectSettings?
   try {
     const applied = JSON.parse(await readFile(path.join(folder, 'applied.json'), 'utf8')) as { variant: 'A' | 'B'; at: string; headlines?: string };
     // A rewritten headlines.json (a second AI run in the same folder) is a new result, not the applied one.
-    if (state.status === 'ready' && applied.headlines === (await headlinesHash(folder, brief.results.headlines))) {
+    if (state.status === 'ready' && applied.headlines !== undefined && applied.headlines === headlinesHash) {
       state.applied = { variant: applied.variant, at: applied.at };
       state.status = 'applied';
     }
   } catch {
     // Not applied yet.
   }
-  return state;
+  return { state, ...(headlinesHash ? { headlinesHash } : {}) };
 }
 
 /** All jobs, newest first. Folders that are not jobs (other names, no brief) are skipped. */
@@ -416,10 +441,9 @@ export async function listJobs(workspace: Workspace, limit = Infinity): Promise<
  */
 export async function applyHeadlines(workspace: Workspace, id: string, variant: 'A' | 'B'): Promise<{ locales: LocaleId[] }> {
   if (variant !== 'A' && variant !== 'B') throw new JobError('variant must be A or B');
-  const state = await readJob(workspace, id);
+  const { state, headlinesHash } = await inspectJob(workspace, id);
   if (state.status === 'invalid') throw new JobError(`Job ${id} has invalid results: ${state.errors.join('; ')}`, 409);
   if (!state.headlines) throw new JobError(`Job ${id} has no headlines yet`, 409);
-  const brief = JSON.parse(await readFile(path.join(state.folder, 'brief.json'), 'utf8')) as Brief;
   const project = await readProject(workspace);
   const screenshots = await listScreenshots(workspace);
   const sets = await readScreenshotSets(workspace, screenshots);
@@ -438,6 +462,7 @@ export async function applyHeadlines(workspace: Workspace, id: string, variant: 
   if (applied.length === 0) throw new JobError(`None of the screenshots of job ${id} are in the sets any more`, 409);
   const saved = await saveScreenshotSets(workspace, next);
   if (!saved.ok) throw new JobError(`The headlines no longer fit the screenshots: ${saved.errors.join('; ')}`, 409);
-  await writeJsonAtomic(path.join(state.folder, 'applied.json'), { variant, at: new Date().toISOString(), headlines: await headlinesHash(state.folder, brief.results.headlines) });
+  // The fingerprint of the text that was validated and applied, not of the file as it is now.
+  await writeJsonAtomic(path.join(state.folder, 'applied.json'), { variant, at: new Date().toISOString(), headlines: headlinesHash });
   return { locales: applied };
 }
