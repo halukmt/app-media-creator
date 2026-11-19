@@ -96,7 +96,7 @@ describe.each(LOGOS)('Icon variants from $label', ({ logo }) => {
     const icon = (dir: string) => read(withVariants, `apple/${dir}/icon/app-icon.png`);
     expect(icon('preview').equals(icon('shared'))).toBe(false);
     expect(icon('dev').equals(icon('preview'))).toBe(false);
-  }, 60_000);
+  });
 
   test('write Android launcher resources and a favicon set per environment, valid for their specs', async () => {
     const workspace = await workspaceWith(await logo(), [PREVIEW, DEV]);
@@ -131,7 +131,7 @@ describe('The two styles look different', () => {
     const colours = new Set<string>();
     for (let x = 300; x < 724; x += 4) colours.add(at(x, row).join(','));
     expect([...colours]).toContain('194,65,12');
-  }, 30_000);
+  });
 
   test('blueprint draws a blue background with grid lines and no alpha channel', async () => {
     const workspace = await workspaceWith({ name: 'logo.png', bytes: await flatPng() }, [DEV]);
@@ -144,7 +144,7 @@ describe('The two styles look different', () => {
     // A grid line (x = 64, a major line) is lighter than the cell next to it.
     const pixel = (x: number, y: number) => background[(y * 256 + x) * 3]!;
     expect(pixel(64, 30)).toBeGreaterThan(pixel(70, 30));
-  }, 30_000);
+  });
 });
 
 describe('Environment labels must be drawable with the icon font (#68)', () => {
@@ -190,7 +190,7 @@ describe('Removing an environment', () => {
     const { entries } = await createExport(workspace);
     expect(entries).toContain('apple/preview/icon/app-icon.png');
     expect(entries.some((e) => e.startsWith('apple/dev/'))).toBe(false);
-  }, 60_000);
+  });
 
   test('reports a configured environment without files once the asset has variants', async () => {
     const workspace = await workspaceWith({ name: 'logo.svg', bytes: transparentSvg() }, [PREVIEW]);
@@ -199,7 +199,7 @@ describe('Removing an environment', () => {
     const items = (await exportChecklist(workspace)).targets.flatMap((t) => t.items).filter((i) => i.specId === 'apple.icon');
     expect(items.map((i) => i.environment)).toEqual([undefined, 'preview', 'dev']);
     expect(items[2]?.messages.map((m) => m.text).join(' ')).toMatch(/not been generated yet for dev/);
-  }, 60_000);
+  });
 
   test('writes, checks and exports only production icons for a project without environments (#70)', async () => {
     const workspace = await workspaceFactory();
@@ -212,7 +212,7 @@ describe('Removing an environment', () => {
     const { entries } = await createExport(workspace);
     expect(entries).toContain('apple/shared/icon/app-icon.png');
     expect(entries.some((e) => /^(apple|google|web)\/preview\//.test(e))).toBe(false);
-  }, 60_000);
+  });
 
   test('removes its files on the next generation and keeps the remaining environment', async () => {
     const workspace = await workspaceWith({ name: 'logo.svg', bytes: transparentSvg() }, [PREVIEW, DEV]);
@@ -223,5 +223,5 @@ describe('Removing an environment', () => {
     const manifest = await readManifest(workspace);
     expect(manifest.entries.some((e) => e.environment === 'dev')).toBe(false);
     expect(manifest.entries.some((e) => e.environment === 'preview')).toBe(true);
-  }, 60_000);
+  });
 });

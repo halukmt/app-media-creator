@@ -61,19 +61,19 @@ describe('generateShareImages writes share images per locale', () => {
     // For a visual check.
     mkdirSync('test-results/share', { recursive: true });
     writeFileSync('test-results/share/og-tr-TR.png', read(workspace, 'web/tr-TR/og-image/01-og-image.png'));
-  }, 60_000);
+  });
 
   test('draws the tagline of each locale, so the share images differ per locale', async () => {
     const workspace = await workspaceWithLogo();
     await generateShareImages(workspace, { taglines: TAGLINES });
     expect(read(workspace, 'web/de-DE/og-image/01-og-image.png').equals(read(workspace, 'web/tr-TR/og-image/01-og-image.png'))).toBe(false);
-  }, 60_000);
+  });
 
   test('keeps the WhatsApp preview under 300 KB', async () => {
     const workspace = await workspaceWithLogo();
     await generateShareImages(workspace, { locales: 'de-DE' });
     expect(read(workspace, 'web/de-DE/whatsapp-preview/01-whatsapp-preview.jpg').length).toBeLessThanOrEqual(300 * 1024);
-  }, 60_000);
+  });
 
   test('draws the whole app name without a tagline and on wide banners (#62)', async () => {
     const workspace = await workspaceFactory();
@@ -84,7 +84,7 @@ describe('generateShareImages writes share images per locale', () => {
     for (const file of ['web/tr-TR/x-card/01-x-card.png', 'web/de-DE/og-image/01-og-image.png', 'web/shared/social-facebook-cover/facebook-cover.png', 'web/shared/social-linkedin-banner/linkedin-banner.png']) {
       expect(await textInkWidth(read(workspace, file)), file).toBeGreaterThan(150);
     }
-  }, 60_000);
+  });
 
   test('rejects a tagline for an unsupported locale and an invalid background', async () => {
     const workspace = await workspaceWithLogo();
@@ -105,7 +105,7 @@ describe('Profile pictures, banners, signature and logo variants are shared by a
     for (const entry of shared) {
       expect(validateMedia(getSpec(entry.specId), await inspectImageBytes(read(workspace, entry.path))), entry.path).toEqual([]);
     }
-  }, 60_000);
+  });
 
   test('draws the monochrome variant in one colour and the inverse in white', async () => {
     const workspace = await workspaceWithLogo();
@@ -117,7 +117,7 @@ describe('Profile pictures, banners, signature and logo variants are shared by a
       for (let i = 0; i < data.length; i += info.channels) if (data[i + 3]! > 200) colours.add(`${data[i]},${data[i + 1]},${data[i + 2]}`);
       expect([...colours]).toEqual([rgb.join(',')]);
     }
-  }, 60_000);
+  });
 
   test('keeps the shape of a one-colour opaque logo in the monochrome and inverse variants (#63)', async () => {
     const workspace = await workspaceFactory();
@@ -131,7 +131,7 @@ describe('Profile pictures, banners, signature and logo variants are shared by a
       // The filled mark covers most of the 90 % logo box.
       expect(opaque, variant).toBeGreaterThan((data.length / 4) * 0.7);
     }
-  }, 60_000);
+  });
 
   test('flags the unverified social sizes in the export checklist', async () => {
     const workspace = await workspaceWithLogo();
@@ -140,7 +140,7 @@ describe('Profile pictures, banners, signature and logo variants are shared by a
     const banner = checklist.targets.find((t) => t.target === 'web')!.items.find((i) => i.specId === 'web.social.youtube-banner');
     expect(banner?.status).toBe('warning');
     expect(banner?.messages.map((m) => m.text)).toContain('Size and limits come from third-party sources, not from the store itself');
-  }, 60_000);
+  });
 });
 
 describe('The generate API builds the share images', () => {
@@ -154,5 +154,5 @@ describe('The generate API builds the share images', () => {
       });
     expect((await post(workspace)).status).toBe(201);
     expect((await post(await workspaceFactory())).status).toBe(400);
-  }, 60_000);
+  });
 });

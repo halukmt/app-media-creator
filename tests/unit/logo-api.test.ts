@@ -96,7 +96,7 @@ describe('Logo packs are generated from the saved settings', () => {
     // A smaller copy for the preview grid.
     const small = await app.request(`/api/output/file?path=${encodeURIComponent(touch!.path)}&width=64`);
     expect((await sharp(Buffer.from(await small.arrayBuffer())).metadata()).width).toBe(64);
-  }, 60_000);
+  });
 
   test('rejects an unknown pack and asks for a logo', async () => {
     const app = appFor(await workspaceFactory());
