@@ -439,3 +439,8 @@
   CI in 45 s, locally ~170 s under load.
 - Heredocs with apostrophes failed again for the OpenSpec files → Write tool (keep doing that).
 - Next Ready: #21 (embed / loop videos, builds on this). #23 (Video UI) waits for #22 (amc-video skill).
+
+## #106 ffprobe lookup for wrapper names (Codex on #105) — done (PR #107)
+
+- Codex P2 on PR #105: a `FFMPEG_PATH` without an `ffmpeg` file name made ffmpeg itself the ffprobe. Taken right away
+  (shared video tools). Sibling only for `ffmpeg…` names, otherwise PATH. Code review: no findings.
