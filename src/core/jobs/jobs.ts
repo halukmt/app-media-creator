@@ -3,6 +3,7 @@ import { existsSync } from 'node:fs';
 import { copyFile, lstat, mkdir, readFile, readdir } from 'node:fs/promises';
 import path from 'node:path';
 import { isLocaleId, resolveLocales, type LocaleId, type LocaleSelection } from '../locales/index.js';
+import type { CardLayout } from '../screenshots/index.js';
 import {
   effectiveSet,
   listInputs,
@@ -33,9 +34,17 @@ import {
 export const JOB_ID = /^\d{8}-\d{6}-[a-z0-9]{4}$/;
 /** Largest result file read from a job folder. */
 const MAX_RESULT_BYTES = 256 * 1024;
-/** Recommended copy lengths (copy rules §8); longer texts are reported as warnings, not errors. */
-const HEADLINE_HINT = 30;
-const SUBLINE_HINT = 40;
+/**
+ * Recommended copy lengths per card layout (copy rules §8: headline about 30 characters, subline about 40), adjusted to
+ * the start font size of each layout: the large-device layout has the biggest headline, text at the bottom the
+ * smallest. Longer texts still render (the card shrinks them); they are reported as warnings, not errors.
+ */
+export const COPY_LIMITS: Record<CardLayout, { headline: number; subline: number }> = {
+  'text-top': { headline: 30, subline: 40 },
+  // Same subline size as text-top; only the headline starts larger.
+  'text-top-large': { headline: 26, subline: 40 },
+  'text-bottom': { headline: 34, subline: 44 },
+};
 
 export type JobTask = 'copy';
 export type JobStatus = 'waiting' | 'ready' | 'invalid' | 'applied';
@@ -60,6 +69,17 @@ export interface BriefSlot {
   subline: string;
   /** The locale has no own screenshots and uses the source locale's. */
   fallbackInput: boolean;
+  /**
+   * Card layout of the slot and the recommended maximum lengths that follow from it. Optional when read back: briefs
+   * written before per-layout limits have neither (see limitsFor).
+   */
+  layout?: CardLayout;
+  limits?: { headline: number; subline: number };
+}
+
+/** The copy limits of a brief slot: its own, or those of its layout, or the general text-top limits. */
+export function limitsFor(slot: Pick<BriefSlot, 'layout' | 'limits'> | undefined): { headline: number; subline: number } {
+  return slot?.limits ?? (slot?.layout ? COPY_LIMITS[slot.layout] : undefined) ?? COPY_LIMITS['text-top'];
 }
 
 export interface Brief {
@@ -173,7 +193,17 @@ export async function createJob(workspace: Workspace, options: CreateJobOptions 
     const entries = effectiveSet(sets, locale, project.sourceLocale, screenshots);
     const slots: BriefSlot[] = [];
     for (const [index, entry] of entries.entries()) {
-      slots.push({ slot: index + 1, input: entry.input, image: await imageFor(entry.input), headline: entry.headline, subline: entry.subline, fallbackInput: entry.fallbackInput });
+      const layout = entry.layout ?? sets.style.layout;
+      slots.push({
+        slot: index + 1,
+        input: entry.input,
+        image: await imageFor(entry.input),
+        headline: entry.headline,
+        subline: entry.subline,
+        fallbackInput: entry.fallbackInput,
+        layout,
+        limits: COPY_LIMITS[layout],
+      });
     }
     if (slots.length > 0) briefShots[locale] = slots;
   }
@@ -295,16 +325,20 @@ async function inspectJob(workspace: Workspace, id: string, projectSettings?: Pr
             continue;
           }
           const known = new Set((brief.screenshots[locale] ?? []).map((slot) => slot.input));
+          const slotOf = new Map((brief.screenshots[locale] ?? []).map((slot) => [slot.input, slot]));
           const seen = new Set<string>();
           for (const slot of slots) {
             if (!known.has(slot.input)) state.errors.push(`headlines.json: ${locale} names ${slot.input}, which is not a screenshot of this job`);
             if (seen.has(slot.input)) state.errors.push(`headlines.json: ${locale} names ${slot.input} twice`);
             seen.add(slot.input);
+            const briefSlot = slotOf.get(slot.input);
+            const limits = limitsFor(briefSlot);
             for (const variant of ['A', 'B'] as const) {
-              const label = `headlines.json ${locale} ${variant}`;
+              // Names the slot, so a warning points at the screenshot whose text is too long.
+              const label = `headlines.json ${locale} slot ${briefSlot?.slot ?? '?'} ${variant}`;
               texts.push({ label, text: `${slot[variant].headline} ${slot[variant].subline}` });
-              if (slot[variant].headline.length > HEADLINE_HINT) state.warnings.push(`${label}: "${slot[variant].headline}" is longer than ${HEADLINE_HINT} characters`);
-              if (slot[variant].subline.length > SUBLINE_HINT) state.warnings.push(`${label}: the subline is longer than ${SUBLINE_HINT} characters`);
+              if (slot[variant].headline.length > limits.headline) state.warnings.push(`${label}: "${slot[variant].headline}" is longer than ${limits.headline} characters`);
+              if (slot[variant].subline.length > limits.subline) state.warnings.push(`${label}: the subline is longer than ${limits.subline} characters`);
             }
           }
         }

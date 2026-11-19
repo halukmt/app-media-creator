@@ -27,6 +27,21 @@ AI is optional and never needs your credentials inside the tool:
   your own Claude Code login. The UI picks up the results automatically.
 - **Optional:** put an `ANTHROPIC_API_KEY` in `.env` to get a "Generate" button directly in the UI.
 
+### Screenshot headlines with Claude Code
+
+1. Install the skill once in the project that uses app-media-creator:
+
+   ```bash
+   npx skills add halukmt/app-media-creator --skill amc-copy
+   ```
+
+2. In the Screenshots section, open **Preview and edit** and choose **Prepare AI job** for the selected languages.
+3. Copy the command exactly as the page shows it (for example
+   `/amc-copy "/path/to/your-app/.app-media/jobs/20261119-104512-k3x9"`, with the full path) and run it in Claude Code. The skill looks at your screenshots, follows the copy rules and your `claims` (allowed and forbidden),
+   and writes two variants per language: **A** outcome-first and **B** mechanism-first.
+4. The page shows the result as soon as the skill has written it. Compare A and B and apply one; nothing changes
+   before you do. Results that break the rules (for example a forbidden claim) are shown as errors and never applied.
+
 ## Requirements
 
 - Node.js ≥ 22.12
