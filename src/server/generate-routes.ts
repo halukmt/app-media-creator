@@ -2,6 +2,7 @@ import { Hono, type Context } from 'hono';
 import { generateAndroidIcons, type AndroidIconOptions } from '../core/generators/android-icons.js';
 import { generateAppStoreIcons, type AppStoreIconOptions } from '../core/generators/app-store-icons.js';
 import { generateFramedScreenshots, type FramedScreenshotOptions } from '../core/generators/framed-screenshots.js';
+import { generateScreenshotCards, type ScreenshotCardOptions } from '../core/generators/screenshot-cards.js';
 import { GeneratorError, loadNewestLogo } from '../core/generators/logo.js';
 import { logoPalette } from '../core/generators/render.js';
 import { generateWebIcons, type WebIconOptions } from '../core/generators/web-icons.js';
@@ -74,6 +75,17 @@ export function generateRoutes(workspace: Workspace): Hono {
     const options = pick(parsed.body, ['frame', 'shadow', 'locales']) as FramedScreenshotOptions;
     try {
       return c.json(await generateFramedScreenshots(workspace, options), 201);
+    } catch (error) {
+      return generatorError(c, error);
+    }
+  });
+
+  api.post('/generate/screenshot-cards', async (c) => {
+    const parsed = await readOptionalJsonObject(c);
+    if (!parsed.ok) return c.json({ error: parsed.error }, 400);
+    const options = pick(parsed.body, ['locales']) as ScreenshotCardOptions;
+    try {
+      return c.json(await generateScreenshotCards(workspace, options), 201);
     } catch (error) {
       return generatorError(c, error);
     }

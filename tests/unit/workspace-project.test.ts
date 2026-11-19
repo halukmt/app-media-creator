@@ -69,9 +69,14 @@ describe('Project settings are validated and normalized', () => {
     expect(errors.some((e) => e.startsWith('claims.allowed:'))).toBe(true);
   });
 
-  test('offers only screenshot entries of the target as devices', () => {
-    expect(deviceOptions('apple')).toContain('apple.screenshot.iphone-duo-inner');
-    expect(deviceOptions('google')).toContain('google.screenshot.tablet-10');
+  test('offers the device matrix as devices: iPhone, iPhone Duo and iPad 13\" for Apple, phone and tablets for Google', () => {
+    expect(deviceOptions('apple').map((id) => id.replace('apple.screenshot.', ''))).toEqual(['iphone-6.9', 'iphone-6.5', 'iphone-6.3', 'iphone-duo-outer', 'iphone-duo-inner', 'ipad-13']);
+    expect(deviceOptions('google').map((id) => id.replace('google.screenshot.', ''))).toEqual(['phone', 'tablet-7', 'tablet-10']);
     expect(deviceOptions('web')).toEqual([]);
+  });
+
+  test('rejects a screenshot spec outside the device matrix', () => {
+    const result = validateProject(projectInputFactory({ targets: { apple: { enabled: true, devices: ['apple.screenshot.apple-tv'] }, google: { enabled: true, devices: [] }, web: { enabled: true, devices: [] } } }));
+    expect(result.ok ? [] : result.errors).toEqual(['targets.apple.devices: apple.screenshot.apple-tv is not a apple device']);
   });
 });

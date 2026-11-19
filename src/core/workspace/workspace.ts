@@ -89,7 +89,7 @@ export function saveProject(workspace: Workspace, input: unknown): Promise<Proje
 }
 
 /** Writes JSON to a uniquely named temporary file and renames it, so readers never see a half-written file. */
-async function writeJsonAtomic(file: string, data: unknown): Promise<void> {
+export async function writeJsonAtomic(file: string, data: unknown): Promise<void> {
   const tmp = `${file}.${process.pid}.${randomBytes(4).toString('hex')}.tmp`;
   await writeFile(tmp, `${JSON.stringify(data, null, 2)}\n`, 'utf8');
   await rename(tmp, file);

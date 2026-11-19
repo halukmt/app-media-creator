@@ -10,6 +10,7 @@ import {
   outerAspect,
   svgNumber,
   type FrameKind,
+  type UserFrame,
 } from './frames.js';
 import { LAYOUT_RATIOS, isCardLayout, placeCard, type CardLayout } from './layouts.js';
 import { fitText } from './text-layout.js';
@@ -28,6 +29,8 @@ export interface CardInput {
   screenshot?: Uint8Array;
   /** Folder with user bezels (`<kind>.png` + `<kind>.json`); a matching one replaces the generic frame. */
   userFramesDir?: string;
+  /** A user bezel loaded once by the caller (null: none); takes precedence over `userFramesDir`. */
+  userFrame?: UserFrame | null;
   /** Warn when the text block covers more than this share of the card (Google Play asks for under 20 %). */
   maxTextShare?: number;
 }
@@ -97,7 +100,8 @@ export async function renderScreenshotCard(input: CardInput): Promise<CardResult
   const warnings: CardWarning[] = [];
   const shot = await screenshotInfo(input.screenshot);
   const screenAspect = shot ? shot.height / shot.width : DEFAULT_SCREEN_ASPECT[input.frame];
-  const userFrame = input.userFramesDir ? await loadUserFrame(input.userFramesDir, input.frame) : null;
+  const userFrame =
+    input.userFrame !== undefined ? input.userFrame : input.userFramesDir ? await loadUserFrame(input.userFramesDir, input.frame) : null;
   const deviceAspect = userFrame ? userFrame.height / userFrame.width : outerAspect(input.frame, screenAspect);
   const place = placeCard(input.layout, width, height, deviceAspect);
 
