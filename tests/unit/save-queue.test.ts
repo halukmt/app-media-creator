@@ -74,3 +74,28 @@ describe('The save queue stores the latest edits one save at a time', () => {
     expect(save).not.toHaveBeenCalled();
   });
 });
+
+describe('A failed save never comes back over newer edits', () => {
+  test('old fails while new is queued: new is saved and old is not written again', async () => {
+    let failOld: () => void = () => undefined;
+    const save = vi.fn((doc: string) =>
+      doc === 'old'
+        ? new Promise<void>((_resolve, reject) => {
+            failOld = () => reject(new Error('offline'));
+          })
+        : Promise.resolve(),
+    );
+    const queue = createSaveQueue(save);
+    queue.schedule('old');
+    const oldRun = queue.flush().catch(() => undefined);
+    await vi.waitFor(() => expect(save).toHaveBeenCalledWith('old'));
+    queue.schedule('new');
+    const newRun = queue.flush();
+    failOld();
+    await oldRun;
+    await newRun;
+    expect(queue.hasPending()).toBe(false);
+    await queue.flush();
+    expect(save.mock.calls.map(([doc]) => doc)).toEqual(['old', 'new']);
+  });
+});
