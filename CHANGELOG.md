@@ -45,6 +45,8 @@ entries left under `[Unreleased]` is rejected by `npm run check:release`.
 
 ### Fixed
 
+- With an ffmpeg wrapper in `FFMPEG_PATH` whose name does not start with `ffmpeg`, videos are measured with the
+  ffprobe on the PATH instead of with the wrapper itself. (#106)
 - Leaving Screenshots, a lost edit of the screenshot sets stays reported when the header image settings were saved
   at the same time. (#103)
 - An edit made just before leaving Logo, Screenshots or Store texts is saved before Export or the reopened section

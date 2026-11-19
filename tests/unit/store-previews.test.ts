@@ -98,6 +98,8 @@ describe('parseProbe reads ffprobe\'s answer', () => {
     expect(ffprobeBinary({ FFMPEG_PATH: path.join(tools, 'ffmpeg.exe') }, () => true)).toBe(path.join(tools, 'ffprobe.exe'));
     // No ffprobe beside a standalone ffmpeg: the one on the PATH.
     expect(ffprobeBinary({ FFMPEG_PATH: path.join(tools, 'ffmpeg-static') }, () => false)).toBe('ffprobe');
+    // A wrapper with another name: never ffmpeg itself as ffprobe (#106).
+    expect(ffprobeBinary({ FFMPEG_PATH: path.join(tools, 'custom-encoder') }, () => true)).toBe('ffprobe');
     expect(ffprobeBinary({ FFPROBE_PATH: '/opt/ffprobe', FFMPEG_PATH: '/usr/bin/ffmpeg' })).toBe('/opt/ffprobe');
     expect(ffprobeBinary({})).toBe('ffprobe');
     const missing = async () => Promise.reject(Object.assign(new Error('spawn ffprobe ENOENT'), { code: 'ENOENT' }));
