@@ -33,4 +33,5 @@ entries left under `[Unreleased]` is rejected by `npm run check:release`.
 - Closing the sections menu on a phone returns focus to the menu button, and widening the window with the menu open no longer locks the page. (#44)
 - The shadow of a user bezel no longer darkens the edges of the screenshot inside it. (#51)
 - Semi-transparent parts of a user bezel keep their opacity instead of being drawn twice. (#53)
+- When screenshot edits cannot be saved, upload and generate stop and the edits are kept instead of being lost or ignored. (#57)
 
