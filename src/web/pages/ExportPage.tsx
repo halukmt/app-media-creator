@@ -49,17 +49,20 @@ export function ExportPage({ project, locales, selection, onSelectionChange, foc
   const [download, setDownload] = useState<Download>({ kind: 'idle' });
   const [confirming, setConfirming] = useState(false);
   const downloadButton = useRef<HTMLButtonElement>(null);
+  // The running download, if any: at most one at a time, and it belongs to the selection it was started with.
+  const runningDownload = useRef<AbortController | null>(null);
   // Never send an empty list (the server would reject it); fall back to every project language.
   const exportLocales = selection.length > 0 ? selection : project.locales;
+  // Compared by content: a click that leaves the languages as they were gives a new array but changes nothing.
+  const localeKey = exportLocales.join(',');
 
   // Reload whenever the languages or the saved project change; an older request never overwrites a newer one.
   useEffect(() => {
     const controller = new AbortController();
     setLoading(true);
     setLoadError(null);
-    // A result for another selection must not stay next to the new checklist.
     setDownload({ kind: 'idle' });
-    fetchChecklist(exportLocales, controller.signal)
+    fetchChecklist(localeKey.split(','), controller.signal)
       .then((next) => {
         setChecklist(next);
         setLoading(false);
@@ -70,24 +73,37 @@ export function ExportPage({ project, locales, selection, onSelectionChange, foc
         setLoading(false);
         setLoadError(error instanceof ApiError ? error.messages : []);
       });
-    return () => controller.abort();
-  }, [exportLocales, project]);
+    return () => {
+      controller.abort();
+      // A download for another selection, or one left behind with the page, is neither saved nor shown.
+      runningDownload.current?.abort();
+      runningDownload.current = null;
+    };
+  }, [localeKey, project]);
 
   const summary = checklist ? summarizeChecklist(checklist) : null;
   const noTarget = checklist !== null && checklist.targets.length === 0;
   const nothingGenerated = summary !== null && summary.files === 0;
 
   async function runDownload() {
-    if (!checklist || loading) return;
+    if (!checklist || loading || runningDownload.current) return;
+    const controller = new AbortController();
+    runningDownload.current = controller;
     setConfirming(false);
     setDownload({ kind: 'busy' });
     try {
-      const result = await downloadExport(exportLocales);
+      const result = await downloadExport(exportLocales, controller.signal);
+      // The selection changed while the body was still arriving: drop the ZIP of the old selection.
+      if (controller.signal.aborted) return;
       const fileName = downloadFileName(result.header, en.export.fallbackFileName);
       saveBlob(result.blob, fileName);
       setDownload({ kind: 'done', fileName, changed: isWorseStatus(result.status, checklist.status) });
     } catch (error) {
+      if (controller.signal.aborted) return;
       setDownload({ kind: 'failed', messages: error instanceof ApiError ? error.messages : [] });
+    } finally {
+      // Only the run that registered itself clears the slot; an aborted run never clears a newer one.
+      if (runningDownload.current === controller) runningDownload.current = null;
     }
   }
 

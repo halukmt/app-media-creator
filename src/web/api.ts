@@ -120,11 +120,13 @@ export function fetchChecklist(locales: readonly string[], signal?: AbortSignal)
  */
 export async function downloadExport(
   locales: readonly string[],
+  signal?: AbortSignal,
 ): Promise<{ blob: Blob; header: string | null; status: string | null }> {
   const response = await fetch('/api/export', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ locales }),
+    ...(signal ? { signal } : {}),
   });
   if (!response.ok) throw await apiError(response);
   return {
