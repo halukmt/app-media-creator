@@ -397,3 +397,14 @@
 - Code review 8 findings, 5 fixed (previews, wording, plural, type check); kept the per-caller try/catch.
 - E2E: tests that wait 60–90 s for generation had the 30 s default test timeout → `test.slow()` (logo, screenshots ×3).
 - Security review: no findings.
+
+## #96 Shared hooks — done (PR #100)
+
+- `src/web/hooks/useAiJob.ts` and `useRevisionAutosave.ts` (generic `load`/`documentOf` so Screenshots can load uploads
+  with the sets; callbacks `onLoaded`, `onServerDocument`, `onChangedElsewhere`, `onSaved` via a ref set in
+  useLayoutEffect; `applyLocked(apply)` keeps the #84/#87/#89 order). `isConflict`/`messagesOf` in `api.ts`.
+- Code review 8 findings, 7 fixed (late first job list, stale save answer overwriting checks, unhandled apply error,
+  render-time ref write, dead import, inline messagesOf copies, alias style). Creative autosave stays (no revision) →
+  consider with #98.
+- One e2e flake: "header image preview at 768 px" failed once under load, green in two reruns. Watch.
+- No delta spec (`skip_specs`), no design-critic (no visible change), no security review (client only).
