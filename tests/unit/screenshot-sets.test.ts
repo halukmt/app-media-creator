@@ -183,7 +183,7 @@ describe('generateScreenshotCards renders the device matrix per locale', () => {
     expect(iphone?.messages.some((m) => m.text.includes('made from the de-DE input'))).toBe(true);
     // One screenshot is below the Play phone minimum of 2.
     expect(result.warnings.filter((w) => w.code === 'too-few-screenshots').map((w) => w.path).sort()).toEqual(['google/de-DE/phone', 'google/tr-TR/phone']);
-  }, 60_000);
+  });
 
   test('removes the cards of a device that is no longer picked', async () => {
     const workspace = await smallProject({ google: [] });
@@ -193,14 +193,14 @@ describe('generateScreenshotCards renders the device matrix per locale', () => {
     expect(result.ok).toBe(true);
     await generateScreenshotCards(workspace, { locales: 'de-DE' });
     expect((await readManifest(workspace)).entries.map((e) => e.path)).toEqual(['apple/de-DE/iphone-6.9/01-start.png']);
-  }, 60_000);
+  });
 
   test('generates one locale only when asked', async () => {
     const workspace = await smallProject({ google: [] });
     await upload(workspace, 'de-DE', 'start.png');
     const result = await generateScreenshotCards(workspace, { locales: 'tr-TR' });
     expect(result.entries.map((e) => e.path)).toEqual(['apple/tr-TR/iphone-6.3/01-start.png']);
-  }, 60_000);
+  });
 
   test('gives Google Play at most 8 screenshots and the App Store up to 10', async () => {
     const workspace = await smallProject({ apple: [] });
@@ -208,7 +208,7 @@ describe('generateScreenshotCards renders the device matrix per locale', () => {
     const result = await generateScreenshotCards(workspace, { locales: 'de-DE' });
     expect(result.entries).toHaveLength(8);
     expect((await readManifest(workspace)).entries.every((e) => e.specId === 'google.screenshot.phone')).toBe(true);
-  }, 60_000);
+  });
 
   test('asks for screenshots and for a device when there is nothing to render', async () => {
     const workspace = await smallProject();

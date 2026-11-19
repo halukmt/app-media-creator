@@ -113,12 +113,12 @@ describe('Generation per language keeps the outputs tidy', () => {
     expect(result.skipped).toEqual(['de-DE']);
     expect((await readManifest(workspace)).entries.map((e) => e.path)).toEqual([`apple/tr-TR/iphone-6.3/01-tr.png`]);
     expect(turkish.path).toContain('tr-TR');
-  }, 60_000);
+  });
 
   test('says in the preview when a screenshot is beyond the store maximum', async () => {
     const { workspace } = await workspaceWithShot();
     for (let i = 2; i <= 9; i += 1) await saveInput(workspace, 'de-DE', { kind: 'screenshot', locale: 'de-DE', originalName: `s${i}.png`, bytes: await appScreenshot(118, 256) });
     const preview = await renderCardPreview(workspace, { locale: 'de-DE', device: 'google.screenshot.phone', index: 8, width: 120 });
     expect(preview.warnings.map((w) => w.code)).toContain('not-exported');
-  }, 60_000);
+  });
 });

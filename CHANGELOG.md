@@ -47,4 +47,5 @@ entries left under `[Unreleased]` is rejected by `npm run check:release`.
 - Environment labels with characters the icon font cannot draw (e.g. Cyrillic or Chinese) are rejected at the label field instead of vanishing from the icons. (#68)
 - Changing the languages while a ZIP download runs cancels it, so no ZIP or message for the old selection appears and only one download runs at a time. (#48)
 - A logo that is one solid colour or a gradient without transparency keeps its shape in the Android monochrome layer, the monochrome and inverse logo variants and blueprint icons instead of coming out empty or cut apart. (#63)
+- Unit tests that render many images no longer time out in a full local run on a busy machine. (#72)
 
