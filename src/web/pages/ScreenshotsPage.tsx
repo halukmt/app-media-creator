@@ -83,7 +83,9 @@ export function ScreenshotsPage({ project, catalogue, selection, onSelectionChan
   const [editLocale, setEditLocale] = useState(project.sourceLocale);
   const [uploadState, setUploadState] = useState<{ done: number; total: number } | null>(null);
   const [uploadMessage, setUploadMessage] = useState<Message>(null);
-  const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved' | 'failed'>('idle');
+  const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved' | 'failed' | 'conflict'>('idle');
+  // The stored revision this page last saw; every save is sent based on it (#85).
+  const knownRevision = useRef(0);
   const [announce, setAnnounce] = useState('');
   const [device, setDevice] = useState<string>('');
   const [previews, setPreviews] = useState<Record<number, CardPreviewResult | 'failed'>>({});
@@ -155,7 +157,16 @@ export function ScreenshotsPage({ project, catalogue, selection, onSelectionChan
       const [nextInputs, nextSets] = await Promise.all([fetchInputs(), fetchScreenshots()]);
       if (number !== reloadCount.current) return false;
       setInputs(nextInputs.filter((input) => input.kind === 'screenshot'));
-      setSets(nextSets);
+      // An answer older than a save this page already made is stale for the sets (uploads are still current).
+      if (nextSets.revision >= knownRevision.current) {
+        // The sets moved on elsewhere: an edit still waiting is based on the older version and must not be sent.
+        if (nextSets.revision > knownRevision.current && queue.current.hasPending()) {
+          queue.current.discard();
+          setSaveState('conflict');
+        }
+        knownRevision.current = nextSets.revision;
+        setSets(nextSets);
+      }
       setLoadError(null);
       // This reload started after the apply finished, so it shows the applied texts: release once it is rendered.
       if (!applyRunning.current && lockedAfter.current !== null && number > lockedAfter.current) setReleaseLock(true);
@@ -217,13 +228,24 @@ export function ScreenshotsPage({ project, catalogue, selection, onSelectionChan
 
   // Edits are saved after a short pause. Saves run one after another; `flushSave` sends a pending edit at once and
   // resolves when everything is stored, so upload, generate and leaving the page never lose or overwrite an edit.
+  // The page's own edits follow each other, so a save is sent based on the revision of the last save or load. A save
+  // that the server rejects as based on an older revision means the sets changed elsewhere.
   const queue = useRef(
-    createSaveQueue<ScreenshotSets>(saveScreenshots, () => {
-      setSaveState('saved');
-      setPreviewVersion((v) => v + 1);
-    }),
+    createSaveQueue<ScreenshotSets>(
+      async (document) => {
+        const saved = await saveScreenshots({ ...document, revision: knownRevision.current });
+        knownRevision.current = saved.revision;
+        return saved;
+      },
+      () => {
+        setSaveState('saved');
+        setPreviewVersion((v) => v + 1);
+      },
+    ),
   );
-  /** Sends pending edits now; rejects (and keeps them) when the save fails. */
+  const reloadRef = useRef(reload);
+  reloadRef.current = reload;
+  /** Sends pending edits now; rejects (and keeps them) when the save fails; drops them when they conflict. */
   const flushSave = useCallback(async (): Promise<void> => {
     if (saveTimer.current) {
       clearTimeout(saveTimer.current);
@@ -232,6 +254,14 @@ export function ScreenshotsPage({ project, catalogue, selection, onSelectionChan
     try {
       await queue.current.flush();
     } catch (error) {
+      if (error instanceof ApiError && error.status === 409) {
+        // Never retry it: the change is based on data that changed elsewhere. Show the current version instead. The
+        // caller (upload, generate, apply) may go on: nothing of this page waits to be saved any more.
+        queue.current.discard();
+        setSaveState('conflict');
+        await reloadRef.current();
+        return;
+      }
       setSaveState('failed');
       throw error;
     }
@@ -782,7 +812,10 @@ export function ScreenshotsPage({ project, catalogue, selection, onSelectionChan
               {saveState === 'saving' ? en.screenshots.saving : saveState === 'saved' ? en.screenshots.saved : ''}
               {deviceSize ? ` ${deviceName} · ${en.screenshots.pixels(deviceSize.width, deviceSize.height)}` : ''}
             </p>
-            <div role="alert">{saveState === 'failed' ? <StatusAlert announce={false} tone="error" title={en.screenshots.saveFailed} /> : null}</div>
+            <div role="alert">
+              {saveState === 'failed' ? <StatusAlert announce={false} tone="error" title={en.screenshots.saveFailed} /> : null}
+              {saveState === 'conflict' ? <StatusAlert announce={false} tone="warning" title={en.screenshots.changedElsewhere} /> : null}
+            </div>
             {usesFallback ? (
               <>
                 <StatusAlert tone="info" title={en.screenshots.fallbackNote(localeName(project.sourceLocale))}>

@@ -295,6 +295,7 @@ export const en = {
     saving: 'Saving…',
     saved: 'Changes saved.',
     saveFailed: 'Changes could not be saved.',
+    changedElsewhere: 'The screenshots were changed elsewhere (another tab or an AI apply). Your last change was not saved; the current version is loaded.',
     saveFirst: 'Your latest changes could not be saved, so nothing was started. They are still here; try again.',
     fallbackNote: (source: string) => `This language has no own screenshots; it uses the ${source} screenshots and texts.`,
     previewHeading: 'Preview',

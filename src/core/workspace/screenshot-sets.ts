@@ -39,6 +39,11 @@ export interface CardStyle {
 
 export interface ScreenshotSets {
   version: 1;
+  /**
+   * Counts the stored versions. A save names the revision it is based on and is rejected when the file has moved on
+   * (another tab, an AI apply), so an older document never overwrites newer changes.
+   */
+  revision: number;
   style: CardStyle;
   sets: Partial<Record<LocaleId, ScreenshotEntry[]>>;
   /**
@@ -51,6 +56,7 @@ export interface ScreenshotSets {
 export function defaultScreenshotSets(): ScreenshotSets {
   return {
     version: 1,
+    revision: 0,
     style: { layout: 'text-top', background: { kind: 'gradient', from: '#003a72', to: '#0079dd', angle: 160 } },
     sets: {},
     known: [],
@@ -73,6 +79,7 @@ const entrySchema = z.object({
 
 const documentSchema = z.object({
   version: z.literal(1).optional(),
+  revision: z.number().int().min(0).optional(),
   style: z.object({
     layout: z.custom<CardLayout>(isCardLayout, { message: 'unknown layout' }),
     background: z.custom<Background>(isBackground, { message: 'must be a #rrggbb colour or a gradient of two' }),
@@ -81,7 +88,7 @@ const documentSchema = z.object({
   known: z.array(z.string()).optional(),
 });
 
-export type SetsValidation = { ok: true; sets: ScreenshotSets } | { ok: false; errors: string[] };
+export type SetsValidation = { ok: true; sets: ScreenshotSets } | { ok: false; errors: string[]; conflict?: true };
 
 /**
  * Validates screenshot sets against the uploaded screenshots: known locales, only existing screenshot inputs, each
@@ -124,7 +131,7 @@ export function validateScreenshotSets(input: unknown, screenshots: readonly Sto
   }
   if (errors.length > 0) return { ok: false, errors };
   const known = (parsed.data.known ?? []).filter((p) => uploaded.has(p));
-  return { ok: true, sets: { version: 1, style: parsed.data.style, sets, known } };
+  return { ok: true, sets: { version: 1, revision: parsed.data.revision ?? 0, style: parsed.data.style, sets, known } };
 }
 
 /**
@@ -147,36 +154,63 @@ export function mergeWithInputs(stored: ScreenshotSets, screenshots: readonly St
   return { ...stored, sets, known: screenshots.map((s) => s.path) };
 }
 
+/**
+ * The stored sets as read (lenient: a deleted upload drops only its own entry), or the defaults with revision 0 when
+ * there is no file or it is broken as a whole. Reading and saving use this one view, so both see the same revision.
+ */
+async function readStoredSets(workspace: Workspace, uploads: readonly StoredInput[]): Promise<ScreenshotSets> {
+  const file = path.join(workspace.root, FILE);
+  if (!existsSync(file)) return defaultScreenshotSets();
+  let raw: unknown = null;
+  try {
+    raw = JSON.parse(await readFile(file, 'utf8'));
+  } catch {
+    raw = null;
+  }
+  const result = validateScreenshotSets(raw, uploads, true);
+  return result.ok ? result.sets : defaultScreenshotSets();
+}
+
 /** The current sets: the stored file (or defaults) merged with the uploaded screenshots. */
 export async function readScreenshotSets(workspace: Workspace, screenshots?: readonly StoredInput[]): Promise<ScreenshotSets> {
   const uploads = screenshots ?? (await listScreenshots(workspace));
-  const file = path.join(workspace.root, FILE);
-  let stored = defaultScreenshotSets();
-  if (existsSync(file)) {
-    let raw: unknown = null;
-    try {
-      raw = JSON.parse(await readFile(file, 'utf8'));
-    } catch {
-      raw = null;
-    }
-    // Lenient: a deleted upload drops only its own entry. A file that is broken as a whole falls back to defaults.
-    const result = validateScreenshotSets(raw, uploads, true);
-    if (result.ok) stored = result.sets;
-  }
-  return mergeWithInputs(stored, uploads);
+  return mergeWithInputs(await readStoredSets(workspace, uploads), uploads);
 }
 
+// Saves of one workspace run one after another, so two saves based on the same revision cannot both pass the check.
+const saveQueues = new Map<string, Promise<unknown>>();
+
 /**
- * Validates and stores the sets; returns the merged result or the validation errors. Every current upload counts as
- * known afterwards, so a screenshot left out of the saved sets is not appended again.
+ * Validates and stores the sets; returns the merged result or the validation errors. When the input names a
+ * `revision`, it must be the stored one: otherwise nothing is written and the result is a conflict. Each save stores
+ * the next revision. (Internal callers that just read the sets pass their revision along; the HTTP route requires one.)
+ * Uploads the saving page knew (its `known` list) and those already known stay known, so a screenshot left out of the
+ * saved sets is not appended again; an upload the page never saw is still appended on the next read.
  */
-export async function saveScreenshotSets(workspace: Workspace, input: unknown): Promise<SetsValidation> {
-  const screenshots = await listScreenshots(workspace);
-  const result = validateScreenshotSets(input, screenshots);
-  if (!result.ok) return result;
-  const toStore: ScreenshotSets = { ...result.sets, known: screenshots.map((s) => s.path) };
-  await writeJsonAtomic(path.join(workspace.root, FILE), toStore);
-  return { ok: true, sets: mergeWithInputs(toStore, screenshots) };
+export function saveScreenshotSets(workspace: Workspace, input: unknown): Promise<SetsValidation> {
+  const run = async (): Promise<SetsValidation> => {
+    const screenshots = await listScreenshots(workspace);
+    const result = validateScreenshotSets(input, screenshots);
+    if (!result.ok) return result;
+    const stored = await readStoredSets(workspace, screenshots);
+    const based = (input as { revision?: unknown }).revision;
+    if (typeof based === 'number' && based !== stored.revision) {
+      return {
+        ok: false,
+        conflict: true,
+        errors: [`The screenshot sets were changed elsewhere (revision ${stored.revision}); this save is based on revision ${based}`],
+      };
+    }
+    const listed = Object.values(result.sets.sets).flatMap((entries) => (entries ?? []).map((entry) => entry.input));
+    const known = [...new Set([...stored.known, ...result.sets.known, ...listed])];
+    const toStore: ScreenshotSets = { ...result.sets, revision: stored.revision + 1, known };
+    await writeJsonAtomic(path.join(workspace.root, FILE), toStore);
+    return { ok: true, sets: mergeWithInputs(toStore, screenshots) };
+  };
+  const previous = saveQueues.get(workspace.root) ?? Promise.resolve();
+  const next = previous.then(run, run);
+  saveQueues.set(workspace.root, next.catch(() => undefined));
+  return next;
 }
 
 export interface EffectiveEntry extends ScreenshotEntry {

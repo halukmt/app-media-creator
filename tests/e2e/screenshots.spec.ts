@@ -192,6 +192,29 @@ test.describe('The Screenshots section', () => {
     }
   });
 
+  test('shows the newer version when another tab saved the sets in between (#85)', async ({ page, context }) => {
+    const open = async (tab: Page) => {
+      await tab.setViewportSize({ width: 1280, height: 900 });
+      await tab.goto('/#/screenshots');
+      await tab.getByRole('button', { name: /Preview and edit/ }).first().click();
+      await tab.getByRole('group', { name: /Language to edit/ }).locator('label', { hasText: 'German' }).click();
+      return tab.getByLabel('Subline', { exact: true }).first();
+    };
+    const first = await open(page);
+    const other = await context.newPage();
+    const second = await open(other);
+    // The other tab saves first.
+    await second.fill('Saved in the other tab');
+    await expect(other.getByText('Changes saved.')).toBeVisible();
+    // This tab is still based on the earlier revision: its save is refused and it shows the newer version.
+    await first.fill('Saved in this tab');
+    await expect(page.getByRole('alert').filter({ hasText: 'The screenshots were changed elsewhere' })).toBeVisible();
+    await expect(first).toHaveValue('Saved in the other tab');
+    const stored = (await (await page.request.get('/api/screenshots')).json()) as { sets: Record<string, { subline: string }[]> };
+    expect(stored.sets['de-DE']?.[0]?.subline).toBe('Saved in the other tab');
+    await other.close();
+  });
+
   /** Opens the purpose step and picks the App Store header and search images. */
   async function chooseHeader(page: Page) {
     await page.goto('/#/screenshots');

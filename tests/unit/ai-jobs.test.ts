@@ -144,8 +144,11 @@ describe('applyHeadlines writes one variant into the screenshot sets', () => {
     const b = brief(job.folder);
     const inputs = b.screenshots['de-DE']!.map((s) => s.input);
     write(job.folder, 'headlines.json', headlineVariants({ 'de-DE': inputs, 'tr-TR': inputs }));
+    const before = (await readScreenshotSets(workspace)).revision;
     expect(await applyHeadlines(workspace, job.id, 'B')).toEqual({ locales: ['de-DE', 'tr-TR'] });
     const sets = await readScreenshotSets(workspace);
+    // A page still based on the earlier revision cannot save over the applied headlines (#85).
+    expect(sets.revision).toBe(before + 1);
     expect(sets.sets['de-DE']?.map((e) => e.headline)).toEqual(['de-DE B 1', 'de-DE B 2']);
     expect(sets.sets['tr-TR']?.map((e) => [e.input, e.headline])).toEqual(inputs.map((input, i) => [input, `tr-TR B ${i + 1}`]));
     const state = await readJob(workspace, job.id);
