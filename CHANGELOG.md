@@ -40,4 +40,5 @@ entries left under `[Unreleased]` is rejected by `npm run check:release`.
 - A failed older save of screenshot edits can no longer overwrite newer edits. (#59)
 - The app name on share images and banners is drawn completely instead of being cut off after part of the first letter. (#62)
 - Environment labels with characters the icon font cannot draw (e.g. Cyrillic or Chinese) are rejected at the label field instead of vanishing from the icons. (#68)
+- Changing the languages while a ZIP download runs cancels it, so no ZIP or message for the old selection appears and only one download runs at a time. (#48)
 

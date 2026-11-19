@@ -118,6 +118,50 @@ test.describe('The export of the running tool', () => {
     await expect(page.getByRole('status').filter({ hasText: 'downloaded' })).toBeVisible();
   });
 
+  test('drops a running download when the languages change and lets a new one start (#48)', async ({ page }) => {
+    let downloads = 0;
+    page.on('download', () => (downloads += 1));
+    let requests = 0;
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    // Hold the first export request back until the selection has changed, then let it through.
+    await page.route('**/api/export', async (route) => {
+      requests += 1;
+      if (requests === 1) await gate;
+      await route.continue().catch(() => undefined);
+    });
+
+    await page.goto('/#/export');
+    await selectGermanOnly(page);
+    await expect(page.getByText('Required files are missing or invalid.')).toBeVisible();
+    await page.getByRole('button', { name: 'Download ZIP' }).click();
+    await page.getByRole('dialog').getByRole('button', { name: 'Download anyway' }).click();
+    const busy = page.getByRole('button', { name: 'Building ZIP…' });
+    await expect(busy).toBeVisible();
+    // Clicks on the busy button start nothing.
+    await busy.click({ force: true });
+    await expect.poll(() => requests).toBe(1);
+
+    // Changing the languages aborts the held request in the browser.
+    const aborted = page.waitForEvent('requestfailed', (request) => request.url().endsWith('/api/export'));
+    await page.getByRole('group', { name: /Languages for this section/ }).locator('label', { hasText: 'Turkish' }).click();
+    await aborted;
+    release();
+    const button = page.getByRole('button', { name: 'Download ZIP' });
+    await expect(button).toBeVisible();
+    expect(downloads).toBe(0);
+    await expect(page.getByRole('status').filter({ hasText: 'downloaded' })).toHaveCount(0);
+    await expect(page.getByRole('alert').filter({ hasText: 'could not' })).toHaveCount(0);
+
+    // The slot is free again: a new download for the new selection sends a new request.
+    await button.click();
+    const downloading = page.waitForEvent('download');
+    await page.getByRole('dialog').getByRole('button', { name: 'Download anyway' }).click();
+    await downloading;
+    expect(requests).toBe(2);
+    await expect(page.getByRole('status').filter({ hasText: 'downloaded' })).toBeVisible();
+  });
+
   for (const width of viewportWidths()) {
     test(`shows the Export section with data at ${width} px without accessibility violations`, async ({ page }) => {
       await page.setViewportSize({ width, height: 900 });
