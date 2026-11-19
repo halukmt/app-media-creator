@@ -356,3 +356,11 @@
 - Code review found 10 points (stale edit after reload, double reader, known semantics, …) → fixed; security clean.
 - The client edit lock from #84–#89 stays as a UX guard; data loss is now prevented by the server.
 - Codex on PR #90: no findings. Next: #16 (amc-copy skill), #24 (store texts).
+
+## #92 Codex findings on #91: queued saves on conflict — done (PR #93)
+
+- Save queue: discard generations, `discardOn` (drop in the same step as the refused save — a caller's catch is too
+  late, the next queued run starts in the next microtask), `SaveDiscardedError` for dropped flushes, `discard()`
+  reports drops. Page: `isConflict`, reload with newer revision drops queued edits + refreshes previews, knownRevision
+  never goes back.
+- Codex on PR #91 led to this issue (P1). Next: #16 (amc-copy skill), #24 (store texts).
