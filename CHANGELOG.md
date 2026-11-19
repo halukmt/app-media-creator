@@ -34,4 +34,5 @@ entries left under `[Unreleased]` is rejected by `npm run check:release`.
 - The shadow of a user bezel no longer darkens the edges of the screenshot inside it. (#51)
 - Semi-transparent parts of a user bezel keep their opacity instead of being drawn twice. (#53)
 - When screenshot edits cannot be saved, upload and generate stop and the edits are kept instead of being lost or ignored. (#57)
+- A failed older save of screenshot edits can no longer overwrite newer edits. (#59)
 

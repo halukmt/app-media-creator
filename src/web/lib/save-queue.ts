@@ -11,7 +11,9 @@ export interface SaveQueue<T> {
 }
 
 export function createSaveQueue<T>(save: (document: T) => Promise<unknown>, onSaved?: () => void): SaveQueue<T> {
-  let pending: { document: T } | null = null;
+  let pending: { document: T; version: number } | null = null;
+  // Every scheduled version gets a number; a failed save may only come back if nothing newer was scheduled since.
+  let latestVersion = 0;
   // Settled chain of saves; never stays rejected, so later flushes still run.
   let chain: Promise<void> = Promise.resolve();
   // The latest attempt itself: a flush with nothing new to send waits for it and fails with it, so a save that is
@@ -20,7 +22,8 @@ export function createSaveQueue<T>(save: (document: T) => Promise<unknown>, onSa
 
   return {
     schedule(document) {
-      pending = { document };
+      latestVersion += 1;
+      pending = { document, version: latestVersion };
     },
     hasPending() {
       return pending !== null;
@@ -34,8 +37,9 @@ export function createSaveQueue<T>(save: (document: T) => Promise<unknown>, onSa
           await save(next.document);
           onSaved?.();
         } catch (error) {
-          // Keep the unsaved version for the next attempt, unless the user already made a newer one.
-          if (pending === null) pending = next;
+          // Keep the unsaved version for the next attempt, unless a newer one was scheduled meanwhile (it may already
+          // be saved or queued; restoring this one would later write it back over the newer edits).
+          if (pending === null && next.version === latestVersion) pending = next;
           throw error;
         }
       });
