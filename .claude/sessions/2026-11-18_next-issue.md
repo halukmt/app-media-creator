@@ -384,3 +384,16 @@
 - Reviews: code-review 10, design-critic 13 (fixed except a status badge per language), security clean.
 - New: #96 shared hooks (P2 S, Backlog), #97 task-haluk confirm "no step bar" (P1 XS, sub-issue of #24).
 - Lesson: node -e replacements inside bash double quotes eat backslashes and backticks; use a patch file.
+
+## Backlog prioritised again (2026-11-19, delegated by Haluk)
+
+- Ready: #81 and #96 (raised to P1), #98 (new, Codex on PR #95: pending saves when leaving a section, P1 S), #20, #21.
+  #23 (Video UI) waits for #22 (amc-video). Rest stays in Backlog.
+
+## #81 Project locales for "all" — done (PR #99)
+
+- `selectProjectLocales(projectLocales, selection)` in `src/core/locales/`: export, generators, `createJob` and the
+  card / creative previews use it; one message "is not a locale of this project"; malformed selection → 400.
+- Code review 8 findings, 5 fixed (previews, wording, plural, type check); kept the per-caller try/catch.
+- E2E: tests that wait 60–90 s for generation had the 30 s default test timeout → `test.slow()` (logo, screenshots ×3).
+- Security review: no findings.
