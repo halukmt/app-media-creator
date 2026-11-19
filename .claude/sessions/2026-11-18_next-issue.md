@@ -198,3 +198,17 @@
 - Fix: own `pathData` in `fonts.ts` (shortest 2-decimal form, throws on non-finite / unknown commands); unit test bans
   `toPathData` / `toSVG` in `src/`. Regression test verified to fail on old code. Goldens unchanged.
 - Next: #34 (only Ready issue left).
+
+## #34 Icon variants for preview / test installs — done (PR #67)
+
+- `project.environments` (id, badge ≤ 10, colour preset, style badge | blueprint; max 5; default preview). Ids equal to
+  a lower-case language code are reserved (case-insensitive file systems).
+- Manifest `environment` → `<target>/<environment>/<segment>/…`; part of the set position. Icon generators write
+  production + all environments in one batch with `replaceSets` (removed environments get deleted on regeneration).
+- `src/core/generators/environments.ts`: label pill in the mask-safe circle (radius 0.46 / adaptive 33/108 /
+  maskable from catalogue safe area), colour bar < 64 px, blueprint = gradient + grid + silhouette outline (erosion via
+  blur; note: sharp returns sRGB after blur → `extractChannel(0)`).
+- Checklist: environment sets as own items in project order; stale ones warned and excluded from the ZIP.
+- UI: `EnvironmentCard` on the Project screen; Logo preview "Icon set" filter; docs/icon-variants.md.
+- One unit-test run had a single unexplained failure (likely a timeout under load); 3 reruns and CI green. Watch.
+- Ready list is now empty (Backlog: #30, #42, #47, #48, #63, #64, M3–M7).
