@@ -190,6 +190,11 @@ describe('generateCreativeAssets writes the header, search and universal images 
     const workspace = await creativeWorkspace();
     await expect(renderCreativePreview(workspace, { locale: 'de-DE', specId: 'apple.icon' })).rejects.toThrow(/not a store artwork image/);
   });
+
+  test('previews only the project\'s languages, like generating', async () => {
+    const workspace = await creativeWorkspace();
+    await expect(renderCreativePreview(workspace, { locale: 'fr-FR', specId: 'apple.creative.header-image' })).rejects.toThrow('fr-FR is not a locale of this project');
+  });
 });
 
 describe('generateCreativeAssets writes the feature graphic and the in-app event images per locale', () => {

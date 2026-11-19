@@ -1,7 +1,7 @@
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { outputPath, registerOutputs, type OutputEntry, type RegisterOptions } from '../export/manifest.js';
-import { isLocaleId, resolveLocales, type LocaleId, type LocaleSelection } from '../locales/index.js';
+import { isLocaleId, selectProjectLocales, type LocaleId, type LocaleSelection } from '../locales/index.js';
 import { cardSizeForSpec, loadUserFrame, renderCreativeAsset, type CreativeInput, type TextWarningCode, type UserFrame } from '../screenshots/index.js';
 import { getSpec, type Rect, type SpecEntry } from '../specs/index.js';
 import {
@@ -187,6 +187,7 @@ export async function renderCreativePreview(workspace: Workspace, request: Creat
   if (!Number.isInteger(width) || width < 160 || width > 1600) throw new GeneratorError('width must be whole pixels from 160 to 1600');
 
   const sources = await loadSources(workspace);
+  if (!sources.project.locales.includes(request.locale)) throw new GeneratorError(`${request.locale} is not a locale of this project`);
   if (!enabledImages(sources.project, image.group).includes(image)) {
     throw new GeneratorError(`Enable ${getSpec(image.specId).target === 'apple' ? 'the App Store' : 'Google Play'} in Project for this image`);
   }
@@ -222,7 +223,7 @@ export async function generateCreativeAssets(workspace: Workspace, options: Crea
   const images = enabledImages(sources.project, group);
   let locales: LocaleId[];
   try {
-    locales = options.locales === undefined ? sources.project.locales : resolveLocales(options.locales);
+    locales = selectProjectLocales(sources.project.locales, options.locales);
   } catch (error) {
     throw new GeneratorError((error as Error).message);
   }

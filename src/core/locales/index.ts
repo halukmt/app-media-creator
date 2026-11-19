@@ -61,3 +61,24 @@ export function resolveLocales(selection: LocaleSelection): LocaleId[] {
   if (requested.includes('all')) return [...LOCALE_IDS];
   return LOCALE_IDS.filter((id) => requested.includes(id));
 }
+
+/**
+ * Resolves a selection for a project (export, generators, AI jobs): no selection or "all" means the project's locales,
+ * in catalogue order. Entries are checked against the catalogue first, then against the project.
+ * Throws when a locale is not supported, lies outside the project or the selection is empty.
+ */
+export function selectProjectLocales(projectLocales: readonly LocaleId[], selection: LocaleSelection | undefined): LocaleId[] {
+  const project = LOCALE_IDS.filter((id) => projectLocales.includes(id));
+  if (selection === undefined) return project;
+  if (typeof selection !== 'string' && !(Array.isArray(selection) && selection.every((entry) => typeof entry === 'string'))) {
+    throw new Error('locales must be "all", a locale id or a list of locale ids');
+  }
+  const requested = typeof selection === 'string' ? [selection] : [...selection];
+  const locales = resolveLocales(requested);
+  if (requested.includes('all')) return project;
+  const outside = locales.filter((locale) => !projectLocales.includes(locale));
+  if (outside.length > 0) {
+    throw new Error(`${outside.join(', ')} ${outside.length === 1 ? 'is not a locale' : 'are not locales'} of this project`);
+  }
+  return locales;
+}

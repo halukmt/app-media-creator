@@ -66,9 +66,14 @@ describe('createJob prepares an AI job folder', () => {
     expect((await readJob(workspace, without.id)).warnings.join(' ')).toMatch(/video frames are missing/);
   });
 
+  test('reads "all" as the project\'s languages', async () => {
+    const job = await createJob(await jobWorkspace(), { locales: 'all' });
+    expect(Object.keys(brief(job.folder).screenshots)).toEqual(['de-DE', 'tr-TR']);
+  });
+
   test('rejects a language outside the project and a project without screenshots', async () => {
     const workspace = await jobWorkspace();
-    await expect(createJob(workspace, { locales: ['fr-FR'] })).rejects.toThrow(/fr-FR is not a language of this project/);
+    await expect(createJob(workspace, { locales: ['fr-FR'] })).rejects.toThrow(/fr-FR is not a locale of this project/);
     await expect(createJob(await workspaceFactory())).rejects.toThrow(/Upload screenshots/);
   });
 });

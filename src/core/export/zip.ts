@@ -4,7 +4,7 @@ import { once } from 'node:events';
 import { rm } from 'node:fs/promises';
 import path from 'node:path';
 import { Zip, ZipPassThrough, strToU8 } from 'fflate';
-import { resolveLocales, type LocaleId, type LocaleSelection } from '../locales/index.js';
+import { selectProjectLocales, type LocaleId, type LocaleSelection } from '../locales/index.js';
 import { getSpec } from '../specs/index.js';
 import { safeBaseName } from '../workspace/inputs.js';
 import type { ProjectSettings } from '../workspace/project.js';
@@ -23,21 +23,11 @@ export class ExportError extends Error {}
  * Throws ExportError naming every locale outside the project.
  */
 export function selectExportLocales(project: ProjectSettings, selection: LocaleSelection | undefined): LocaleId[] {
-  if (selection === undefined) return [...project.locales];
-  const requested = typeof selection === 'string' ? [selection] : [...selection];
-  let locales: LocaleId[];
   try {
-    // Validates every entry first, so an unsupported locale next to "all" is rejected too (#30).
-    locales = resolveLocales(requested);
+    return selectProjectLocales(project.locales, selection);
   } catch (error) {
     throw new ExportError((error as Error).message);
   }
-  if (requested.includes('all')) return [...project.locales];
-  const outside = locales.filter((locale) => !project.locales.includes(locale));
-  if (outside.length > 0) {
-    throw new ExportError(`${outside.join(', ')} ${outside.length === 1 ? 'is' : 'are'} not a locale of this project`);
-  }
-  return locales;
 }
 
 export interface ExportOptions {

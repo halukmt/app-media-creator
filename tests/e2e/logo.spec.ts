@@ -28,6 +28,8 @@ test.describe('The Logo section', () => {
   });
 
   test('uploads a logo, sets options, generates all packs and exports them per target', async ({ page }) => {
+    // Renders every logo pack; under load this takes longer than the default 30 s.
+    test.slow();
     await page.setViewportSize({ width: 1280, height: 900 });
     await page.goto('/#/logo');
     await expect(page.getByRole('heading', { level: 1, name: 'Logo' })).toBeVisible();

@@ -1,6 +1,6 @@
 import sharp, { type Sharp } from 'sharp';
 import { outputPath, registerOutputs, type OutputEntry, type RegisterOptions } from '../export/manifest.js';
-import { isLocaleId, resolveLocales, type LocaleId, type LocaleSelection } from '../locales/index.js';
+import { isLocaleId, selectProjectLocales, type LocaleId, type LocaleSelection } from '../locales/index.js';
 import { cardFont, cardSizeForSpec, textBlockSvg, textColorFor, type CardWarning } from '../screenshots/index.js';
 import { getSpec, listSpecs, type Rect, type SpecEntry } from '../specs/index.js';
 import { MAX_TAGLINE, readProject, type Workspace } from '../workspace/index.js';
@@ -148,7 +148,7 @@ function checkTaglines(taglines: ShareImageOptions['taglines'], projectLocales: 
   const result: Partial<Record<LocaleId, string>> = {};
   for (const [locale, text] of Object.entries(taglines)) {
     if (!isLocaleId(locale)) throw new GeneratorError(`taglines: ${locale} is not a supported locale`);
-    if (!projectLocales.includes(locale)) throw new GeneratorError(`taglines: ${locale} is not a language of this project`);
+    if (!projectLocales.includes(locale)) throw new GeneratorError(`taglines: ${locale} is not a locale of this project`);
     if (typeof text !== 'string' || text.length > MAX_TAGLINE) throw new GeneratorError(`taglines.${locale} must be text up to ${MAX_TAGLINE} characters`);
     if (text.trim()) result[locale] = text.trim();
   }
@@ -167,7 +167,7 @@ export async function generateShareImages(workspace: Workspace, options: ShareIm
   const taglines = checkTaglines(options.taglines, project.locales);
   let locales: LocaleId[];
   try {
-    locales = options.locales === undefined ? project.locales : resolveLocales(options.locales);
+    locales = selectProjectLocales(project.locales, options.locales);
   } catch (error) {
     throw new GeneratorError((error as Error).message);
   }

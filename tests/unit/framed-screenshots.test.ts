@@ -6,13 +6,14 @@ import sharp from 'sharp';
 import { describe, expect, test } from 'vitest';
 import { exportChecklist, readManifest } from '../../src/core/export/index.js';
 import { generateFramedScreenshots } from '../../src/core/generators/framed-screenshots.js';
+import { GeneratorError } from '../../src/core/generators/logo.js';
 import { renderFramedScreenshot } from '../../src/core/screenshots/index.js';
 import { getSpec, inspectImageBytes, validateMedia } from '../../src/core/specs/index.js';
-import { saveInput, type Workspace } from '../../src/core/workspace/index.js';
+import { saveInput, saveProject, type Workspace } from '../../src/core/workspace/index.js';
 import { createApp } from '../../src/server/app.js';
 import { packageInfoFactory } from '../factories/package-info.js';
 import { appScreenshot } from '../factories/screenshots.js';
-import { workspaceFactory } from '../factories/workspace.js';
+import { projectInputFactory, workspaceFactory } from '../factories/workspace.js';
 
 /** A workspace with one screenshot each for German and Turkish. */
 async function workspaceWithScreenshots(): Promise<Workspace> {
@@ -99,6 +100,16 @@ describe('generateFramedScreenshots writes website screenshots per locale', () =
   test('asks for screenshots when the selected locales have none', async () => {
     const workspace = await workspaceFactory();
     await expect(generateFramedScreenshots(workspace, { locales: 'fr-FR' })).rejects.toThrow('Upload screenshots for fr-FR first');
+  });
+
+  test('reads "all" as the project\'s locales and rejects a locale outside the project', async () => {
+    const workspace = await workspaceWithScreenshots();
+    const saved = await saveProject(workspace, projectInputFactory({ sourceLocale: 'de-DE', locales: ['de-DE', 'en-US'] }));
+    if (!saved.ok) throw new Error(saved.errors.join('; '));
+    const entries = await generateFramedScreenshots(workspace, { locales: 'all', shadow: false });
+    expect(new Set(entries.map((e) => e.locale))).toEqual(new Set(['de-DE']));
+    await expect(generateFramedScreenshots(workspace, { locales: 'tr-TR' })).rejects.toThrow(new GeneratorError('tr-TR is not a locale of this project'));
+    expect(existsSync(path.join(workspace.outputDir, 'web', 'tr-TR'))).toBe(false);
   });
 
   test('removes the files of a deleted screenshot when generating again', async () => {

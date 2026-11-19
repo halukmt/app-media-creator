@@ -40,6 +40,8 @@ test.describe('The Screenshots section', () => {
   });
 
   test('uploads for two languages, edits a headline, previews and generates, and the ZIP holds both languages', async ({ page }) => {
+    // Renders full-size store images; under load this takes longer than the default 30 s.
+    test.slow();
     await page.setViewportSize({ width: 1280, height: 900 });
     await page.goto('/#/screenshots');
     await expect(page.getByRole('heading', { level: 1, name: 'Screenshots' })).toBeVisible();
@@ -223,6 +225,8 @@ test.describe('The Screenshots section', () => {
   }
 
   test('creates the App Store header, search and universal images with a phrase and shows their safe area (#18)', async ({ page, request }) => {
+    // Renders full-size store images; under load this takes longer than the default 30 s.
+    test.slow();
     await page.setViewportSize({ width: 1280, height: 900 });
     await chooseHeader(page);
     await page.getByLabel('Phrase (German)').fill('Faire Teams in Sekunden');
@@ -253,6 +257,8 @@ test.describe('The Screenshots section', () => {
   });
 
   test('creates the Play feature graphic with the phrase and the in-app event images without text (#19)', async ({ page, request }) => {
+    // Renders full-size store images; under load this takes longer than the default 30 s.
+    test.slow();
     await page.setViewportSize({ width: 1280, height: 900 });
     await page.goto('/#/screenshots');
     await page.getByRole('button', { name: 'Purpose', exact: false }).first().click();

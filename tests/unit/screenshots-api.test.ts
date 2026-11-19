@@ -61,6 +61,16 @@ describe('Card previews show one slot small, with the warnings of the full card'
     expect(preview.warnings.map((w) => w.code)).toContain('word-broken');
   });
 
+  test('previews only the project\'s languages, like generating', async () => {
+    const { workspace } = await workspaceWithShot();
+    const saved = await saveProject(workspace, { ...projectInputFactory(), sourceLocale: 'de-DE', locales: ['de-DE', 'en-US'] });
+    if (!saved.ok) throw new Error(saved.errors.join('; '));
+    await expect(renderCardPreview(workspace, { locale: 'fr-FR', device: 'apple.screenshot.iphone-6.3', index: 0 })).rejects.toThrow('fr-FR is not a locale of this project');
+    const response = await appFor(workspace).request('/api/generate/screenshot-cards', { method: 'POST', body: JSON.stringify({ locales: 5 }), headers: { 'content-type': 'application/json' } });
+    expect(response.status).toBe(400);
+    expect(await response.json()).toMatchObject({ error: 'locales must be "all", a locale id or a list of locale ids' });
+  });
+
   test('applies a slot override: no frame on a slot changes the card', async () => {
     const { workspace, input } = await workspaceWithShot();
     const framed = await renderCardPreview(workspace, { locale: 'de-DE', device: 'apple.screenshot.iphone-6.3', index: 0 });

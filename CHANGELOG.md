@@ -41,6 +41,8 @@ entries left under `[Unreleased]` is rejected by `npm run check:release`.
 
 ### Fixed
 
+- Generators and AI jobs read the locale selection "all" as the project's locales and reject locales outside the
+  project, like the export. (#81)
 - Generated files with dots in their name stay in the export, and a failed ZIP write returns an error instead of stopping the tool. (#35)
 - A failed batch of generated files leaves the previous files untouched, and rotated JPEG logos are rendered upright. (#38)
 - Closing the sections menu on a phone returns focus to the menu button, and widening the window with the menu open no longer locks the page. (#44)
