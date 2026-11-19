@@ -1,9 +1,20 @@
 // conventions: RULE-TESTING-3301
 import { describe, expect, test } from 'vitest';
-import { getSpec, validateMedia } from '../../src/core/specs/index.js';
+import { getSpec, matchesDimensions, validateMedia } from '../../src/core/specs/index.js';
 import { imagePropsFactory, videoPropsFactory } from '../factories/media.js';
 
 const iphone63 = getSpec('apple.screenshot.iphone-6.3');
+
+describe('The iPad app preview sizes follow the device generation (#30)', () => {
+  test('accepts 1200×1600 and 900×1200 for the 12.9" (2nd gen), and only 900×1200 for the 9.7"', () => {
+    const large = getSpec('apple.preview.ipad-12.9').dimensions;
+    const small = getSpec('apple.preview.ipad-9.7').dimensions;
+    expect(matchesDimensions(large, 1200, 1600)).toBe(true);
+    expect(matchesDimensions(large, 900, 1200)).toBe(true);
+    expect(matchesDimensions(small, 900, 1200)).toBe(true);
+    expect(matchesDimensions(small, 1200, 1600)).toBe(false);
+  });
+});
 
 describe('validateMedia checks a generated file against its spec entry', () => {
   test('accepts a 1206×2622 PNG without alpha of 2 MB as a 6.3-inch iPhone screenshot', () => {

@@ -139,6 +139,8 @@ describe('selectExportLocales checks the selection against the project', () => {
 
   test('rejects fr-FR when the project uses only de-DE and en-US', () => {
     expect(() => selectExportLocales(project, ['fr-FR'])).toThrow(new ExportError('fr-FR is not a locale of this project'));
+    // "all" next to an unsupported locale is rejected, not expanded (#30).
+    expect(() => selectExportLocales(project, ['all', 'pt-BR'])).toThrow(new ExportError('pt-BR is not a supported locale'));
   });
 
   test('rejects an unsupported locale', () => {

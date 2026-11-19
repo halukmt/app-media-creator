@@ -36,6 +36,10 @@ describe('resolveLocales turns one, several or all locales into an ordered list'
     expect(resolveLocales(['all'])).toHaveLength(6);
   });
 
+  test('rejects an unsupported locale next to "all" and names it (#30)', () => {
+    expect(() => resolveLocales(['all', 'pt-BR'])).toThrow(/pt-BR is not a supported locale/);
+  });
+
   test('returns a single locale', () => {
     expect(resolveLocales('es-ES')).toEqual(['es-ES']);
   });

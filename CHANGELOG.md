@@ -50,4 +50,5 @@ entries left under `[Unreleased]` is rejected by `npm run check:release`.
 - Changing the languages while a ZIP download runs cancels it, so no ZIP or message for the old selection appears and only one download runs at a time. (#48)
 - A logo that is one solid colour or a gradient without transparency keeps its shape in the Android monochrome layer, the monochrome and inverse logo variants and blueprint icons instead of coming out empty or cut apart. (#63)
 - Unit tests that render many images no longer time out in a full local run on a busy machine. (#72)
+- App previews for the iPad 12.9" (2nd generation) accept 1200×1600 as well, and a language list with "all" plus an unsupported language is rejected instead of ignored. (#30)
 
