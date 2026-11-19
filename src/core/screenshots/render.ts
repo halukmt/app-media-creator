@@ -4,19 +4,16 @@ import { backgroundSvg, isBackground, textColorFor, type Background } from './ba
 import { cardFont } from './fonts.js';
 import {
   DEFAULT_SCREEN_ASPECT,
-  frameBox,
   frameForSpec,
-  frameSvg,
   isFrameKind,
   loadUserFrame,
   outerAspect,
-  screenWidthFor,
   svgNumber,
   type FrameKind,
-  type UserFrame,
 } from './frames.js';
 import { LAYOUT_RATIOS, isCardLayout, placeCard, type CardLayout } from './layouts.js';
 import { fitText } from './text-layout.js';
+import { CardInputError, deviceSvg, screenshotInfo } from './device.js';
 
 export interface CardInput {
   /** Output size in pixels. */
@@ -53,15 +50,10 @@ const LEADING = { headline: 1.08, subline: 1.3 } as const;
 const GAP = 0.3;
 /** Text never shrinks below this share of the layout's start size. */
 const MIN_TEXT_SCALE = 0.5;
-const PLACEHOLDER = '#e5e5ea';
 
 const n = svgNumber;
 /** Largest card edge in pixels; store sizes stay far below. */
 const MAX_EDGE = 8192;
-const SCREENSHOT_FORMATS = new Set(['png', 'jpeg', 'webp']);
-
-/** Thrown for card input that cannot be rendered (bad layout, colour, size, screenshot format …). */
-export class CardInputError extends Error {}
 
 /** Checks every value that ends up in the SVG, so the function is safe to call with request data. */
 function assertCardInput(input: CardInput): void {
@@ -93,55 +85,6 @@ export function cardDefaultsForSpec(spec: SpecEntry): { width: number; height: n
     frame: spec.discouragesFrames ? 'none' : frameForSpec(spec.id),
     ...(spec.maxTextShare !== undefined ? { maxTextShare: spec.maxTextShare } : {}),
   };
-}
-
-async function screenshotInfo(bytes: Uint8Array | undefined): Promise<{ width: number; height: number } | null> {
-  if (!bytes) return null;
-  const metadata = await sharp(bytes).metadata();
-  // Raster formats only: an SVG "screenshot" would be parsed by librsvg with its own references.
-  if (!SCREENSHOT_FORMATS.has(metadata.format ?? '')) throw new CardInputError('The screenshot must be a PNG, JPEG or WebP image');
-  const width = metadata.autoOrient?.width ?? metadata.width;
-  const height = metadata.autoOrient?.height ?? metadata.height;
-  if (!width || !height) throw new Error('The screenshot has no readable size');
-  return { width, height };
-}
-
-/** The screenshot resized to cover the screen rectangle, as an SVG image element. */
-async function screenImage(bytes: Uint8Array | undefined, x: number, y: number, width: number, height: number): Promise<string> {
-  if (!bytes) return `<rect x="${n(x)}" y="${n(y)}" width="${n(width)}" height="${n(height)}" fill="${PLACEHOLDER}"/>`;
-  const resized = await sharp(bytes)
-    .autoOrient()
-    .resize(Math.max(1, Math.round(width)), Math.max(1, Math.round(height)), { fit: 'cover', position: 'top' })
-    .png({ compressionLevel: 1 })
-    .toBuffer();
-  return (
-    `<image x="${n(x)}" y="${n(y)}" width="${n(width)}" height="${n(height)}" preserveAspectRatio="none" ` +
-    `href="data:image/png;base64,${resized.toString('base64')}"/>`
-  );
-}
-
-/** Device drawing with either the user's bezel or the generic frame. */
-async function deviceSvg(
-  kind: FrameKind,
-  userFrame: UserFrame | null,
-  box: { x: number; y: number; width: number },
-  screenAspect: number,
-  screenshot: Uint8Array | undefined,
-): Promise<{ svg: string; height: number }> {
-  if (userFrame) {
-    const scale = box.width / userFrame.width;
-    const s = userFrame.screen;
-    const image = await screenImage(screenshot, box.x + s.x * scale, box.y + s.y * scale, s.width * scale, s.height * scale);
-    const bezel =
-      `<image x="${n(box.x)}" y="${n(box.y)}" width="${n(box.width)}" height="${n(userFrame.height * scale)}" preserveAspectRatio="none" ` +
-      `href="data:image/png;base64,${userFrame.png.toString('base64')}"/>`;
-    return { svg: image + bezel, height: userFrame.height * scale };
-  }
-  const screenWidth = screenWidthFor(kind, box.width);
-  const frame = frameBox(kind, screenWidth, screenWidth * screenAspect);
-  const s = frame.screen;
-  const image = await screenImage(screenshot, box.x + s.x, box.y + s.y, s.width, s.height);
-  return { svg: frameSvg(kind, box.x, box.y, frame, image, 'device'), height: frame.outerHeight };
 }
 
 /**
@@ -216,7 +159,7 @@ export async function renderScreenshotCard(input: CardInput): Promise<CardResult
   }
 
   // Device and background
-  const device = await deviceSvg(input.frame, userFrame, place.device, screenAspect, input.screenshot);
+  const device = await deviceSvg({ kind: input.frame, userFrame, box: place.device, screenAspect, screenshot: input.screenshot });
   const bg = backgroundSvg(input.background, width, height);
   const svg =
     `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">` +

@@ -18,6 +18,8 @@ export interface Workspace {
   /** ZIP files created by the export. */
   exportsDir: string;
   projectFile: string;
+  /** Official device bezels the user adds (`<kind>.png` + `<kind>.json`); never created by the tool. */
+  userFramesDir: string;
 }
 
 /** `project.json` exists but cannot be used; `problems` lists every reason for the UI. */
@@ -49,6 +51,7 @@ export async function openWorkspace(dir: string): Promise<Workspace> {
     outputDir: path.join(root, 'output'),
     exportsDir: path.join(root, 'exports'),
     projectFile: path.join(root, PROJECT_FILE),
+    userFramesDir: path.join(root, 'frames', 'user'),
   };
   for (const folder of FOLDERS) await mkdir(path.join(root, folder), { recursive: true });
   if (!existsSync(workspace.projectFile)) {

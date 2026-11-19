@@ -12,7 +12,9 @@ export type AssetGroup =
   | 'banner'
   | 'favicon'
   | 'share'
-  | 'social';
+  | 'social'
+  /** App screenshots in a device frame for websites (no store requirement). */
+  | 'mockup';
 
 /** `document` covers files of an asset set that are not media, e.g. a web app manifest or an HTML snippet. */
 export type MediaKind = 'image' | 'video' | 'document';
@@ -114,6 +116,8 @@ export interface SpecEntry {
    * fixed rules use their first size instead.
    */
   defaultSize?: Size;
+  /** Device width in pixels at 1x for framed website screenshots; 2x doubles it. */
+  baseWidth?: number;
   /** Largest share of the image that overlay text may cover (Google Play screenshots: under 20 %). */
   maxTextShare?: number;
   /** The store discourages device frames around screenshots (Google Play). */

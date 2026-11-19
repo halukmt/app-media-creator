@@ -97,6 +97,15 @@ export function safeBaseName(originalName: string): string {
   return cleaned.slice(0, 80) || 'file';
 }
 
+/** Prefix `saveInput` puts before the original name (upload time and a random tag). */
+const STORED_PREFIX = /^\d+-[0-9a-f]{6}-/;
+
+/** The original base name of a stored input file, without the upload prefix and the extension. */
+export function originalInputName(storedPath: string): string {
+  const base = storedPath.split('/').pop() ?? storedPath;
+  return base.replace(/\.[^.]+$/, '').replace(STORED_PREFIX, '');
+}
+
 export interface StoredInput {
   kind: InputKind;
   /** Locale folder for screenshots and videos; undefined for the logo. */

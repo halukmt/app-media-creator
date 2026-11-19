@@ -60,6 +60,8 @@ const GEOMETRY: Record<Exclude<FrameKind, 'none'>, Geometry> = {
 };
 
 const BODY = '#0a0a0a';
+/** Drop shadow offset and blur as shares of the outer width; also used to size the margin around framed screenshots. */
+export const SHADOW = { offset: 0.025, blur: 0.035 } as const;
 const RIM = '#2a2a2a';
 
 export interface FrameBox {
@@ -111,18 +113,20 @@ export function isFrameKind(value: unknown): value is FrameKind {
  * SVG for a device at (x, y) with the screen content drawn by `screen` (SVG elements placed at the screen rectangle).
  * The body is drawn first, then the screen content clipped to the rounded screen, then cutouts on top.
  */
-export function frameSvg(kind: FrameKind, x: number, y: number, box: FrameBox, screen: string, id: string): string {
+export function frameSvg(kind: FrameKind, x: number, y: number, box: FrameBox, screen: string, id: string, withShadow = true): string {
   const s = box.screen;
   const clip =
     `<clipPath id="${id}-screen"><rect x="${n(x + s.x)}" y="${n(y + s.y)}" width="${n(s.width)}" height="${n(s.height)}" ` +
     `rx="${n(s.radius)}"/></clipPath>`;
-  const shadow =
-    `<filter id="${id}-shadow" x="-20%" y="-20%" width="140%" height="140%">` +
-    `<feDropShadow dx="0" dy="${n(box.outerWidth * 0.025)}" stdDeviation="${n(box.outerWidth * 0.035)}" flood-color="#000" flood-opacity="0.3"/></filter>`;
+  const shadow = withShadow
+    ? `<filter id="${id}-shadow" x="-20%" y="-20%" width="140%" height="140%">` +
+      `<feDropShadow dx="0" dy="${n(box.outerWidth * SHADOW.offset)}" stdDeviation="${n(box.outerWidth * SHADOW.blur)}" flood-color="#000" flood-opacity="0.3"/></filter>`
+    : '';
+  const filter = withShadow ? ` filter="url(#${id}-shadow)"` : '';
   const content = `<g clip-path="url(#${id}-screen)">${screen}</g>`;
 
   if (kind === 'none') {
-    const plate = `<rect x="${n(x)}" y="${n(y)}" width="${n(box.outerWidth)}" height="${n(box.outerHeight)}" rx="${n(s.radius)}" fill="#ffffff" filter="url(#${id}-shadow)"/>`;
+    const plate = `<rect x="${n(x)}" y="${n(y)}" width="${n(box.outerWidth)}" height="${n(box.outerHeight)}" rx="${n(s.radius)}" fill="#ffffff"${filter}/>`;
     return `<defs>${clip}${shadow}</defs>${plate}${content}`;
   }
 
@@ -130,7 +134,7 @@ export function frameSvg(kind: FrameKind, x: number, y: number, box: FrameBox, s
   const radius = box.outerWidth * g.radius;
   const rim = Math.max(1, box.outerWidth * 0.006);
   const body =
-    `<rect x="${n(x)}" y="${n(y)}" width="${n(box.outerWidth)}" height="${n(box.outerHeight)}" rx="${n(radius)}" fill="${BODY}" filter="url(#${id}-shadow)"/>` +
+    `<rect x="${n(x)}" y="${n(y)}" width="${n(box.outerWidth)}" height="${n(box.outerHeight)}" rx="${n(radius)}" fill="${BODY}"${filter}/>` +
     `<rect x="${n(x + rim / 2)}" y="${n(y + rim / 2)}" width="${n(box.outerWidth - rim)}" height="${n(box.outerHeight - rim)}" rx="${n(radius - rim / 2)}" fill="none" stroke="${RIM}" stroke-width="${n(rim)}"/>`;
 
   let cutout = '';

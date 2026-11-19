@@ -195,14 +195,27 @@ export interface RegisterOptions extends OutputPathOptions {
 
 let queue: Promise<unknown> = Promise.resolve();
 
+export interface RegisterBatchOptions {
+  /**
+   * Sets this batch regenerates completely: every earlier entry of these specs and locales that the batch does not
+   * write again is removed (with its file), e.g. a position 03 after a screenshot was deleted. Use undefined in
+   * `locales` for shared assets.
+   */
+  replaceSets?: { specIds: readonly string[]; locales: readonly (LocaleId | undefined)[] };
+}
+
 /**
  * Writes generated files into the output folder and records them in the manifest, as one batch:
  * every path is checked first (a path that belongs to another asset rejects the whole batch before anything is
  * written), then all files are written and the manifest is updated once.
- * A file for the same set position (spec, locale, order) replaces the previous one, even under a new name.
+ * A file for the same set position (spec, locale, subfolder, order) replaces the previous one, even under a new name.
  * Batches run one after another.
  */
-export function registerOutputs(workspace: Workspace, list: readonly RegisterOptions[]): Promise<OutputEntry[]> {
+export function registerOutputs(
+  workspace: Workspace,
+  list: readonly RegisterOptions[],
+  batch: RegisterBatchOptions = {},
+): Promise<OutputEntry[]> {
   const run = async (): Promise<OutputEntry[]> => {
     const manifest = await readManifest(workspace);
     const planned = list.map((options) => {
@@ -259,8 +272,10 @@ export function registerOutputs(workspace: Workspace, list: readonly RegisterOpt
         await Promise.all(staged.slice(index).map((s) => rm(s.tmp, { force: true })));
         throw error;
       }
+      // The subfolder is part of the position: 1x / 2x or density folders hold parallel sets.
       const samePosition = (e: OutputEntry) =>
-        e.path === entry.path || (e.specId === entry.specId && e.locale === entry.locale && e.order === entry.order);
+        e.path === entry.path ||
+        (e.specId === entry.specId && e.locale === entry.locale && e.subfolder === entry.subfolder && e.order === entry.order);
       for (const old of entries.filter(samePosition)) {
         if (old.path !== entry.path) {
           const oldFile = path.join(workspace.outputDir, old.path);
@@ -269,6 +284,17 @@ export function registerOutputs(workspace: Workspace, list: readonly RegisterOpt
         }
       }
       entries = [...entries.filter((e) => !samePosition(e)), entry];
+    }
+
+    if (batch.replaceSets) {
+      const { specIds, locales } = batch.replaceSets;
+      const written = new Set(planned.map(({ entry }) => entry.path));
+      const stale = entries.filter((e) => specIds.includes(e.specId) && locales.includes(e.locale) && !written.has(e.path));
+      for (const old of stale) {
+        const oldFile = path.join(workspace.outputDir, old.path);
+        if ((await locateOutputFile(oldFile, workspace.outputDir)) === 'own') await rm(oldFile, { force: true });
+      }
+      entries = entries.filter((e) => !stale.includes(e));
     }
 
     entries.sort((a, b) => a.path.localeCompare(b.path));
