@@ -9,11 +9,11 @@ import { getSpec, inspectImageBytes, validateMedia } from '../../src/core/specs/
 import { saveInput, saveProject, type Workspace } from '../../src/core/workspace/index.js';
 import { createApp } from '../../src/server/app.js';
 import { twoColourPng } from '../factories/logos.js';
+import { shareTaglines } from '../factories/screenshots.js';
 import { packageInfoFactory } from '../factories/package-info.js';
 import { projectInputFactory, workspaceFactory } from '../factories/workspace.js';
 
-/** Taglines with long German words and Turkish characters. */
-const TAGLINES = { 'de-DE': 'Faire Mannschaftsaufstellung in Sekunden', 'tr-TR': 'Şampiyonluğa giden yolda İstanbul’un takımları' };
+const TAGLINES = shareTaglines();
 
 async function workspaceWithLogo(): Promise<Workspace> {
   const workspace = await workspaceFactory();
@@ -61,6 +61,7 @@ describe('generateShareImages writes share images per locale', () => {
     const workspace = await workspaceWithLogo();
     await expect(generateShareImages(workspace, { taglines: { 'pt-BR': 'Olá' } })).rejects.toThrow(/pt-BR is not a supported locale/);
     await expect(generateShareImages(workspace, { background: 'red' as `#${string}` })).rejects.toThrow(/background must be a colour/);
+    await expect(generateShareImages(workspace, { taglines: { 'fr-FR': 'Bonjour' } })).rejects.toThrow(/fr-FR is not a language of this project/);
   });
 });
 

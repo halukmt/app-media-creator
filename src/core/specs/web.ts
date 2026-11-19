@@ -210,6 +210,7 @@ export const WEB_SPECS: readonly SpecEntry[] = [
     kind: 'image',
     required: false,
     dimensions: { kind: 'range', min: { width: 300, height: 75 }, aspect: { maxRatio: 4 }, orientation: 'landscape' },
+    defaultSize: { width: 1200, height: 630 },
     formats: ['png', 'jpeg'],
     alpha: 'allowed',
     maxBytes: 300 * KB,

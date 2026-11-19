@@ -1,7 +1,7 @@
 import sharp, { type Sharp } from 'sharp';
 import { outputPath, registerOutputs, type OutputEntry, type RegisterOptions } from '../export/manifest.js';
 import { isLocaleId, resolveLocales, type LocaleId, type LocaleSelection } from '../locales/index.js';
-import { textBlockSvg, textColorFor, type CardWarning } from '../screenshots/index.js';
+import { cardFont, cardSizeForSpec, textBlockSvg, textColorFor, type CardWarning } from '../screenshots/index.js';
 import { getSpec, listSpecs, type Rect, type SpecEntry } from '../specs/index.js';
 import { readProject, type Workspace } from '../workspace/index.js';
 import { GeneratorError, loadNewestLogo } from './logo.js';
@@ -50,12 +50,24 @@ async function compose(width: number, height: number, background: HexColor | nul
   ]);
 }
 
-async function logoAt(logo: LogoSource, box: number): Promise<Buffer> {
-  return renderLogoSquare(logo, { size: Math.round(box), logoBox: Math.round(box) });
+/** The logo fitted into a square box on transparency; cached per box size for the whole run. */
+function logoCache(logo: LogoSource): (box: number) => Promise<Buffer> {
+  const cache = new Map<number, Promise<Buffer>>();
+  return (box) => {
+    const side = Math.round(box);
+    let png = cache.get(side);
+    if (!png) {
+      png = renderLogoSquare(logo, { size: side, logoBox: side });
+      cache.set(side, png);
+    }
+    return png;
+  };
 }
 
+type LogoAt = (box: number) => Promise<Buffer>;
+
 /** Logo on the left, app name and tagline on the right: Open Graph, X card and the WhatsApp preview. */
-async function shareImage(logo: LogoSource, width: number, height: number, background: HexColor, name: string, tagline: string | undefined) {
+async function shareImage(logoAt: LogoAt, width: number, height: number, background: HexColor, name: string, tagline: string | undefined) {
   const pad = width * 0.07;
   const box = height * 0.42;
   const textX = pad + box + width * 0.05;
@@ -72,17 +84,18 @@ async function shareImage(logo: LogoSource, width: number, height: number, backg
     align: 'left',
     valign: 'middle',
   });
-  const image = await compose(width, height, background, [{ png: await logoAt(logo, box), left: pad, top: (height - box) / 2 }], text.svg);
+  const image = await compose(width, height, background, [{ png: await logoAt(box), left: pad, top: (height - box) / 2 }], text.svg);
   return { image, warnings: text.warnings };
 }
 
 /** Logo and app name centred in the safe area (or the whole image) of a banner. */
-async function bannerImage(logo: LogoSource, spec: SpecEntry, width: number, height: number, background: HexColor, name: string) {
+async function bannerImage(logoAt: LogoAt, spec: SpecEntry, width: number, height: number, background: HexColor, name: string) {
   const area: Rect = spec.safeArea ?? { x: 0, y: 0, width, height };
   const box = area.height * 0.55;
   const gap = area.height * 0.15;
   const titleSize = area.height * 0.24;
-  const textWidth = Math.max(1, Math.min(area.width - box - gap - area.width * 0.1, titleSize * 0.62 * name.length));
+  // Measured with the title font, so logo and name are centred as one group; long names shrink to fit.
+  const textWidth = Math.max(1, Math.min(area.width - box - gap - area.width * 0.1, cardFont(800).measure(name.normalize('NFC').trim(), titleSize) * 1.02));
   const start = area.x + (area.width - (box + gap + textWidth)) / 2;
   const text = textBlockSvg({
     x: start + box + gap,
@@ -96,12 +109,12 @@ async function bannerImage(logo: LogoSource, spec: SpecEntry, width: number, hei
     align: 'left',
     valign: 'middle',
   });
-  const image = await compose(width, height, background, [{ png: await logoAt(logo, box), left: start, top: area.y + (area.height - box) / 2 }], text.svg);
+  const image = await compose(width, height, background, [{ png: await logoAt(box), left: start, top: area.y + (area.height - box) / 2 }], text.svg);
   return { image, warnings: text.warnings };
 }
 
-/** Email signature: logo and name on transparency, readable on white mail backgrounds. */
-async function signatureImage(logo: LogoSource, width: number, height: number, name: string) {
+/** Email signature: logo and name on white, so it stays readable in dark-mode mail clients too. */
+async function signatureImage(logoAt: LogoAt, width: number, height: number, name: string) {
   const box = height * 0.8;
   const pad = height * 0.1;
   const text = textBlockSvg({
@@ -116,26 +129,27 @@ async function signatureImage(logo: LogoSource, width: number, height: number, n
     align: 'left',
     valign: 'middle',
   });
-  const image = await compose(width, height, null, [{ png: await logoAt(logo, box), left: pad, top: pad }], text.svg);
+  const image = await compose(width, height, '#ffffff', [{ png: await logoAt(box), left: pad, top: pad }], text.svg);
   return { image, warnings: text.warnings };
 }
 
 /** JPEG below `maxBytes`: quality steps down until the file fits. */
-async function jpegWithin(image: Sharp, maxBytes: number): Promise<Buffer> {
+async function jpegWithin(image: Sharp, maxBytes: number, label: string): Promise<Buffer> {
   const flat = await image.flatten({ background: '#ffffff' }).png().toBuffer();
   for (let quality = 88; quality >= 40; quality -= 8) {
     const jpeg = await sharp(flat).jpeg({ quality, mozjpeg: true }).toBuffer();
     if (jpeg.length <= maxBytes) return jpeg;
   }
-  throw new GeneratorError(`The WhatsApp preview stays above ${Math.round(maxBytes / 1024)} KB even at low quality`);
+  throw new GeneratorError(`${label} stays above ${Math.round(maxBytes / 1024)} KB even at low quality`);
 }
 
-function checkTaglines(taglines: ShareImageOptions['taglines']): Partial<Record<LocaleId, string>> {
+function checkTaglines(taglines: ShareImageOptions['taglines'], projectLocales: readonly LocaleId[]): Partial<Record<LocaleId, string>> {
   if (taglines === undefined) return {};
   if (typeof taglines !== 'object' || taglines === null) throw new GeneratorError('taglines must be an object of locale → text');
   const result: Partial<Record<LocaleId, string>> = {};
   for (const [locale, text] of Object.entries(taglines)) {
     if (!isLocaleId(locale)) throw new GeneratorError(`taglines: ${locale} is not a supported locale`);
+    if (!projectLocales.includes(locale)) throw new GeneratorError(`taglines: ${locale} is not a language of this project`);
     if (typeof text !== 'string' || text.length > MAX_TAGLINE) throw new GeneratorError(`taglines.${locale} must be text up to ${MAX_TAGLINE} characters`);
     if (text.trim()) result[locale] = text.trim();
   }
@@ -150,8 +164,8 @@ function checkTaglines(taglines: ShareImageOptions['taglines']): Partial<Record<
  */
 export async function generateShareImages(workspace: Workspace, options: ShareImageOptions = {}): Promise<ShareImageResult> {
   if (options.background !== undefined && !isHexColor(options.background)) throw new GeneratorError('background must be a colour like #1a2b3c');
-  const taglines = checkTaglines(options.taglines);
   const project = await readProject(workspace);
+  const taglines = checkTaglines(options.taglines, project.locales);
   let locales: LocaleId[];
   try {
     locales = options.locales === undefined ? project.locales : resolveLocales(options.locales);
@@ -161,6 +175,7 @@ export async function generateShareImages(workspace: Workspace, options: ShareIm
 
   const source = await loadNewestLogo(workspace);
   const logo = await rasterizeLogo(source, 2048);
+  const logoAt = logoCache(logo);
   const background: HexColor = options.background ?? '#ffffff';
   const files: RegisterOptions[] = [];
   const warnings: ShareWarning[] = [];
@@ -170,17 +185,24 @@ export async function generateShareImages(workspace: Workspace, options: ShareIm
     for (const warning of found) warnings.push({ ...warning, path: filePath });
   };
 
-  // Share images per locale.
+  // Share images per locale. Locales without a tagline look the same, so each distinct image is rendered once.
+  const rendered = new Map<string, { bytes: Buffer; warnings: CardWarning[] }>();
   for (const locale of locales) {
     const tagline = taglines[locale];
     for (const specId of SHARE_SPECS) {
       const spec = getSpec(specId);
-      const [size] = spec.dimensions.kind === 'fixed' ? fixedSizes(specId) : [{ width: 1200, height: 630 }];
-      const { image, warnings: found } = await shareImage(logo, size!.width, size!.height, background, project.name, tagline);
-      const name = specId.replace('web.', '');
-      const bytes =
-        specId === 'web.whatsapp-preview' ? await jpegWithin(image, spec.maxBytes ?? 300 * 1024) : await image.flatten({ background }).png().toBuffer();
-      add({ specId, locale, order: 1, name, extension: specId === 'web.whatsapp-preview' ? 'jpg' : 'png', bytes }, found);
+      const size = cardSizeForSpec(spec);
+      // A byte limit the PNG would break means JPEG (WhatsApp preview); otherwise PNG.
+      const jpeg = spec.maxBytes !== undefined && spec.maxBytes < 1024 * 1024 && spec.formats.includes('jpeg');
+      const key = JSON.stringify([specId, tagline ?? '']);
+      let image = rendered.get(key);
+      if (!image) {
+        const share = await shareImage(logoAt, size.width, size.height, background, project.name, tagline);
+        const bytes = jpeg ? await jpegWithin(share.image, spec.maxBytes!, spec.name) : await share.image.flatten({ background }).png().toBuffer();
+        image = { bytes, warnings: share.warnings };
+        rendered.set(key, image);
+      }
+      add({ specId, locale, order: 1, name: specId.replace('web.', ''), extension: jpeg ? 'jpg' : 'png', bytes: image.bytes }, image.warnings);
     }
   }
 
@@ -190,20 +212,19 @@ export async function generateShareImages(workspace: Workspace, options: ShareIm
     if (!size) continue;
     const name = spec.id.replace('web.social.', '');
     if (spec.id === 'web.social.email-signature-logo') {
-      const { image, warnings: found } = await signatureImage(logo, size.width, size.height, project.name);
-      add({ specId: spec.id, order: 1, name, extension: 'png', bytes: await image.png().toBuffer() }, found);
+      const { image, warnings: found } = await signatureImage(logoAt, size.width, size.height, project.name);
+      add({ specId: spec.id, order: 1, name, extension: 'png', bytes: await image.flatten({ background: '#ffffff' }).png().toBuffer() }, found);
     } else if (size.width === size.height) {
       const box = Math.round(size.width * PROFILE_LOGO_SHARE);
       add({ specId: spec.id, order: 1, name, extension: 'png', bytes: await renderLogoSquare(logo, { size: size.width, logoBox: box, background }) });
     } else {
-      const { image, warnings: found } = await bannerImage(logo, spec, size.width, size.height, background, project.name);
+      const { image, warnings: found } = await bannerImage(logoAt, spec, size.width, size.height, background, project.name);
       add({ specId: spec.id, order: 1, name, extension: 'png', bytes: await image.flatten({ background }).png().toBuffer() }, found);
     }
   }
 
   // Logo variants.
-  const [variant] = fixedSizes('web.logo.mark');
-  if (!variant) throw new Error('web.logo.mark has no size');
+  const variant = cardSizeForSpec(getSpec('web.logo.mark'));
   for (const [kind, color] of Object.entries(LOGO_VARIANTS)) {
     add({ specId: `web.logo.${kind}`, order: 1, name: `logo-${kind}`, extension: 'png', bytes: await renderSilhouette(logo, { size: variant.width, logoBox: Math.round(variant.width * 0.9), color }) });
   }

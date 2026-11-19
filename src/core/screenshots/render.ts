@@ -1,7 +1,6 @@
 import sharp from 'sharp';
 import type { Size, SpecEntry } from '../specs/index.js';
 import { backgroundSvg, isBackground, textColorFor, type Background } from './backgrounds.js';
-import { cardFont } from './fonts.js';
 import {
   DEFAULT_SCREEN_ASPECT,
   frameForSpec,
@@ -13,7 +12,7 @@ import {
   type UserFrame,
 } from './frames.js';
 import { LAYOUT_RATIOS, isCardLayout, placeCard, type CardLayout } from './layouts.js';
-import { fitText } from './text-layout.js';
+import { textBlockSvg } from './text-block.js';
 import { CardInputError, deviceSvg, screenshotInfo } from './device.js';
 
 export interface CardInput {
@@ -49,10 +48,6 @@ export interface CardResult {
 }
 
 const LEADING = { headline: 1.08, subline: 1.3 } as const;
-/** Gap between headline and subline, as a share of the headline size. */
-const GAP = 0.3;
-/** Text never shrinks below this share of the layout's start size. */
-const MIN_TEXT_SCALE = 0.5;
 
 const n = svgNumber;
 /** Largest card edge in pixels; store sizes stay far below. */
@@ -105,56 +100,22 @@ export async function renderScreenshotCard(input: CardInput): Promise<CardResult
   const deviceAspect = userFrame ? userFrame.height / userFrame.width : outerAspect(input.frame, screenAspect);
   const place = placeCard(input.layout, width, height, deviceAspect);
 
-  // Text
-  const heavy = cardFont(800);
-  const regular = cardFont(500);
+  // Text: headline and subline centred in the layout's text box.
   const ratios = LAYOUT_RATIOS[input.layout];
-  // NFC: decomposed input (e.g. "s" + U+0327 from macOS) becomes the precomposed letters the font has.
-  const headline = input.headline.normalize('NFC').trim();
-  const subline = input.subline?.normalize('NFC').trim() || undefined;
-  const fit = fitText({
-    headline,
-    ...(subline ? { subline } : {}),
-    width: place.text.width,
-    height: place.text.height,
-    headlineSize: width * ratios.headline,
-    sublineSize: width * ratios.subline,
-    headlineLeading: LEADING.headline,
-    sublineLeading: LEADING.subline,
-    gap: GAP,
-    minScale: MIN_TEXT_SCALE,
-    measureHeadline: (text, size) => heavy.measure(text, size),
-    measureSubline: (text, size) => regular.measure(text, size),
+  const text = textBlockSvg({
+    ...place.text,
+    title: input.headline,
+    ...(input.subline ? { subtitle: input.subline } : {}),
+    titleSize: width * ratios.headline,
+    subtitleSize: width * ratios.subline,
+    titleLeading: LEADING.headline,
+    subtitleLeading: LEADING.subline,
+    color: textColorFor(input.background),
+    align: 'center',
   });
-  if (fit.overflow) warnings.push({ code: 'text-overflow', message: 'The text does not fit into its area even at the smallest size; shorten it' });
-  if (fit.brokenWord) warnings.push({ code: 'word-broken', message: 'A word is too long for one line and was hyphenated; shorten it or add a line break' });
-  const missing = [...new Set([...heavy.missing(headline), ...regular.missing(subline ?? '')])];
-  if (missing.length > 0) warnings.push({ code: 'missing-glyphs', message: `These characters cannot be drawn: ${missing.join(' ')}` });
+  warnings.push(...text.warnings);
 
-  const color = textColorFor(input.background);
-  const textPaths: string[] = [];
-  let lineTop = place.text.y;
-  let blockWidth = 0;
-  const drawLines = (lines: string[], size: number, leading: number, font: typeof heavy) => {
-    for (const line of lines) {
-      // Centre the glyph box (ascent to descent) inside the line box, and the line inside the text box.
-      const baseline = lineTop + (leading * size - (font.ascent - font.descent) * size) / 2 + font.ascent * size;
-      const lineWidth = font.measure(line, size);
-      blockWidth = Math.max(blockWidth, lineWidth);
-      textPaths.push(font.path(line, place.text.x + (place.text.width - lineWidth) / 2, baseline, size).path);
-      lineTop += leading * size;
-    }
-  };
-  drawLines(fit.headlineLines, fit.headlineSize, LEADING.headline, heavy);
-  const headlineSvg = `<path fill="${color}" d="${textPaths.join('')}"/>`;
-  textPaths.length = 0;
-  if (fit.sublineLines.length > 0) {
-    lineTop += GAP * fit.headlineSize;
-    drawLines(fit.sublineLines, fit.sublineSize, LEADING.subline, regular);
-  }
-  const sublineSvg = textPaths.length > 0 ? `<path fill="${color}" fill-opacity="0.9" d="${textPaths.join('')}"/>` : '';
-
-  const textShare = (blockWidth * fit.height) / (width * height);
+  const textShare = (text.width * text.height) / (width * height);
   if (input.maxTextShare !== undefined && textShare > input.maxTextShare) {
     warnings.push({
       code: 'text-share',
@@ -168,7 +129,7 @@ export async function renderScreenshotCard(input: CardInput): Promise<CardResult
   const svg =
     `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">` +
     `<defs>${bg.defs}</defs><rect width="${width}" height="${height}" fill="${bg.fill}"/>` +
-    `${device.svg}${headlineSvg}${sublineSvg}</svg>`;
+    `${device.svg}${text.svg}</svg>`;
 
   // `unlimited`: the SVG is built here and embeds the (resized) screenshot as a large data URI.
   const png = await sharp(Buffer.from(svg), { unlimited: true }).removeAlpha().png().toBuffer();
