@@ -162,3 +162,8 @@
 
 - Codex on PR #56: failed save was swallowed. New `src/web/lib/save-queue.ts` (newest wins, failure keeps the edit,
   flush waits for and fails with a running save); upload/generate stop on a failed flush.
+
+## #59 Review finding from #58 — done (PR #60)
+
+- Codex on PR #58 (P1): a failed older save could be restored after a newer version was already queued → version
+  counter; restore only if still the latest. Regression test checked to fail on the old code.
