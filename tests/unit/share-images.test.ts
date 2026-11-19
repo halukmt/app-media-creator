@@ -25,6 +25,24 @@ async function workspaceWithLogo(): Promise<Workspace> {
 
 const read = (workspace: Workspace, file: string) => readFileSync(path.join(workspace.outputDir, file));
 
+/** Width in px of the white text (the app name) right of the logo: columns with near-white pixels. */
+async function textInkWidth(png: Buffer): Promise<number> {
+  const { data, info } = await sharp(png).removeAlpha().raw().toBuffer({ resolveWithObject: true });
+  let first = -1;
+  let last = -1;
+  for (let x = Math.round(info.width * 0.3); x < info.width; x++) {
+    for (let y = 0; y < info.height; y++) {
+      const i = (y * info.width + x) * 3;
+      if (data[i]! > 230 && data[i + 1]! > 230 && data[i + 2]! > 230) {
+        if (first < 0) first = x;
+        last = x;
+        break;
+      }
+    }
+  }
+  return first < 0 ? 0 : last - first + 1;
+}
+
 describe('generateShareImages writes share images per locale', () => {
   test('writes Open Graph, X card and WhatsApp preview for de-DE and tr-TR, each valid for its spec', async () => {
     const workspace = await workspaceWithLogo();
@@ -55,6 +73,17 @@ describe('generateShareImages writes share images per locale', () => {
     const workspace = await workspaceWithLogo();
     await generateShareImages(workspace, { locales: 'de-DE' });
     expect(read(workspace, 'web/de-DE/whatsapp-preview/01-whatsapp-preview.jpg').length).toBeLessThanOrEqual(300 * 1024);
+  }, 60_000);
+
+  test('draws the whole app name without a tagline and on wide banners (#62)', async () => {
+    const workspace = await workspaceFactory();
+    const saved = await saveProject(workspace, { ...projectInputFactory(), name: 'Demo', sourceLocale: 'de-DE', locales: ['de-DE', 'tr-TR'] });
+    if (!saved.ok) throw new Error(saved.errors.join('; '));
+    await saveInput(workspace, 'de-DE', { kind: 'logo', originalName: 'logo.png', bytes: await twoColourPng() });
+    await generateShareImages(workspace, { background: '#003a72' });
+    for (const file of ['web/tr-TR/x-card/01-x-card.png', 'web/de-DE/og-image/01-og-image.png', 'web/shared/social-facebook-cover/facebook-cover.png', 'web/shared/social-linkedin-banner/linkedin-banner.png']) {
+      expect(await textInkWidth(read(workspace, file)), file).toBeGreaterThan(150);
+    }
   }, 60_000);
 
   test('rejects a tagline for an unsupported locale and an invalid background', async () => {
