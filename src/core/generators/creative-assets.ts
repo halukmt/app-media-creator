@@ -20,14 +20,37 @@ import {
 import { GeneratorError } from './logo.js';
 import { assertValidOutputs } from './outputs.js';
 
-/** The App Store creative image specs this generator writes, with the file name of each. */
-export const CREATIVE_IMAGES = [
-  { specId: 'apple.creative.header-image', name: 'header' },
-  { specId: 'apple.creative.search-image', name: 'search' },
-  { specId: 'apple.creative.universal-image', name: 'universal' },
-] as const;
-const CREATIVE_SPEC_IDS: string[] = CREATIVE_IMAGES.map((image) => image.specId);
-/** Screenshots one asset uses: the key art plus one per side. */
+/**
+ * Store artwork made from the screenshots, a background and one phrase per locale, in two groups:
+ * - `header`: App Store product page header, search results and universal images (iOS 27);
+ * - `feature`: the Google Play feature graphic and the App Store in-app event card and details images.
+ */
+export const CREATIVE_GROUPS = ['header', 'feature'] as const;
+export type CreativeGroup = (typeof CREATIVE_GROUPS)[number];
+
+export interface CreativeImage {
+  specId: string;
+  /** File name without extension. */
+  name: string;
+  group: CreativeGroup;
+  /** Whether the phrase is drawn; Apple asks for no own text on in-app event media. */
+  text: boolean;
+  /**
+   * Where the key art goes, as shares of the image, for specs without a store safe area: centred, because Google Play
+   * asks to keep key elements in the centre and Apple overlays the event title at the bottom of the details page.
+   */
+  keyArea?: Rect;
+}
+
+export const CREATIVE_IMAGES: readonly CreativeImage[] = [
+  { specId: 'apple.creative.header-image', name: 'header', group: 'header', text: true },
+  { specId: 'apple.creative.search-image', name: 'search', group: 'header', text: true },
+  { specId: 'apple.creative.universal-image', name: 'universal', group: 'header', text: true },
+  { specId: 'google.feature-graphic', name: 'feature-graphic', group: 'feature', text: true, keyArea: { x: 0.15, y: 0.1, width: 0.7, height: 0.8 } },
+  { specId: 'apple.event.card-image', name: 'event-card', group: 'feature', text: false, keyArea: { x: 0.25, y: 0.12, width: 0.5, height: 0.76 } },
+  { specId: 'apple.event.details-image', name: 'event-details', group: 'feature', text: false, keyArea: { x: 0.1, y: 0.1, width: 0.8, height: 0.5 } },
+];
+/** Screenshots one asset uses: the key art plus the ones on the sides. */
 const SHOTS = 3;
 
 export type CreativeWarningCode = TextWarningCode | 'missing-phrase';
@@ -35,13 +58,15 @@ export type CreativeWarningCode = TextWarningCode | 'missing-phrase';
 export interface CreativeWarning {
   code: CreativeWarningCode;
   message: string;
-  /** Output path of the image, or `apple/<locale>` for a locale-level warning. */
+  /** Output path of the image, or `<target>/<locale>` for a locale-level warning. */
   path: string;
 }
 
 export interface CreativeAssetOptions {
   /** Languages to generate: "all", one or several; default all languages of the project. */
   locales?: LocaleSelection;
+  /** Which images to generate (default `header`). */
+  group?: CreativeGroup;
 }
 
 export interface CreativeAssetResult {
@@ -69,7 +94,6 @@ interface Sources {
 
 async function loadSources(workspace: Workspace): Promise<Sources> {
   const project = await readProject(workspace);
-  if (!project.targets.apple.enabled) throw new GeneratorError('Enable the App Store in Project to create header and search images');
   const screenshots = await listScreenshots(workspace);
   return {
     project,
@@ -80,21 +104,44 @@ async function loadSources(workspace: Workspace): Promise<Sources> {
   };
 }
 
-function creativeSpec(specId: string): SpecEntry {
-  if (!CREATIVE_SPEC_IDS.includes(specId)) throw new GeneratorError(`${specId} is not a header or search image`);
-  return getSpec(specId);
+function isCreativeGroup(value: unknown): value is CreativeGroup {
+  return typeof value === 'string' && (CREATIVE_GROUPS as readonly string[]).includes(value);
 }
 
-/** Size and safe area of a spec, scaled to `width` (the full size when absent). */
-function geometry(spec: SpecEntry, width?: number): { width: number; height: number; safeArea: Rect } {
+/** The images of a group whose store is enabled in the project; fails with a message when there are none. */
+function enabledImages(project: ProjectSettings, group: CreativeGroup): CreativeImage[] {
+  const images = CREATIVE_IMAGES.filter((image) => image.group === group && project.targets[getSpec(image.specId).target].enabled);
+  if (images.length === 0) {
+    throw new GeneratorError(
+      group === 'header'
+        ? 'Enable the App Store in Project to create header and search images'
+        : 'Enable Google Play or the App Store in Project to create the feature graphic and event images',
+    );
+  }
+  return images;
+}
+
+function creativeImage(specId: string): CreativeImage {
+  const image = CREATIVE_IMAGES.find((candidate) => candidate.specId === specId);
+  if (!image) throw new GeneratorError(`${specId} is not a store artwork image`);
+  return image;
+}
+
+/** Size and key-art area of an image (the store safe area, or the centred key area), scaled to `width`. */
+export function creativeGeometry(image: CreativeImage, width?: number): { width: number; height: number; safeArea: Rect } {
+  const spec = getSpec(image.specId);
   const full = cardSizeForSpec(spec);
-  if (!spec.safeArea) throw new Error(`${spec.id} has no safe area in the catalogue`);
+  const area: Rect | undefined =
+    spec.safeArea ??
+    (image.keyArea
+      ? { x: image.keyArea.x * full.width, y: image.keyArea.y * full.height, width: image.keyArea.width * full.width, height: image.keyArea.height * full.height }
+      : undefined);
+  if (!area) throw new Error(`${spec.id} has neither a safe area in the catalogue nor a key area`);
   const scale = width === undefined ? 1 : width / full.width;
-  const s = spec.safeArea;
   return {
     width: Math.round(full.width * scale),
     height: Math.round(full.height * scale),
-    safeArea: { x: s.x * scale, y: s.y * scale, width: s.width * scale, height: s.height * scale },
+    safeArea: { x: area.x * scale, y: area.y * scale, width: area.width * scale, height: area.height * scale },
   };
 }
 
@@ -122,9 +169,9 @@ export interface CreativePreview {
   png: Buffer;
   width: number;
   height: number;
-  /** Size of the real asset and its safe area in pixels. */
+  /** Size of the real asset and its key-art area in pixels. */
   full: { width: number; height: number; safeArea: Rect };
-  /** Safe area as shares of the image size (0 to 1), for the guide overlay. */
+  /** Key-art area as shares of the image size (0 to 1), for the guide overlay. */
   safeArea: Rect;
   warnings: { code: CreativeWarningCode; message: string }[];
   fallbackInput: boolean;
@@ -132,28 +179,25 @@ export interface CreativePreview {
 
 const PREVIEW_WIDTH = 640;
 
-/** Renders one creative asset small for the UI: same layout as the full size, scaled down with its safe area. */
+/** Renders one image small for the UI: same layout as the full size, scaled down with its key-art area. */
 export async function renderCreativePreview(workspace: Workspace, request: CreativePreviewRequest): Promise<CreativePreview> {
   if (!isLocaleId(request.locale)) throw new GeneratorError(`${String(request.locale)} is not a supported locale`);
-  const spec = creativeSpec(request.specId);
+  const image = creativeImage(request.specId);
   const width = request.width ?? PREVIEW_WIDTH;
   if (!Number.isInteger(width) || width < 160 || width > 1600) throw new GeneratorError('width must be whole pixels from 160 to 1600');
 
   const sources = await loadSources(workspace);
+  if (!enabledImages(sources.project, image.group).includes(image)) {
+    throw new GeneratorError(`Enable ${getSpec(image.specId).target === 'apple' ? 'the App Store' : 'Google Play'} in Project for this image`);
+  }
   const entries = effectiveSet(sources.sets, request.locale, sources.project.sourceLocale, sources.screenshots);
   if (entries.length === 0) throw new GeneratorError(`Upload screenshots for ${sources.project.sourceLocale} first`);
-  const size = geometry(spec, width);
-  const phrase = sources.settings.phrases[request.locale] ?? '';
-  const result = await withContext(spec.name, async () =>
-    renderCreativeAsset({
-      ...size,
-      background: sources.settings.background,
-      phrase,
-      screenshots: await screenshotsFor(workspace, entries, new Map()),
-      userFrame: sources.userFrame,
-    }),
+  const size = creativeGeometry(image, width);
+  const phrase = image.text ? (sources.settings.phrases[request.locale] ?? '') : '';
+  const result = await withContext(getSpec(image.specId).name, async () =>
+    renderCreativeAsset({ ...size, background: sources.settings.background, phrase, screenshots: await screenshotsFor(workspace, entries, new Map()), userFrame: sources.userFrame }),
   );
-  const full = geometry(spec);
+  const full = creativeGeometry(image);
   const s = full.safeArea;
   return {
     png: result.png,
@@ -161,18 +205,21 @@ export async function renderCreativePreview(workspace: Workspace, request: Creat
     height: size.height,
     full,
     safeArea: { x: s.x / full.width, y: s.y / full.height, width: s.width / full.width, height: s.height / full.height },
-    warnings: [...result.warnings, ...(phrase ? [] : [{ code: 'missing-phrase' as const, message: missingPhrase(request.locale) }])],
+    warnings: [...result.warnings, ...(image.text && !phrase ? [{ code: 'missing-phrase' as const, message: missingPhrase(request.locale) }] : [])],
     fallbackInput: entries.slice(0, SHOTS).some((entry) => entry.fallbackInput),
   };
 }
 
 /**
- * Renders the product page header, search results and universal images for every selected language from the first
- * three screenshots of its set (the source language's set when it has none), the background and the language's phrase.
+ * Renders the images of one group for every selected language from the first three screenshots of its set (the source
+ * language's set when it has none), the background and the language's phrase. Only images of enabled stores are made.
  * Everything is rendered and validated before anything is written; each language then replaces its earlier images.
  */
 export async function generateCreativeAssets(workspace: Workspace, options: CreativeAssetOptions = {}): Promise<CreativeAssetResult> {
+  const group = options.group ?? 'header';
+  if (!isCreativeGroup(group)) throw new GeneratorError(`group must be one of ${CREATIVE_GROUPS.join(', ')}`);
   const sources = await loadSources(workspace);
+  const images = enabledImages(sources.project, group);
   let locales: LocaleId[];
   try {
     locales = options.locales === undefined ? sources.project.locales : resolveLocales(options.locales);
@@ -182,8 +229,11 @@ export async function generateCreativeAssets(workspace: Workspace, options: Crea
   if (sources.screenshots.length === 0) throw new GeneratorError(`Upload screenshots for ${sources.project.sourceLocale} first`);
 
   const cache = new Map<string, Buffer>();
+  // Text-free images (event card and details) of languages with the same screenshots are identical: rendered once.
+  const rendered = new Map<string, Awaited<ReturnType<typeof renderCreativeAsset>>>();
   const perLocale = new Map<LocaleId, RegisterOptions[]>();
   const result: CreativeAssetResult = { entries: [], warnings: [], skipped: [] };
+  const withText = images.filter((image) => image.text);
 
   for (const locale of locales) {
     perLocale.set(locale, []);
@@ -193,23 +243,40 @@ export async function generateCreativeAssets(workspace: Workspace, options: Crea
       continue;
     }
     const phrase = sources.settings.phrases[locale] ?? '';
-    if (!phrase) result.warnings.push({ code: 'missing-phrase', message: missingPhrase(locale), path: `apple/${locale}` });
+    if (!phrase && withText.length > 0) {
+      result.warnings.push({ code: 'missing-phrase', message: missingPhrase(locale), path: `${getSpec(withText[0]!.specId).target}/${locale}` });
+    }
     const screenshots = await screenshotsFor(workspace, entries, cache);
     const fallbackInput = entries.slice(0, SHOTS).some((entry) => entry.fallbackInput);
-    for (const image of CREATIVE_IMAGES) {
+    for (const image of images) {
       const spec = getSpec(image.specId);
-      const input: CreativeInput = { ...geometry(spec), background: sources.settings.background, phrase, screenshots, userFrame: sources.userFrame };
-      const rendered = await withContext(`${spec.name} (${locale})`, () => renderCreativeAsset(input));
-      const file: RegisterOptions = { specId: spec.id, locale, order: 1, name: image.name, extension: 'png', bytes: rendered.png, fallbackInput };
+      const input: CreativeInput = {
+        ...creativeGeometry(image),
+        background: sources.settings.background,
+        phrase: image.text ? phrase : '',
+        screenshots,
+        userFrame: sources.userFrame,
+      };
+      const key = JSON.stringify([image.specId, input.phrase, entries.slice(0, SHOTS).map((entry) => entry.input)]);
+      let drawn = rendered.get(key);
+      if (!drawn) {
+        drawn = await withContext(`${spec.name} (${locale})`, () => renderCreativeAsset(input));
+        rendered.set(key, drawn);
+      }
+      const file: RegisterOptions = { specId: spec.id, locale, order: 1, name: image.name, extension: 'png', bytes: drawn.png, fallbackInput };
       perLocale.get(locale)!.push(file);
       const filePath = outputPath(spec, file);
-      for (const warning of rendered.warnings) result.warnings.push({ ...warning, path: filePath });
+      for (const warning of drawn.warnings) result.warnings.push({ ...warning, path: filePath });
     }
   }
 
-  await withContext('Header and search images', () => assertValidOutputs([...perLocale.values()].flat()));
+  await withContext(group === 'header' ? 'Header and search images' : 'Feature graphic and event images', () =>
+    assertValidOutputs([...perLocale.values()].flat()),
+  );
+  // Each run replaces the whole group of a language, also images of a store that was switched off since.
+  const groupSpecIds = CREATIVE_IMAGES.filter((image) => image.group === group).map((image) => image.specId);
   for (const [locale, files] of perLocale) {
-    result.entries.push(...(await registerOutputs(workspace, files, { replaceSets: { specIds: CREATIVE_SPEC_IDS, locales: [locale] } })));
+    result.entries.push(...(await registerOutputs(workspace, files, { replaceSets: { specIds: groupSpecIds, locales: [locale] } })));
   }
   return result;
 }

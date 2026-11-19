@@ -5,7 +5,17 @@ export const CREATIVE_LABELS = {
   'apple.creative.header-image': 'header',
   'apple.creative.search-image': 'search',
   'apple.creative.universal-image': 'universal',
+  'google.feature-graphic': 'featureGraphic',
+  'apple.event.card-image': 'eventCard',
+  'apple.event.details-image': 'eventDetails',
 } as const satisfies Record<string, string>;
+
+/** The two artwork purposes of the Screenshots section, matching the generator groups. */
+export type CreativePurpose = 'header' | 'feature';
+
+export function isCreativePurpose(value: string): value is CreativePurpose {
+  return value === 'header' || value === 'feature';
+}
 
 export type CreativeAssetKey = (typeof CREATIVE_LABELS)[keyof typeof CREATIVE_LABELS];
 

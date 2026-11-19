@@ -233,7 +233,7 @@ export function generateRoutes(workspace: Workspace): Hono {
   api.post('/generate/creative-assets', async (c) => {
     const parsed = await readOptionalJsonObject(c);
     if (!parsed.ok) return c.json({ error: parsed.error }, 400);
-    const options = pick(parsed.body, ['locales']) as CreativeAssetOptions;
+    const options = pick(parsed.body, ['locales', 'group']) as CreativeAssetOptions;
     try {
       return c.json(await generateCreativeAssets(workspace, options), 201);
     } catch (error) {

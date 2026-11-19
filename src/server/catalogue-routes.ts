@@ -2,7 +2,7 @@ import { Hono } from 'hono';
 import { LOCALES } from '../core/locales/index.js';
 import { getSpec, type Target } from '../core/specs/index.js';
 import { cardSizeForSpec } from '../core/screenshots/index.js';
-import { CREATIVE_IMAGES } from '../core/generators/creative-assets.js';
+import { CREATIVE_IMAGES, creativeGeometry, type CreativeGroup } from '../core/generators/creative-assets.js';
 import { ENVIRONMENT_COLORS, MAX_BADGE_LENGTH, MAX_ENVIRONMENTS, MAX_PHRASE, deviceOptions, type EnvironmentColor } from '../core/workspace/index.js';
 
 export interface CatalogueDevice {
@@ -21,8 +21,20 @@ export interface Catalogue {
   environmentColors: { id: EnvironmentColor; color: string }[];
   maxEnvironments: number;
   maxBadgeLength: number;
-  /** App Store header, search and universal images: size and art safe area in pixels, in display order. */
-  creativeImages: { specId: string; name: string; size: { width: number; height: number }; safeArea: { x: number; y: number; width: number; height: number } }[];
+  /**
+   * Store artwork from screenshots, in display order: size and key-art area in pixels. `storeSafeArea` is true when the
+   * area is the store's art safe area, false for the centred key area of images without one.
+   */
+  creativeImages: {
+    specId: string;
+    name: string;
+    group: CreativeGroup;
+    target: Target;
+    text: boolean;
+    size: { width: number; height: number };
+    safeArea: { x: number; y: number; width: number; height: number };
+    storeSafeArea: boolean;
+  }[];
   maxPhrase: number;
 }
 
@@ -42,10 +54,19 @@ export function buildCatalogue(): Catalogue {
     environmentColors: Object.entries(ENVIRONMENT_COLORS).map(([id, color]) => ({ id: id as EnvironmentColor, color })),
     maxEnvironments: MAX_ENVIRONMENTS,
     maxBadgeLength: MAX_BADGE_LENGTH,
-    creativeImages: CREATIVE_IMAGES.map(({ specId }) => {
-      const spec = getSpec(specId);
-      const { width, height } = cardSizeForSpec(spec);
-      return { specId, name: spec.name, size: { width, height }, safeArea: spec.safeArea! };
+    creativeImages: CREATIVE_IMAGES.map((image) => {
+      const spec = getSpec(image.specId);
+      const { width, height, safeArea } = creativeGeometry(image);
+      return {
+        specId: image.specId,
+        name: spec.name,
+        group: image.group,
+        target: spec.target,
+        text: image.text,
+        size: { width, height },
+        safeArea,
+        storeSafeArea: spec.safeArea !== undefined,
+      };
     }),
     maxPhrase: MAX_PHRASE,
   };

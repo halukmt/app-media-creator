@@ -27,8 +27,10 @@ export interface CreativeInput {
 }
 
 export interface CreativeLayout {
-  /** Box of the phrase, or null without a phrase. */
+  /** Box the phrase is fitted into (before `textShift`), or null without a phrase. */
   text: Rect | null;
+  /** How far the drawn phrase moves right, so phrase and key device sit centred together (0 without a measure). */
+  textShift: number;
   /** The key-art device: top-left corner and outer width. */
   device: { x: number; y: number; width: number; height: number };
   /** Devices in the auxiliary art area, nearest first on each side; they may be cut off at the image edge. */
@@ -81,9 +83,10 @@ async function shadowSvg(box: { x: number; y: number; width: number; height: num
 
 /**
  * Where everything goes, for a device of the given outer aspect (height / width). Pure, so the guarantee "key art
- * inside the safe area" can be tested without rendering.
+ * inside the safe area" can be tested without rendering. With `textWidth` (the measured width of the fitted phrase)
+ * phrase and key device move towards each other by the space the phrase does not need, so they sit centred as a group.
  */
-export function creativeLayout(width: number, height: number, safe: Rect, deviceAspect: number, hasText: boolean): CreativeLayout {
+export function creativeLayout(width: number, height: number, safe: Rect, deviceAspect: number, hasText: boolean, textWidth?: number): CreativeLayout {
   const pad = safe.height * PADDING;
   const inner = { x: safe.x + pad, y: safe.y + pad, width: safe.width - 2 * pad, height: safe.height - 2 * pad };
   let deviceHeight = inner.height * DEVICE_SHARE;
@@ -94,10 +97,11 @@ export function creativeLayout(width: number, height: number, safe: Rect, device
     deviceHeight = deviceWidth * deviceAspect;
   }
   const deviceY = inner.y + (inner.height - deviceHeight) / 2;
-  const device = hasText
-    ? { x: inner.x + inner.width - deviceWidth, y: deviceY, width: deviceWidth, height: deviceHeight }
-    : { x: inner.x + (inner.width - deviceWidth) / 2, y: deviceY, width: deviceWidth, height: deviceHeight };
   const text = hasText ? { x: inner.x, y: inner.y, width: inner.width - deviceWidth - pad, height: inner.height } : null;
+  const textShift = text && textWidth !== undefined ? Math.max(0, (text.width - Math.min(textWidth, text.width)) / 2) : 0;
+  const device = hasText
+    ? { x: inner.x + inner.width - deviceWidth - textShift, y: deviceY, width: deviceWidth, height: deviceHeight }
+    : { x: inner.x + (inner.width - deviceWidth) / 2, y: deviceY, width: deviceWidth, height: deviceHeight };
 
   // Side devices: the size of the key-art device, in a row outwards from the safe area on both sides.
   const sides: CreativeLayout['sides'] = [];
@@ -114,7 +118,7 @@ export function creativeLayout(width: number, height: number, safe: Rect, device
 
   // Narrow safe areas (the universal image) get a smaller start size, so long words shrink instead of breaking.
   const textSize = Math.min(safe.height * TEXT_SIZE, text ? text.width / TEXT_WIDTH_DIVISOR : Infinity);
-  return { text, device, sides, textSize };
+  return { text, textShift, device, sides, textSize };
 }
 
 /** Checks every value that ends up in the SVG, so the function is safe to call with request data. */
@@ -146,7 +150,21 @@ export async function renderCreativeAsset(input: CreativeInput): Promise<Creativ
   const screenAspect = first ? first.height / first.width : DEFAULT_SCREEN_ASPECT.iphone;
   const deviceAspect = userFrame ? userFrame.height / userFrame.width : outerAspect('iphone', screenAspect);
   const phrase = input.phrase.normalize('NFC').trim();
-  const layout = creativeLayout(width, height, input.safeArea, deviceAspect, phrase.length > 0);
+  // The phrase is fitted into its box first; its measured width then centres phrase and key device as one group.
+  const unshifted = creativeLayout(width, height, input.safeArea, deviceAspect, phrase.length > 0);
+  const block = unshifted.text
+    ? textBlockSvg({
+        ...unshifted.text,
+        title: phrase,
+        titleSize: unshifted.textSize,
+        subtitleSize: unshifted.textSize / 2,
+        titleLeading: 1.1,
+        color: textColorFor(input.background),
+        align: 'left',
+        valign: 'middle',
+      })
+    : null;
+  const layout = block ? creativeLayout(width, height, input.safeArea, deviceAspect, true, block.width) : unshifted;
 
   const devices: string[] = [];
   const draw = async (box: { x: number; y: number; width: number; height: number }, screenshot: Uint8Array, id: string) => {
@@ -162,23 +180,8 @@ export async function renderCreativeAsset(input: CreativeInput): Promise<Creativ
     devices.splice(start, devices.length - start, `<g opacity="${n(side.opacity)}">${devices.slice(start).join('')}</g>`);
   }
   await draw(layout.device, shots[0]!, 'key');
-
-  const warnings: TextWarning[] = [];
-  let text = '';
-  if (layout.text) {
-    const block = textBlockSvg({
-      ...layout.text,
-      title: phrase,
-      titleSize: layout.textSize,
-      subtitleSize: layout.textSize / 2,
-      titleLeading: 1.1,
-      color: textColorFor(input.background),
-      align: 'left',
-      valign: 'middle',
-    });
-    text = block.svg;
-    warnings.push(...block.warnings);
-  }
+  const text = block ? (layout.textShift > 0 ? `<g transform="translate(${n(layout.textShift)} 0)">${block.svg}</g>` : block.svg) : '';
+  const warnings: TextWarning[] = block ? block.warnings : [];
 
   const bg = backgroundSvg(input.background, width, height);
   const svg =

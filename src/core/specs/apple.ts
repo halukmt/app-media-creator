@@ -239,6 +239,8 @@ export const APPLE_SPECS: readonly SpecEntry[] = [
         aspect: { ratio: 16 / 9, tolerance: 0.01 },
         orientation: 'landscape',
       },
+      // Rendered at the largest size: Apple crops the card for different placements.
+      ...(kind === 'image' ? { defaultSize: { width: 3840, height: 2160 } } : {}),
       formats: kind === 'image' ? ['png', 'jpeg'] : ['mp4', 'mov', 'm4v'],
       alpha: 'forbidden',
       maxBytes: 500 * MB,
@@ -262,6 +264,7 @@ export const APPLE_SPECS: readonly SpecEntry[] = [
         aspect: { ratio: 16 / 9, tolerance: 0.01 },
         orientation: 'portrait',
       },
+      ...(kind === 'image' ? { defaultSize: { width: 2160, height: 3840 } } : {}),
       formats: kind === 'image' ? ['png', 'jpeg'] : ['mp4', 'mov', 'm4v'],
       alpha: 'forbidden',
       maxBytes: 500 * MB,
