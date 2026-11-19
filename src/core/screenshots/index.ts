@@ -7,3 +7,4 @@ export * from './layouts.js';
 export * from './render.js';
 export * from './text-layout.js';
 export * from './text-block.js';
+export * from './creative.js';

@@ -51,6 +51,16 @@ export interface Catalogue {
   environmentColors: { id: EnvironmentColor; color: string }[];
   maxEnvironments: number;
   maxBadgeLength: number;
+  creativeImages: CatalogueCreativeImage[];
+  maxPhrase: number;
+}
+
+/** One App Store creative image: size and art safe area in pixels (from the spec catalogue). */
+export interface CatalogueCreativeImage {
+  specId: string;
+  name: string;
+  size: { width: number; height: number };
+  safeArea: { x: number; y: number; width: number; height: number };
 }
 
 /** An API error with the messages the server sent (validation errors or one error text). */
@@ -307,6 +317,54 @@ export function fetchLogoOutputs(): Promise<LogoOutput[]> {
 
 export function generateLogoPack(pack: LogoPack, locales: readonly string[]): Promise<PackResult> {
   return request<PackResult>(`/api/generate/logo/${pack}`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ locales }),
+  });
+}
+
+/** Settings of the App Store header and search images (mirrors core CreativeSettings). */
+export interface CreativeSettings {
+  version: 1;
+  background: Background;
+  phrases: Partial<Record<string, string>>;
+}
+
+/** A small render of one creative image; `safeArea` is given as shares (0 to 1) of the image size. */
+export interface CreativePreviewResult {
+  image: string;
+  width: number;
+  height: number;
+  /** Pixel size of the real asset and of its safe area. */
+  full: { width: number; height: number; safeWidth: number; safeHeight: number };
+  safeArea: { x: number; y: number; width: number; height: number };
+  warnings: { code: string; message: string }[];
+  fallbackInput: boolean;
+}
+
+export function fetchCreativeSettings(): Promise<CreativeSettings> {
+  return request<CreativeSettings>('/api/creative/settings');
+}
+
+export function saveCreativeSettings(settings: CreativeSettings): Promise<CreativeSettings> {
+  return request<CreativeSettings>('/api/creative/settings', {
+    method: 'PUT',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(settings),
+  });
+}
+
+export function previewCreative(locale: string, specId: string, width: number, signal?: AbortSignal): Promise<CreativePreviewResult> {
+  return request<CreativePreviewResult>('/api/creative/preview', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ locale, specId, width }),
+    ...(signal ? { signal } : {}),
+  });
+}
+
+export function generateCreativeAssets(locales: readonly string[]): Promise<CardGenerationResult> {
+  return request<CardGenerationResult>('/api/generate/creative-assets', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ locales }),

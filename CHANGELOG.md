@@ -28,6 +28,7 @@ entries left under `[Unreleased]` is rejected by `npm run check:release`.
 - Share and social images from the logo: Open Graph, X card and WhatsApp preview per language with a tagline, profile pictures and banners for WhatsApp, Instagram, Facebook, LinkedIn, X, YouTube and TikTok, an email signature logo, and monochrome, inverse and square-mark logo variants. (#9)
 - Logo section: upload a logo, choose the App Store, Google Play, web and social packs, a background from the presets or the logo colours and a tagline per language, generate everything in one run and check each asset with its validation state before exporting. (#10)
 - Icon variants for preview and test installs: environments in the Project screen (folder name, label, colour, badge or blueprint style) give App Store, Android and favicon sets of their own next to the unchanged production icons, checked in the export checklist and documented for Xcode, Expo, Android flavors and staging sites. (#34)
+- App Store product page header, search results and universal images per language: your first screenshot and a short phrase inside the art safe area, a row of devices across the rest, previews with a safe-area guide in the Screenshots section. (#18)
 
 ### Changed
 
