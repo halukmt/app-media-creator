@@ -254,3 +254,11 @@
 - `readRgba(pipeline)` (sRGB, alpha, 8-bit, length check) now used by `logoPalette`, `analyseBackground`,
   `renderSilhouette`. CHANGELOG under Changed (hardening).
 - #72 (20 s timeout in framed-screenshots) hit 3 of the last 5 full runs → raised to Ready, P1.
+
+## #70 No default preview environment — done (PR #76)
+
+- Haluk's decision: schema `environments` defaults to `[]`, `defaultProject()` lists none; stored lists are kept.
+- No UI change needed (empty hint + Add, Logo "Icon set" filter hidden). Tests: API still returns variant
+  environments, checklist/ZIP without variants, e2e empty Project section and no Logo filter.
+- Accepted: pre-#34 project files without the field that generated preview icons now read as none (unreleased tool).
+- Codex on PR #75: no findings.
