@@ -43,6 +43,7 @@ export function StoreTextsPage({ project, catalogue, selection, onSelectionChang
   // The texts as the server last answered them: its checks belong to these values only.
   const [checked, setChecked] = useState<Pick<StoreTexts, 'texts' | 'checks'>>({ texts: {}, checks: {} });
   const autosave = useRevisionAutosave<StoreTexts>({
+    section: 'store-texts',
     load: fetchStoreTexts,
     documentOf: (loaded) => loaded,
     save: saveStoreTexts,

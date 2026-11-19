@@ -78,6 +78,51 @@ test.describe('The Store texts section', () => {
     await expect(store(page, 'German', 'Google Play').getByLabel('Short description')).toHaveValue('Faire Teams für dein Spiel');
   });
 
+  test('loads the export checklist only after the edit made just before leaving is saved (#98)', async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await page.goto('/#/store-texts');
+    const events: string[] = [];
+    // The save takes a moment; the old page let the Export page read the texts before it landed.
+    await page.route('**/api/store-texts', async (route) => {
+      if (route.request().method() !== 'PUT') return route.continue();
+      await new Promise((resolve) => setTimeout(resolve, 1500));
+      const response = await route.fetch();
+      events.push('saved');
+      await route.fulfill({ response });
+    });
+    page.on('request', (request) => {
+      if (request.url().includes('/api/export/checklist')) events.push('checklist');
+    });
+    await store(page, 'German', 'Google Play').getByLabel('Short description').fill('Faire Teams in Sekunden');
+    await page.getByRole('link', { name: /Export →/ }).click();
+    await expect(page.getByRole('heading', { level: 1, name: 'Export' })).toBeVisible();
+    await expect.poll(() => events.includes('checklist'), { timeout: 10_000 }).toBe(true);
+    expect(events.indexOf('saved')).toBeGreaterThanOrEqual(0);
+    expect(events.indexOf('saved')).toBeLessThan(events.indexOf('checklist'));
+    await page.unroute('**/api/store-texts');
+  });
+
+  test('reports an edit that could not be saved after leaving and links back to the section (#98)', async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await page.goto('/#/store-texts');
+    await page.route('**/api/store-texts', (route) =>
+      route.request().method() === 'PUT' ? route.fulfill({ status: 500, json: { error: 'disk full' } }) : route.continue(),
+    );
+    await store(page, 'German', 'Google Play').getByLabel('Short description').fill('Wird nicht gespeichert');
+    await page.getByRole('link', { name: /Export →/ }).click();
+    const lost = page.getByText('Your last change in Store texts was not saved and is lost.');
+    await expect(lost).toBeVisible();
+    await page.unroute('**/api/store-texts');
+    await page.getByRole('link', { name: 'Open Store texts and enter it again' }).click();
+    await expect(page.getByRole('heading', { level: 1, name: 'Store texts' })).toBeVisible();
+    // The section shows what is stored; the message stays next to it until the user dismisses it.
+    await expect(store(page, 'German', 'Google Play').getByLabel('Short description')).toHaveValue('Faire Teams in Sekunden');
+    await expect(lost).toBeVisible();
+    await expect(page.getByRole('link', { name: 'Open Store texts and enter it again' })).toHaveCount(0);
+    await page.getByRole('button', { name: 'Dismiss' }).click();
+    await expect(lost).toHaveCount(0);
+  });
+
   for (const width of viewportWidths()) {
     test(`shows the texts at ${width} px without accessibility violations`, async ({ page }) => {
       await page.setViewportSize({ width, height: 900 });

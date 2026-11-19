@@ -20,6 +20,10 @@ export const en = {
     loadRejected: 'The project settings could not be read. Fix these entries in project.json:',
     retry: 'Try again',
     serverConnected: (version: string) => `Server ${version} connected`,
+    editLost: (section: string) => `Your last change in ${section} was not saved and is lost.`,
+    editDropped: (section: string) => `${section} was changed elsewhere; your last change there was not saved.`,
+    openSection: (section: string) => `Open ${section} and enter it again`,
+    dismiss: 'Dismiss',
   },
   common: {
     copy: 'Copy',

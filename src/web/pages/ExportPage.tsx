@@ -10,6 +10,7 @@ import { en } from '../i18n/en';
 import { SectionLayout } from '../layouts/SectionLayout';
 import { downloadFileName, isWorseStatus, summarizeChecklist } from '../lib/export';
 import { projectLocaleOptions } from '../lib/locale-selection';
+import { pendingSaves } from '../lib/pending-saves';
 
 interface Props {
   project: ProjectSettings;
@@ -62,7 +63,10 @@ export function ExportPage({ project, locales, selection, onSelectionChange, foc
     setLoading(true);
     setLoadError(null);
     setDownload({ kind: 'idle' });
-    fetchChecklist(localeKey.split(','), controller.signal)
+    // Edits saved while the user left the previous section must land first, or the checklist shows the older state (#98).
+    pendingSaves
+      .settled()
+      .then(() => fetchChecklist(localeKey.split(','), controller.signal))
       .then((next) => {
         setChecklist(next);
         setLoading(false);
