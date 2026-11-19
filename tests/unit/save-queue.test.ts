@@ -1,6 +1,6 @@
 // conventions: RULE-TESTING-3301
 import { describe, expect, test, vi } from 'vitest';
-import { createSaveQueue } from '../../src/web/lib/save-queue.js';
+import { SaveDiscardedError, createSaveQueue } from '../../src/web/lib/save-queue.js';
 
 describe('The save queue stores the latest edits one save at a time', () => {
   test('saves only the newest scheduled version and reports success', async () => {
@@ -27,6 +27,50 @@ describe('The save queue stores the latest edits one save at a time', () => {
     expect(queue.hasPending()).toBe(false);
     await queue.flush().catch(() => undefined);
     expect(save).toHaveBeenCalledTimes(1);
+  });
+
+  test('never sends saves that were already queued behind a conflicting one when it is discarded (#92)', async () => {
+    let rejectFirst!: (error: Error) => void;
+    const save = vi.fn((doc: string) => (doc === 'first' ? new Promise<void>((_resolve, reject) => (rejectFirst = reject)) : Promise.resolve()));
+    const queue = createSaveQueue(save, undefined, { discardOn: (error) => (error as Error).message === '409' });
+    queue.schedule('first');
+    const first = queue.flush();
+    // Two more edits are flushed while the first save is still running: they wait in the queue.
+    queue.schedule('second');
+    const second = queue.flush();
+    queue.schedule('third');
+    const third = queue.flush();
+    await Promise.resolve();
+    expect(save.mock.calls).toEqual([['first']]);
+    // The first save is refused as a conflict: everything based on the old version is dropped at once.
+    rejectFirst(new Error('409'));
+    await expect(first).rejects.toThrow('409');
+    // The queued flushes say that their versions were dropped instead of resolving as saved.
+    await expect(second).rejects.toBeInstanceOf(SaveDiscardedError);
+    await expect(third).rejects.toBeInstanceOf(SaveDiscardedError);
+    expect(save.mock.calls).toEqual([['first']]);
+    expect(queue.hasPending()).toBe(false);
+    // Nothing new: a later flush resolves instead of repeating the conflict.
+    await expect(queue.flush()).resolves.toBeUndefined();
+  });
+
+  test('drops a flush queued behind a running save on a manual discard and reports it (#92)', async () => {
+    let finishFirst!: () => void;
+    const save = vi.fn((doc: string) => (doc === 'A' ? new Promise<void>((resolve) => (finishFirst = resolve)) : Promise.resolve()));
+    const queue = createSaveQueue(save);
+    queue.schedule('A');
+    const a = queue.flush();
+    // A has started; B waits behind it.
+    await Promise.resolve();
+    expect(save.mock.calls).toEqual([['A']]);
+    queue.schedule('B');
+    const b = queue.flush();
+    expect(queue.discard()).toBe(true);
+    finishFirst();
+    await a;
+    await expect(b).rejects.toBeInstanceOf(SaveDiscardedError);
+    expect(save.mock.calls).toEqual([['A']]);
+    expect(queue.discard()).toBe(false);
   });
 
   test('rejects a failed flush and keeps the edits for the next attempt', async () => {
