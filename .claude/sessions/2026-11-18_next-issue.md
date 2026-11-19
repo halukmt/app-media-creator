@@ -444,3 +444,15 @@
 
 - Codex P2 on PR #105: a `FFMPEG_PATH` without an `ffmpeg` file name made ffmpeg itself the ffprobe. Taken right away
   (shared video tools). Sibling only for `ffmpeg…` names, otherwise PATH. Code review: no findings.
+
+## #21 Device videos and looping header / search videos — done (PR #108)
+
+- Catalogue `web.video.vertical|landscape|square` (group `video`, unverified). `frameOverlaySvg` + `keyScreen`
+  (frame with the screen cut out); `src/core/video/compose.ts` (layout, layers, `planLoop` crossfade, `planClip`,
+  `composeArgs`); `generateEmbedVideos` / `generateLoopVideos`; `recordings.ts` shared with the store previews.
+- Layer trick: plate → recording in the screen → overlay. Device videos use the whole plate with the rounded screen
+  cut out as overlay (hides corners also with frame `none`). Loop: `xfade` of the clip's first 0.5 s over its last.
+- Code review 10, all fixed; security clean. Seamless test: the last→first jump is compared with an ordinary frame
+  step (testsrc2 changes every pixel each frame, so "first vs middle" was no baseline). 4K loop renders are slow under
+  load: the loop test runs one language (tr-TR), German is covered by the device video test.
+- Next: no Ready issue left; #23 (Video UI) waits for #22 (amc-video skill, Backlog).
