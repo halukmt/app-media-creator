@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  ApiError,
   fetchBackgrounds,
   fetchChecklist,
   fetchInputs,
@@ -8,6 +7,7 @@ import {
   fetchLogoSettings,
   generateLogoPack,
   logoPreviewUrl,
+  messagesOf,
   outputFileUrl,
   saveLogoSettings,
   uploadLogo,
@@ -53,10 +53,6 @@ const SAVE_DELAY = 600;
 const PREVIEW_WIDTH = 240;
 /** Id of the production icon set in the icon set filter (environment ids never equal it). */
 const PRODUCTION = 'production';
-
-function messagesOf(error: unknown): string[] {
-  return error instanceof ApiError ? error.messages : [];
-}
 
 /** The Logo section: upload the logo, choose packs, background and taglines, generate everything, preview, export. */
 export function LogoPage({ project, catalogue, selection, onSelectionChange, focusHeading }: Props) {

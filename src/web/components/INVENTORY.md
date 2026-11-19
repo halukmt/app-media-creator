@@ -5,6 +5,7 @@ its file is created, with a one-line reason and the rejected alternative. `npm r
 fails when a component file is missing here or a row points to a missing file.
 
 Layouts (`src/web/layouts/`) and pages (`src/web/pages/`) are not listed; they are composed of these components.
+Hooks (`src/web/hooks/`) hold shared state logic, not markup, and are not listed either.
 
 | File | Purpose | DaisyUI | Reason | Rejected alternative |
 |---|---|---|---|---|

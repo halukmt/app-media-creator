@@ -1,12 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ApiError,
-  JOB_EVENTS_URL,
   applyJob,
   createJob,
   fetchBackgrounds,
-  fetchJob,
-  fetchJobs,
   fetchCreativeSettings,
   fetchInputs,
   fetchScreenshots,
@@ -14,12 +11,12 @@ import {
   generateFramedScreenshots,
   generateScreenshotCards,
   inputFileUrl,
+  messagesOf,
   previewCard,
   previewCreative,
   saveCreativeSettings,
   saveScreenshots,
   uploadScreenshot,
-  type AiJob,
   type BackgroundPreset,
   type Catalogue,
   type CardLayout,
@@ -45,13 +42,15 @@ import { SectionEmptyState } from '../components/SectionEmptyState';
 import { SlotEditor, type SlotValues } from '../components/SlotEditor';
 import { StatusAlert } from '../components/StatusAlert';
 import { ToggleField } from '../components/ToggleField';
+import { useAiJob } from '../hooks/useAiJob';
+import { useRevisionAutosave } from '../hooks/useRevisionAutosave';
 import { en } from '../i18n/en';
 import { SectionLayout } from '../layouts/SectionLayout';
 import { headlineLocales } from '../lib/ai-jobs';
 import { CREATIVE_PREVIEW_WIDTH, creativeLabelKey, isCreativePurpose, safeAreaPercent, safeAreaShares } from '../lib/creative';
 import type { CheckStatus } from '../lib/export';
 import { projectLocaleOptions, sourceLocaleFor } from '../lib/locale-selection';
-import { SaveDiscardedError, createSaveQueue } from '../lib/save-queue';
+import { createSaveQueue } from '../lib/save-queue';
 import { INHERIT, applyOverrides, backgroundChoices, backgroundKey, moveEntry, overrideIds, removeEntry, swatchCss, uploadName } from '../lib/screenshots';
 import { sectionHref } from '../lib/sections';
 
@@ -71,28 +70,15 @@ const LAYOUTS: readonly CardLayout[] = ['text-top', 'text-top-large', 'text-bott
 const FRAME_KINDS = ['iphone', 'iphone-home', 'iphone-duo', 'ipad', 'android-phone', 'android-tablet'] as const;
 const SAVE_DELAY = 600;
 
-/** The server refused a save because the sets changed elsewhere (#85). */
-function isConflict(error: unknown): boolean {
-  return error instanceof ApiError && error.status === 409;
-}
-
-function messagesOf(error: unknown): string[] {
-  return error instanceof ApiError ? error.messages : [];
-}
-
 /** The Screenshots section: upload per language, choose the purpose, edit headlines and style, preview, generate. */
 export function ScreenshotsPage({ project, catalogue, selection, onSelectionChange, focusHeading }: Props) {
   const [step, setStep] = useState<StepId>('upload');
   const [purpose, setPurpose] = useState<Purpose>('cards');
   const [inputs, setInputs] = useState<StoredInput[]>([]);
-  const [sets, setSets] = useState<ScreenshotSets | null>(null);
   const [backgrounds, setBackgrounds] = useState<{ presets: BackgroundPreset[]; palette: BackgroundPreset[] }>({ presets: [], palette: [] });
   const [editLocale, setEditLocale] = useState(project.sourceLocale);
   const [uploadState, setUploadState] = useState<{ done: number; total: number } | null>(null);
   const [uploadMessage, setUploadMessage] = useState<Message>(null);
-  const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved' | 'failed' | 'conflict'>('idle');
-  // The stored revision this page last saw; every save is sent based on it (#85).
-  const knownRevision = useRef(0);
   const [announce, setAnnounce] = useState('');
   const [device, setDevice] = useState<string>('');
   const [previews, setPreviews] = useState<Record<number, CardPreviewResult | 'failed'>>({});
@@ -106,25 +92,6 @@ export function ScreenshotsPage({ project, catalogue, selection, onSelectionChan
   const [creativePreviews, setCreativePreviews] = useState<Partial<Record<string, CreativePreviewResult | 'failed'>>>({});
   const [creativeLoadFailed, setCreativeLoadFailed] = useState(false);
   const [showSafeArea, setShowSafeArea] = useState(true);
-  const [aiJob, setAiJob] = useState<AiJob | null>(null);
-  const [aiBusy, setAiBusy] = useState<'prepare' | 'A' | 'B' | null>(null);
-  const [aiMessage, setAiMessage] = useState<AiJobMessage | null>(null);
-  // Every change of the shown job counts; a fetched job is kept only if nothing changed the panel since it was asked
-  // for (a newer job, an optimistic "applied", or a newer fetch).
-  const jobVersion = useRef(0);
-  const showJob = useCallback((job: AiJob | null) => {
-    jobVersion.current += 1;
-    setAiJob(job);
-  }, []);
-  const refreshJob = useCallback((id: string) => {
-    const version = (jobVersion.current += 1);
-    void fetchJob(id)
-      .then((fetched) => {
-        if (version === jobVersion.current) setAiJob(fetched);
-      })
-      .catch(() => undefined);
-  }, []);
-  const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const creativeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const localeOptions = projectLocaleOptions(catalogue.locales, project.locales);
@@ -136,19 +103,6 @@ export function ScreenshotsPage({ project, catalogue, selection, onSelectionChan
     setEditLocale((current) => sourceLocaleFor(selection.includes(current) ? current : project.sourceLocale, selection));
   }, [selection, project.sourceLocale]);
 
-  const [loadError, setLoadError] = useState<string[] | null>(null);
-  // Edit lock around applying AI headlines (#84, #87). Edits are refused while
-  // - an apply runs (`applyRunning`), or
-  // - the server holds applied texts the page has not shown yet (`lockedAfter` = the last reload number started
-  //   before the apply finished; only a successful reload started later can bring the applied texts).
-  // The lock is released only after such a reload is rendered, so no handler of an earlier render can save old texts.
-  const applyRunning = useRef(false);
-  const lockedAfter = useRef<number | null>(null);
-  const [releaseLock, setReleaseLock] = useState(false);
-  // Mirrors the lock for rendering: the page says why edits are not taken.
-  const [editsLocked, setEditsLocked] = useState(false);
-  // Reloads are numbered: an older reload that answers late never overwrites a newer one.
-  const reloadCount = useRef(0);
   const loadCreative = useCallback(async () => {
     try {
       setCreative(await fetchCreativeSettings());
@@ -157,60 +111,29 @@ export function ScreenshotsPage({ project, catalogue, selection, onSelectionChan
       setCreativeLoadFailed(true);
     }
   }, []);
-  /** Loads uploads and sets; resolves false when that failed (the error is shown). */
-  const reload = useCallback(async (): Promise<boolean> => {
-    const number = (reloadCount.current += 1);
-    try {
-      const [nextInputs, nextSets] = await Promise.all([fetchInputs(), fetchScreenshots()]);
-      if (number !== reloadCount.current) return false;
-      setInputs(nextInputs.filter((input) => input.kind === 'screenshot'));
-      // An answer older than a save this page already made is stale for the sets (uploads are still current).
-      if (nextSets.revision >= knownRevision.current) {
-        // The sets moved on elsewhere: an edit still waiting is based on the older version and must not be sent.
-        if (nextSets.revision > knownRevision.current) {
-          // Drops the waiting edit and saves already queued behind a running one (#92).
-          if (queue.current.discard()) setSaveState('conflict');
-          // Texts or styles changed elsewhere: the card previews must show the loaded version (#92).
-          setPreviewVersion((v) => v + 1);
-        }
-        knownRevision.current = nextSets.revision;
-        setSets(nextSets);
-      }
-      setLoadError(null);
-      // This reload started after the apply finished, so it shows the applied texts: release once it is rendered.
-      if (!applyRunning.current && lockedAfter.current !== null && number > lockedAfter.current) setReleaseLock(true);
-      return true;
-    } catch (error) {
-      if (number === reloadCount.current) setLoadError(messagesOf(error));
-      return false;
-    }
-  }, []);
+  // Uploads and screenshot sets load together; the sets carry the revision of the autosave (#85).
+  const autosave = useRevisionAutosave<ScreenshotSets, [StoredInput[], ScreenshotSets]>({
+    load: () => Promise.all([fetchInputs(), fetchScreenshots()]),
+    documentOf: ([, loadedSets]) => loadedSets,
+    save: saveScreenshots,
+    // Uploads are current even when the sets in the same answer are older than a save this page made.
+    onLoaded: ([loadedInputs]) => setInputs(loadedInputs.filter((input) => input.kind === 'screenshot')),
+    // Texts or styles changed elsewhere: the card previews must show the loaded version (#92).
+    onChangedElsewhere: () => setPreviewVersion((v) => v + 1),
+    onSaved: () => setPreviewVersion((v) => v + 1),
+  });
+  // update returns false while AI headlines are applied (the edit is not taken).
+  const { document: sets, saveState, loadError, editsLocked, reload, flush: flushSave, update: updateSets } = autosave;
+  const { job: aiJob, showJob, refreshJob } = useAiJob('copy');
+  const [aiBusy, setAiBusy] = useState<'prepare' | 'A' | 'B' | null>(null);
+  const [aiMessage, setAiMessage] = useState<AiJobMessage | null>(null);
 
   useEffect(() => {
-    void reload();
     fetchBackgrounds()
       .then(setBackgrounds)
       .catch(() => setBackgrounds({ presets: [], palette: [] }));
     void loadCreative();
-    fetchJobs('copy', 1)
-      .then((jobs) => showJob(jobs[0] ?? null))
-      .catch(() => showJob(null));
-  }, [reload, loadCreative, showJob]);
-
-  // The newest AI job is followed through the server's event stream, also after an invalid or applied result (the AI
-  // may write again into the same folder); a result written while the page was closed is in the list above.
-  const aiJobId = aiJob?.id;
-  useEffect(() => {
-    if (!aiJobId) return undefined;
-    const events = new EventSource(JOB_EVENTS_URL);
-    const refresh = () => refreshJob(aiJobId);
-    events.addEventListener('job', (event) => {
-      if ((event as MessageEvent<string>).data === aiJobId) refresh();
-    });
-    // After a dropped connection the browser reconnects; changes in between are fetched once.
-    events.addEventListener('open', refresh);
-    return () => events.close();
-  }, [aiJobId, refreshJob]);
+  }, [loadCreative]);
 
   // Devices the project picked for the stores that are enabled.
   const devices = useMemo(() => {
@@ -234,62 +157,6 @@ export function ScreenshotsPage({ project, catalogue, selection, onSelectionChan
   const usesFallback = ownEntries.length === 0 && editLocale !== project.sourceLocale;
   const shownEntries = usesFallback ? (sets?.sets[project.sourceLocale] ?? []) : ownEntries;
   const hasUploads = inputs.length > 0;
-
-  // Edits are saved after a short pause. Saves run one after another; `flushSave` sends a pending edit at once and
-  // resolves when everything is stored, so upload, generate and leaving the page never lose or overwrite an edit.
-  // The page's own edits follow each other, so a save is sent based on the revision of the last save or load. A save
-  // that the server rejects as based on an older revision means the sets changed elsewhere.
-  const queue = useRef(
-    createSaveQueue<ScreenshotSets>(
-      async (document) => {
-        const saved = await saveScreenshots({ ...document, revision: knownRevision.current });
-        // Never backwards: a reload may already have seen a newer revision than this save's answer.
-        knownRevision.current = Math.max(knownRevision.current, saved.revision);
-        return saved;
-      },
-      () => {
-        setSaveState('saved');
-        setPreviewVersion((v) => v + 1);
-      },
-      // A conflict drops every edit not yet sent, also those already queued behind it (#92).
-      { discardOn: isConflict },
-    ),
-  );
-  const reloadRef = useRef(reload);
-  reloadRef.current = reload;
-  /** Sends pending edits now; rejects (and keeps them) when the save fails; drops them when they conflict. */
-  const flushSave = useCallback(async (): Promise<void> => {
-    if (saveTimer.current) {
-      clearTimeout(saveTimer.current);
-      saveTimer.current = null;
-    }
-    try {
-      await queue.current.flush();
-    } catch (error) {
-      if (isConflict(error) || error instanceof SaveDiscardedError) {
-        // The queue already dropped everything not yet sent (never retried: it is based on data that changed
-        // elsewhere). Show the current version; the caller (upload, generate, apply) goes on once it is loaded.
-        setSaveState('conflict');
-        await reloadRef.current();
-        return;
-      }
-      setSaveState('failed');
-      throw error;
-    }
-  }, []);
-
-  /** Takes an edit and queues its save; returns false while AI headlines are applied (the edit is not taken). */
-  function updateSets(next: ScreenshotSets): boolean {
-    if (applyRunning.current || lockedAfter.current !== null) return false;
-    setSets(next);
-    queue.current.schedule(next);
-    setSaveState('saving');
-    if (saveTimer.current) clearTimeout(saveTimer.current);
-    saveTimer.current = setTimeout(() => void flushSave().catch(() => undefined), SAVE_DELAY);
-    return true;
-  }
-  // Leaving the section sends a pending edit instead of dropping it.
-  useEffect(() => () => void flushSave().catch(() => undefined), [flushSave]);
 
   // Header and search image settings: same autosave as the sets, with their own queue.
   const creativeQueue = useRef(
@@ -323,15 +190,6 @@ export function ScreenshotsPage({ project, catalogue, selection, onSelectionChan
     if (!sets) return false;
     return updateSets({ ...sets, sets: { ...sets.sets, [editLocale]: entries } });
   }
-
-  useEffect(() => {
-    if (!releaseLock) return;
-    setReleaseLock(false);
-    if (applyRunning.current) return;
-    lockedAfter.current = null;
-    setEditsLocked(false);
-    // The reload that released the lock brought a newer revision and already refreshed the previews.
-  }, [releaseLock]);
 
   // Previews of the editing language on the chosen device, one request at a time; a newer version cancels the rest.
   useEffect(() => {
@@ -490,43 +348,26 @@ export function ScreenshotsPage({ project, catalogue, selection, onSelectionChan
   async function applyAiJob(variant: 'A' | 'B') {
     if (!aiJob) return;
     setAiMessage(null);
-    // From here until the reloaded sets are rendered, no edit may queue a save (see updateSets).
-    applyRunning.current = true;
-    setEditsLocked(true);
     setAiBusy(variant);
     try {
-      await flushSave();
-    } catch {
-      // Nothing was sent: the page is as before. Only an earlier apply that still waits for its reload keeps edits
-      // paused, and that reload is tried now (#89).
-      setAiMessage({ action: 'apply', tone: 'error', text: en.screenshots.saveFirst });
-      applyRunning.current = false;
-      setAiBusy(null);
-      setEditsLocked(lockedAfter.current !== null);
-      if (lockedAfter.current !== null) void reload();
-      return;
-    }
-    try {
-      await applyJob(aiJob.id, variant);
-      // Applied on the server: show it at once. A failed refresh below must not read as a failed apply.
-      showJob({ ...aiJob, status: 'applied', applied: { variant, at: new Date().toISOString() } });
+      const saved = await autosave.applyLocked(async () => {
+        try {
+          await applyJob(aiJob.id, variant);
+          // Applied on the server: show it at once. A failed refresh must not read as a failed apply.
+          showJob({ ...aiJob, status: 'applied', applied: { variant, at: new Date().toISOString() } });
+        } catch (error) {
+          setAiMessage({ action: 'apply', tone: 'error', text: en.screenshots.ai.applyFailed, details: messagesOf(error) });
+        } finally {
+          refreshJob(aiJob.id);
+        }
+      });
+      if (!saved) setAiMessage({ action: 'apply', tone: 'error', text: en.screenshots.saveFirst });
     } catch (error) {
       setAiMessage({ action: 'apply', tone: 'error', text: en.screenshots.ai.applyFailed, details: messagesOf(error) });
-    } finally {
-      // Also after an error: the server may have saved the headlines before the answer was lost. Only a reload
-      // started from now on shows the server's state and may release the lock.
-      lockedAfter.current = reloadCount.current;
-      refreshJob(aiJob.id);
-      applyRunning.current = false;
-    }
-    try {
-      // Releases the lock when it succeeds; when it fails, the lock stays until a later reload succeeds (#87).
-      await reload();
     } finally {
       setAiBusy(null);
     }
   }
-
 
   const aiLocales = aiJob ? headlineLocales(aiJob, project.locales) : [];
 

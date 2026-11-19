@@ -124,6 +124,16 @@ export class ApiError extends Error {
   }
 }
 
+/** The server's messages of a failed request; none for other errors (e.g. a lost connection). */
+export function messagesOf(error: unknown): string[] {
+  return error instanceof ApiError ? error.messages : [];
+}
+
+/** The server refused a save because the stored data changed elsewhere (revision check, 409). */
+export function isConflict(error: unknown): boolean {
+  return error instanceof ApiError && error.status === 409;
+}
+
 /**
  * The error of a failed response. Validation errors come as `errors`, other failures as `error`;
  * an invalid project.json adds `problems`.
