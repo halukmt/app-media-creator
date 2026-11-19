@@ -319,3 +319,14 @@
 - CodeQL flagged `byte % 36` (biased random) → `crypto.randomInt`.
 - Bash heredocs with apostrophes / template literals failed twice → scripts via the Write tool.
 - Codex on PR #82: no findings. Next: #16 (amc-copy skill), #24 (store texts).
+
+## #84 Codex findings on #83 — done (PR #86)
+
+- Edit lock during AI apply, released only after the reloaded sets render (effect), kept on reload failure; refused
+  actions do not announce. `inspectJob` keeps the validated headlines fingerprint internal. Job refresh version
+  counter. store-texts lstat guard with per-folder errors.
+- Code review on the first fix found the lock timing and same-id stale fetches → fixed. Concurrent writers (second tab)
+  → #85 (Backlog, P2/S).
+- `gh project item-edit` right after `gh issue create` fails ("field-id must be provided" = empty item id): wait and
+  look the item up by number.
+- Next: #16 (amc-copy skill), #24 (store texts).
