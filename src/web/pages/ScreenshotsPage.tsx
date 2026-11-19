@@ -33,6 +33,7 @@ import { en } from '../i18n/en';
 import { SectionLayout } from '../layouts/SectionLayout';
 import type { CheckStatus } from '../lib/export';
 import { projectLocaleOptions, sourceLocaleFor } from '../lib/locale-selection';
+import { createSaveQueue } from '../lib/save-queue';
 import { INHERIT, applyOverrides, backgroundKey, moveEntry, overrideIds, removeEntry, swatchCss, uploadName } from '../lib/screenshots';
 import { sectionHref } from '../lib/sections';
 
@@ -125,37 +126,35 @@ export function ScreenshotsPage({ project, catalogue, selection, onSelectionChan
 
   // Edits are saved after a short pause. Saves run one after another; `flushSave` sends a pending edit at once and
   // resolves when everything is stored, so upload, generate and leaving the page never lose or overwrite an edit.
-  const pending = useRef<ScreenshotSets | null>(null);
-  const saving = useRef<Promise<void>>(Promise.resolve());
-  const flushSave = useCallback((): Promise<void> => {
+  const queue = useRef(
+    createSaveQueue<ScreenshotSets>(saveScreenshots, () => {
+      setSaveState('saved');
+      setPreviewVersion((v) => v + 1);
+    }),
+  );
+  /** Sends pending edits now; rejects (and keeps them) when the save fails. */
+  const flushSave = useCallback(async (): Promise<void> => {
     if (saveTimer.current) {
       clearTimeout(saveTimer.current);
       saveTimer.current = null;
     }
-    const next = pending.current;
-    pending.current = null;
-    if (!next) return saving.current;
-    saving.current = saving.current
-      .then(() => saveScreenshots(next))
-      .then(
-        () => {
-          setSaveState('saved');
-          setPreviewVersion((v) => v + 1);
-        },
-        () => setSaveState('failed'),
-      );
-    return saving.current;
+    try {
+      await queue.current.flush();
+    } catch (error) {
+      setSaveState('failed');
+      throw error;
+    }
   }, []);
 
   function updateSets(next: ScreenshotSets) {
     setSets(next);
-    pending.current = next;
+    queue.current.schedule(next);
     setSaveState('saving');
     if (saveTimer.current) clearTimeout(saveTimer.current);
-    saveTimer.current = setTimeout(() => void flushSave(), SAVE_DELAY);
+    saveTimer.current = setTimeout(() => void flushSave().catch(() => undefined), SAVE_DELAY);
   }
   // Leaving the section sends a pending edit instead of dropping it.
-  useEffect(() => () => void flushSave(), [flushSave]);
+  useEffect(() => () => void flushSave().catch(() => undefined), [flushSave]);
 
   function updateEntries(entries: ScreenshotEntry[]) {
     if (!sets) return;
@@ -185,8 +184,14 @@ export function ScreenshotsPage({ project, catalogue, selection, onSelectionChan
 
   async function upload(files: File[]) {
     setUploadMessage(null);
-    // Store pending edits first: the reload below must not be overwritten by an older save.
-    await flushSave();
+    // Store pending edits first: the reload below must not be overwritten by an older save. If they cannot be saved,
+    // stop: uploading and reloading now would drop them.
+    try {
+      await flushSave();
+    } catch {
+      setUploadMessage({ tone: 'error', text: en.screenshots.saveFirst });
+      return;
+    }
     const failed: string[] = [];
     setUploadState({ done: 0, total: files.length });
     for (const [index, file] of files.entries()) {
@@ -210,8 +215,13 @@ export function ScreenshotsPage({ project, catalogue, selection, onSelectionChan
 
   async function generate() {
     setGenerateMessage(null);
-    // Generate from what the user sees: send pending edits first.
-    await flushSave();
+    // Generate from what the user sees: send pending edits first; if that fails, do not generate from older data.
+    try {
+      await flushSave();
+    } catch {
+      setGenerateMessage({ tone: 'error', text: en.screenshots.saveFirst });
+      return;
+    }
     const locales = [...selection];
     let files = 0;
     const warnings: string[] = [];
