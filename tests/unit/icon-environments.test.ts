@@ -141,6 +141,28 @@ describe('The two styles look different', () => {
   }, 30_000);
 });
 
+describe('Environment labels must be drawable with the icon font (#68)', () => {
+  test('rejects Cyrillic and CJK labels at the label field, naming the characters', () => {
+    const result = validateProject(
+      projectInputFactory({
+        environments: [
+          { id: 'test', badge: 'ТЕСТ', color: 'red', style: 'badge' },
+          { id: 'qa', badge: '测试', color: 'blue', style: 'blueprint' },
+        ],
+      }),
+    );
+    expect(result.ok).toBe(false);
+    const errors = result.ok ? '' : result.errors.join('\n');
+    expect(errors).toMatch(/environments\.0\.badge: these characters cannot be drawn on the icon: Т Е С/);
+    expect(errors).toMatch(/environments\.1\.badge: .*测 试/);
+  });
+
+  test('accepts Latin labels with Turkish and German letters', () => {
+    const result = validateProject(projectInputFactory({ environments: [{ id: 'test', badge: 'İŞÜÖÄĞÇ', color: 'red', style: 'badge' }] }));
+    expect(result.ok && result.project.environments[0]?.badge).toBe('İŞÜÖÄĞÇ');
+  });
+});
+
 describe('Environment ids that would share a folder with something else', () => {
   test('rejects a language code in lower case, which is the locale folder on Windows and macOS', () => {
     const result = validateProject(projectInputFactory({ environments: [{ id: 'de-de', badge: 'DE', color: 'red', style: 'badge' }] }));

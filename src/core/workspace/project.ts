@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { LOCALE_IDS, isLocaleId, resolveLocales, type LocaleId } from '../locales/index.js';
+import { cardFont } from '../screenshots/fonts.js';
 import { SCREENSHOT_MATRIX, type Target } from '../specs/index.js';
 
 export const PROJECT_VERSION = 1;
@@ -150,6 +151,15 @@ export function validateProject(input: unknown): ProjectValidation {
   const ids = environments.map((environment) => environment.id);
   for (const [index, id] of ids.entries()) {
     if (ids.indexOf(id) !== index) errors.push(`environments.${index}.id: ${id} is used twice`);
+  }
+  // The label is drawn with the icon font (Inter, Latin and Latin Extended); a character without a glyph would
+  // silently vanish from the icons, so it is rejected here.
+  const labelFont = cardFont(800);
+  for (const [index, environment] of environments.entries()) {
+    const missing = labelFont.missing(environment.badge);
+    if (missing.length > 0) {
+      errors.push(`environments.${index}.badge: these characters cannot be drawn on the icon: ${missing.join(' ')}`);
+    }
   }
 
   if (errors.length > 0) return { ok: false, errors };

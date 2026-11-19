@@ -124,6 +124,16 @@ test.describe('The Project screen edits the workspace settings', () => {
     await expect(page.getByRole('heading', { level: 3, name: 'Environment 1: PREVIEW' })).toBeFocused();
   });
 
+  test('shows an error at the label field for characters the icon font cannot draw', async ({ page }) => {
+    await page.goto('/#/project');
+    const label = page.getByRole('region', { name: /^Environment 1:/ }).getByLabel('Label on the icon');
+    await label.fill('ТЕСТ');
+    await page.getByRole('button', { name: 'Save project' }).click();
+    await expect(page.getByRole('alert').filter({ hasText: 'could not be saved' })).toBeVisible();
+    await expect(label).toHaveAttribute('aria-invalid', 'true');
+    await expect(page.getByText(/cannot be drawn on the icon: Т Е С/)).toBeVisible();
+  });
+
   test('names only enabled stores in an empty state', async ({ page, request }) => {
     const project = projectInputFactory();
     const targets = project.targets as Record<string, { enabled: boolean; devices: string[] }>;
