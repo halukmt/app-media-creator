@@ -17,7 +17,7 @@
    binary is a note in the brief, not an error. Tests fake it at the module boundary; one test uses the real ffmpeg
    when it is installed.
 6. **Live updates:** `fs.watch` (recursive) on `jobs/`, debounced 250 ms per job id, one watcher shared by all
-   server-sent-event streams and stopped when the last one closes. The UI follows only a waiting job, refetches on
+   server-sent-event streams and stopped when the last one closes. The UI follows the newest job, refetches on
    `open` (reconnect), and also loads the newest job on page open, so a result written while the page was closed shows.
 7. **Apply** starts from each language's current set (its own, or the source language's for a fallback language):
    order, screenshots and style overrides stay as they are now; only the texts of the screenshots the result names
