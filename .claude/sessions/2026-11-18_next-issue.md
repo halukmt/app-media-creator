@@ -285,3 +285,16 @@
 - Reviews: code-review 8, design-critic 5, security 0. Follow-up `useAutosave` noted on #64.
 - Bash heredocs with apostrophes failed again for long OpenSpec files → Write tool.
 - Codex on PR #78: no findings.
+
+## #19 Play feature graphic and in-app event images — done (PR #80)
+
+- Generator groups `header` / `feature`; feature = Play feature graphic (phrase) + App Store event card 3840×2160 and
+  details 2160×3840 (no text, new catalogue `defaultSize`), centred key areas (`keyArea` shares), enabled stores only.
+- `creativeLayout(…, textWidth)` centres phrase + key device (also improves #18 images); text-free images rendered
+  once per screenshot set and shared across languages.
+- UI: purpose "Feature graphic and in-app event images" shares background and phrases; phrase fields only when a text
+  image exists; "Show key area".
+- Mistake: `npx prettier --write` reformatted ScreenshotsPage (project has no Prettier) → restored and re-applied.
+  Never run formatters the project does not use.
+- Deferred: max media height on PreviewCard for the 9:16 event details card (component-architect first).
+- Codex on PR #79: no findings.
