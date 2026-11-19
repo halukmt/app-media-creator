@@ -34,6 +34,55 @@ export interface CardFont {
 
 const require = createRequire(import.meta.url);
 
+type PathCommand = opentype.PathCommand;
+
+/** Coordinates beyond this are a layout error, not text: no image is that large. */
+const MAX_COORDINATE = 1e9;
+
+/**
+ * A coordinate rounded to 2 decimals in its shortest form ("314", "1.5", never "-0" or exponent notation). A
+ * non-finite or absurd value is a bug upstream (e.g. a fit computed from a zero width) and throws instead of drawing
+ * somewhere wrong.
+ */
+function coordinate(value: number): string {
+  if (!Number.isFinite(value) || Math.abs(value) > MAX_COORDINATE) throw new Error(`Invalid text coordinate: ${value}`);
+  const rounded = Math.round(value * 100) / 100;
+  return String(rounded === 0 ? 0 : rounded);
+}
+
+/**
+ * SVG path data of glyph outline commands. opentype.js 2.0 `toPathData` rounds through a string with `"e+"` appended,
+ * which gives `NaN` for coordinates a hair off an integer (e.g. 314.00000000000006 → "5.7e-14e+2"); librsvg then stops
+ * drawing at that command and the text is cut off. So the commands are written here instead; do not call
+ * `toPathData` / `toSVG` elsewhere (a unit test checks this).
+ */
+export function pathData(commands: readonly PathCommand[]): string {
+  let data = '';
+  for (const command of commands) {
+    switch (command.type) {
+      case 'M':
+      case 'L':
+        data += `${command.type}${coordinate(command.x)} ${coordinate(command.y)}`;
+        break;
+      case 'Q':
+        data += `Q${coordinate(command.x1)} ${coordinate(command.y1)} ${coordinate(command.x)} ${coordinate(command.y)}`;
+        break;
+      case 'C':
+        data += `C${coordinate(command.x1)} ${coordinate(command.y1)} ${coordinate(command.x2)} ${coordinate(command.y2)} ${coordinate(command.x)} ${coordinate(command.y)}`;
+        break;
+      case 'Z':
+        data += 'Z';
+        break;
+      default: {
+        // A command type this writer does not know would silently drop part of the outline.
+        const unknown: never = command;
+        throw new Error(`Unknown path command: ${(unknown as { type: string }).type}`);
+      }
+    }
+  }
+  return data;
+}
+
 function loadFont(file: string): Font {
   const bytes = readFileSync(require.resolve(`@fontsource/inter/files/${file}`));
   return opentype.parse(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer);
@@ -89,7 +138,7 @@ function createCardFont(weight: FontWeight): CardFont {
       const parts: string[] = [];
       for (const char of text) {
         const found = glyphOf(char);
-        if (found) parts.push(found.glyph.getPath(cursor, y, size).toPathData(2));
+        if (found) parts.push(pathData(found.glyph.getPath(cursor, y, size).commands));
         cursor += advance(char, size);
       }
       return { path: parts.filter(Boolean).join(''), width: Math.max(0, cursor - x - tracking * size) };
