@@ -15,7 +15,8 @@ Each environment has:
 | Label colour | orange, purple, green, red, blue, gray | Presets only. The label text is black or white, whichever reads better. |
 | Style | badge or blueprint | See below. |
 
-New projects start with one environment: `preview`, orange, badge. Remove it if you only need production icons.
+New projects have no environments, so only the production icons are generated. Choose **Add environment** to create
+one; the first one is suggested as `preview`, orange, badge.
 
 ## Styles
 

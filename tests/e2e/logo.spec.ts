@@ -6,9 +6,14 @@ import { unzipSync } from 'fflate';
 import { viewportWidths } from '../factories/web.js';
 import { projectInputFactory, svgBytes } from '../factories/workspace.js';
 
-/** German and Turkish only, so the share images stay few. */
+/** German and Turkish only, so the share images stay few; one preview environment for the icon variants. */
 function smallProject() {
-  return { ...projectInputFactory(), sourceLocale: 'de-DE', locales: ['de-DE', 'tr-TR'] };
+  return {
+    ...projectInputFactory(),
+    sourceLocale: 'de-DE',
+    locales: ['de-DE', 'tr-TR'],
+    environments: [{ id: 'preview', badge: 'PREVIEW', color: 'orange', style: 'badge' }],
+  };
 }
 
 test.describe('The Logo section', () => {
@@ -40,7 +45,7 @@ test.describe('The Logo section', () => {
     await page.getByRole('button', { name: 'Generate all' }).click();
     await expect(page.getByText(/files generated/)).toBeVisible({ timeout: 90_000 });
     await expect(page.getByRole('img', { name: 'Preview of App Store icon' }).first()).toBeVisible();
-    // The labelled icons of the default preview environment are a second icon set.
+    // The labelled icons of the preview environment are a second icon set.
     await page.getByRole('group', { name: /Icon set/ }).locator('label', { hasText: 'PREVIEW' }).click();
     await expect(page.getByRole('img', { name: 'Preview of App Store icon (preview)' })).toBeVisible();
     await expect(page.getByRole('img', { name: 'Preview of App Store icon', exact: true })).toHaveCount(0);
@@ -61,12 +66,25 @@ test.describe('The Logo section', () => {
         'web/shared/favicons/favicon.ico',
         'web/de-DE/og-image/01-og-image.png',
         'web/tr-TR/whatsapp-preview/01-whatsapp-preview.jpg',
-        // Icon variants of the default preview environment.
+        // Icon variants of the preview environment.
         'apple/preview/icon/app-icon.png',
         'google/preview/android-res/mipmap-xxxhdpi/ic_launcher.png',
         'web/preview/favicons/favicon.ico',
       ]),
     );
+  });
+
+  test('shows no icon set filter once the project has no environments (#70)', async ({ page, request }) => {
+    expect((await request.put('/api/project', { data: { ...smallProject(), environments: [] } })).ok()).toBe(true);
+    // Generating again removes the icon sets of the removed environment.
+    for (const pack of ['web-icons', 'app-store-icons', 'android-icons']) {
+      expect((await request.post(`/api/generate/${pack}`, { data: {} })).ok(), pack).toBe(true);
+    }
+    await page.goto('/#/logo');
+    await page.getByRole('button', { name: 'Preview', exact: true }).click();
+    await expect(page.getByRole('img', { name: 'Preview of App Store icon', exact: true })).toBeVisible();
+    await expect(page.getByRole('group', { name: /Icon set/ })).toHaveCount(0);
+    await expect(page.getByRole('img', { name: /\(preview\)$/ })).toHaveCount(0);
   });
 
   for (const width of viewportWidths()) {

@@ -31,6 +31,7 @@ entries left under `[Unreleased]` is rejected by `npm run check:release`.
 
 ### Changed
 
+- New projects start without a preview environment, so only the production icons are generated until you add one on the Project screen. (#70)
 - Every logo is read as 8-bit colour with transparency before its pixels are analysed, so greyscale and 16-bit logos are handled like colour logos in silhouettes and palettes. (#74)
 
 ### Fixed

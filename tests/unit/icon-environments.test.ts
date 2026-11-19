@@ -9,7 +9,7 @@ import { generateAppStoreIcons } from '../../src/core/generators/app-store-icons
 import { blueprintBackground } from '../../src/core/generators/environments.js';
 import { generateWebIcons } from '../../src/core/generators/web-icons.js';
 import { getSpec, inspectImage, validateMedia } from '../../src/core/specs/index.js';
-import { saveInput, saveProject, validateProject, type Environment, type Workspace } from '../../src/core/workspace/index.js';
+import { defaultProject, saveInput, saveProject, validateProject, type Environment, type Workspace } from '../../src/core/workspace/index.js';
 import { flatPng, transparentSvg } from '../factories/logos.js';
 import { projectInputFactory, workspaceFactory } from '../factories/workspace.js';
 
@@ -32,9 +32,15 @@ const LOGOS = [
 const read = (workspace: Workspace, file: string) => readFileSync(path.join(workspace.outputDir, file));
 
 describe('Project settings list non-production environments', () => {
-  test('defaults to one preview environment, also for project files without the field', () => {
+  test('starts without environments, also for project files without the field (#70)', () => {
     const { environments: _drop, ...older } = projectInputFactory();
     const result = validateProject(older);
+    expect(result.ok && result.project.environments).toEqual([]);
+    expect(defaultProject().environments).toEqual([]);
+  });
+
+  test('keeps the environments a project file lists (#70)', () => {
+    const result = validateProject(projectInputFactory({ environments: [PREVIEW] }));
     expect(result.ok && result.project.environments).toEqual([PREVIEW]);
   });
 
@@ -193,6 +199,19 @@ describe('Removing an environment', () => {
     const items = (await exportChecklist(workspace)).targets.flatMap((t) => t.items).filter((i) => i.specId === 'apple.icon');
     expect(items.map((i) => i.environment)).toEqual([undefined, 'preview', 'dev']);
     expect(items[2]?.messages.map((m) => m.text).join(' ')).toMatch(/not been generated yet for dev/);
+  }, 60_000);
+
+  test('writes, checks and exports only production icons for a project without environments (#70)', async () => {
+    const workspace = await workspaceFactory();
+    await saveInput(workspace, 'en-US', { kind: 'logo', originalName: 'logo.svg', bytes: transparentSvg() });
+    await generateAppStoreIcons(workspace);
+    await generateAndroidIcons(workspace);
+    await generateWebIcons(workspace);
+    expect((await readManifest(workspace)).entries.filter((e) => e.environment)).toEqual([]);
+    expect((await exportChecklist(workspace)).targets.flatMap((t) => t.items).filter((i) => i.environment)).toEqual([]);
+    const { entries } = await createExport(workspace);
+    expect(entries).toContain('apple/shared/icon/app-icon.png');
+    expect(entries.some((e) => /^(apple|google|web)\/preview\//.test(e))).toBe(false);
   }, 60_000);
 
   test('removes its files on the next generation and keeps the remaining environment', async () => {

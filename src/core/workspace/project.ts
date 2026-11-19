@@ -39,10 +39,6 @@ export interface Environment {
   style: EnvironmentStyle;
 }
 
-export function defaultEnvironments(): Environment[] {
-  return [{ id: 'preview', badge: 'PREVIEW', color: 'orange', style: 'badge' }];
-}
-
 const ENVIRONMENT_ID = /^[a-z][a-z0-9-]{0,19}$/;
 /** `shared` and the locale folders (`de-de` is `de-DE` on case-insensitive file systems) hold other files. */
 const RESERVED_ENVIRONMENTS = new Set(['production', 'shared', ...LOCALE_IDS.map((id) => id.toLowerCase())]);
@@ -79,7 +75,7 @@ export function defaultProject(name = 'My app'): ProjectSettings {
     sourceLocale: 'en-US',
     locales: [...LOCALE_IDS],
     claims: { allowed: [], forbidden: [] },
-    environments: defaultEnvironments(),
+    environments: [],
   };
 }
 
@@ -105,8 +101,8 @@ const projectInputSchema = z.object({
   sourceLocale: z.string(),
   locales: z.union([z.string(), z.array(z.string())]),
   claims: z.object({ allowed: claimList, forbidden: claimList }),
-  /** Absent in project files written before environments existed: the default list. */
-  environments: z.array(environmentSchema).max(MAX_ENVIRONMENTS).optional(),
+  /** Absent in older project files and new projects: no environments, only production icons (#70). */
+  environments: z.array(environmentSchema).max(MAX_ENVIRONMENTS).default([]),
 });
 
 export type ProjectValidation = { ok: true; project: ProjectSettings } | { ok: false; errors: string[] };
@@ -147,7 +143,7 @@ export function validateProject(input: unknown): ProjectValidation {
     }
   }
 
-  const environments = data.environments ?? defaultEnvironments();
+  const environments = data.environments;
   const ids = environments.map((environment) => environment.id);
   for (const [index, id] of ids.entries()) {
     if (ids.indexOf(id) !== index) errors.push(`environments.${index}.id: ${id} is used twice`);
