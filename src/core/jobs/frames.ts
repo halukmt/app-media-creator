@@ -1,6 +1,6 @@
-import { execFile } from 'node:child_process';
 import { mkdir, readdir } from 'node:fs/promises';
 import path from 'node:path';
+import { FfmpegMissingError, ffmpegBinary, isMissingProgram, runProgram, type RunProgram } from '../video/tools.js';
 
 /**
  * Still frames of an uploaded video for the AI: one frame every two seconds, at most 12, 720 px wide, as JPEG.
@@ -11,20 +11,7 @@ import path from 'node:path';
 export const FRAME_INTERVAL_SECONDS = 2;
 export const MAX_FRAMES = 12;
 
-/** Runs a program and resolves when it exits with code 0; injectable for tests. */
-export type RunProgram = (file: string, args: readonly string[]) => Promise<void>;
-
-export const runProgram: RunProgram = (file, args) =>
-  new Promise((resolve, reject) => {
-    execFile(file, [...args], { windowsHide: true, timeout: 120_000, maxBuffer: 1024 * 1024 }, (error) => (error ? reject(error) : resolve()));
-  });
-
-/** The ffmpeg binary: `FFMPEG_PATH` when set, otherwise `ffmpeg` from the PATH. */
-export function ffmpegBinary(env: NodeJS.ProcessEnv = process.env): string {
-  return env.FFMPEG_PATH?.trim() || 'ffmpeg';
-}
-
-export class FfmpegMissingError extends Error {}
+export { FfmpegMissingError, ffmpegBinary, runProgram, type RunProgram } from '../video/tools.js';
 
 /**
  * Extracts the frames of `video` into `outDir` (created) and returns the file names, sorted. Throws
@@ -49,7 +36,7 @@ export async function extractFrames(video: string, outDir: string, run: RunProgr
   try {
     await run(binary, args);
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === 'ENOENT') throw new FfmpegMissingError(`ffmpeg was not found (${binary}); set FFMPEG_PATH`);
+    if (isMissingProgram(error)) throw new FfmpegMissingError(`ffmpeg was not found (${binary}); set FFMPEG_PATH`);
     throw new Error(`ffmpeg could not read the video: ${(error as Error).message.split('\n')[0]}`);
   }
   return (await readdir(outDir)).filter((name) => /^frame-\d{2}\.jpg$/.test(name)).sort();

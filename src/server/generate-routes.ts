@@ -21,7 +21,7 @@ import {
 import { readOptionalJsonObject } from './json-body.js';
 
 /** Maps known generator errors to JSON responses; rethrows everything else. */
-function generatorError(c: Context, error: unknown) {
+export function generatorError(c: Context, error: unknown) {
   if (error instanceof GeneratorError) return c.json({ error: error.message }, 400);
   if (error instanceof ProjectFileError) {
     return c.json({ error: 'project.json in the workspace is invalid', problems: error.problems }, 500);
@@ -30,7 +30,7 @@ function generatorError(c: Context, error: unknown) {
 }
 
 /** Copies the given fields from the body; the generators validate their values. */
-function pick(body: Record<string, unknown>, fields: readonly string[]): Record<string, unknown> {
+export function pick(body: Record<string, unknown>, fields: readonly string[]): Record<string, unknown> {
   return Object.fromEntries(fields.filter((field) => body[field] !== undefined).map((field) => [field, body[field]]));
 }
 

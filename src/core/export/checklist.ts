@@ -3,6 +3,8 @@ import type { LocaleId } from '../locales/index.js';
 import { SPECS, inspectImage, validateMedia, type MediaProperties, type SpecEntry, type Target } from '../specs/index.js';
 import type { ProjectSettings } from '../workspace/project.js';
 import type { StoreTexts } from '../workspace/store-texts.js';
+import { probeVideo } from '../video/probe.js';
+import { FfmpegMissingError } from '../video/tools.js';
 import { storeTextChecklistItems } from './store-texts.js';
 import { locateOutputFile, type FileLocation, type Manifest, type OutputEntry } from './manifest.js';
 
@@ -52,6 +54,8 @@ export interface ChecklistInput {
   locales: readonly LocaleId[];
   outputDir: string;
   measure?: MeasureFile;
+  /** Measures a video (default: ffprobe). */
+  measureVideo?: MeasureFile;
   locate?: LocateFile;
   /** The project's store texts; checked per locale for each store that has any. */
   storeTexts?: StoreTexts;
@@ -80,6 +84,7 @@ async function checkSet(
   const messages: CheckMessage[] = [];
   const where = locale ? ` for ${locale}` : environment ? ` for ${environment}` : '';
   const measure = input.measure ?? inspectImage;
+  const measureVideo = input.measureVideo ?? ((file: string) => probeVideo(file));
 
   if (files.length === 0) {
     if (spec.required) messages.push({ level: 'error', text: `${spec.name} is required but missing${where}` });
@@ -103,7 +108,15 @@ async function checkSet(
     } else if (spec.kind === 'document') {
       // Documents have no media properties; being present is enough.
     } else if (spec.kind === 'video') {
-      messages.push({ level: 'warning', text: `${file.path}: video is not measured yet` });
+      try {
+        for (const violation of validateMedia(spec, await measureVideo(absolute))) {
+          messages.push({ level: 'error', text: `${file.path}: ${violation.message}` });
+        }
+      } catch (error) {
+        // Without ffprobe the video cannot be checked; that is a warning, not a broken file.
+        const missing = error instanceof FfmpegMissingError;
+        messages.push({ level: missing ? 'warning' : 'error', text: `${file.path}: ${missing ? 'not measured: ' : ''}${(error as Error).message}` });
+      }
     } else {
       try {
         for (const violation of validateMedia(spec, await measure(absolute))) {

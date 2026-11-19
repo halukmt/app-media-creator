@@ -20,7 +20,8 @@ export function squareSize(specId: string): number {
 export async function assertValidOutputs(files: readonly RegisterOptions[]): Promise<void> {
   for (const file of files) {
     const spec = getSpec(file.specId);
-    if (spec.kind === 'document') continue;
+    // Documents have no media properties; files copied from disk (videos) are measured by their generator.
+    if (spec.kind === 'document' || file.bytes === undefined) continue;
     const label = `${file.name}.${file.extension}`;
     const violations = validateMedia(spec, await inspectImageBytes(file.bytes, label));
     if (violations.length > 0) {

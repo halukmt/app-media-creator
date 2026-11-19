@@ -119,12 +119,13 @@ export async function generateAndroidIcons(workspace: Workspace, options: Androi
           variant.opaque(legacySize, Math.round(legacySize * scale), background, ICON_SAFE_RADIUS),
         ]);
         // The themed (monochrome) icon is one colour by definition; it stays the production silhouette.
-        const mono = files.find((f) => f.specId === 'google.adaptive-icon.monochrome' && f.subfolder === subfolder)!;
+        const mono = files.find((f) => f.specId === 'google.adaptive-icon.monochrome' && f.subfolder === subfolder)?.bytes;
+        if (!mono) throw new Error(`The production monochrome layer for ${subfolder} is missing`);
         const common = { environment: environment.id, subfolder, extension: 'png', order };
         return [
           { ...common, specId: 'google.adaptive-icon.foreground', name: 'ic_launcher_foreground', bytes: fgBytes },
           { ...common, specId: 'google.adaptive-icon.background', name: 'ic_launcher_background', bytes: bgBytes },
-          { ...common, specId: 'google.adaptive-icon.monochrome', name: 'ic_launcher_monochrome', bytes: mono.bytes },
+          { ...common, specId: 'google.adaptive-icon.monochrome', name: 'ic_launcher_monochrome', bytes: mono },
           { ...common, specId: 'google.launcher-icon', name: 'ic_launcher', bytes: legacyBytes },
         ] satisfies RegisterOptions[];
       }),
