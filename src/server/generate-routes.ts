@@ -3,6 +3,7 @@ import { generateAndroidIcons, type AndroidIconOptions } from '../core/generator
 import { generateAppStoreIcons, type AppStoreIconOptions } from '../core/generators/app-store-icons.js';
 import { generateFramedScreenshots, type FramedScreenshotOptions } from '../core/generators/framed-screenshots.js';
 import { generateScreenshotCards, renderCardPreview, type ScreenshotCardOptions } from '../core/generators/screenshot-cards.js';
+import { generateShareImages, type ShareImageOptions } from '../core/generators/share-images.js';
 import { GeneratorError, loadNewestLogo } from '../core/generators/logo.js';
 import { logoPalette } from '../core/generators/render.js';
 import { BACKGROUND_PRESETS, backgroundsFromPalette, type BackgroundPreset } from '../core/screenshots/index.js';
@@ -87,6 +88,17 @@ export function generateRoutes(workspace: Workspace): Hono {
     const options = pick(parsed.body, ['locales']) as ScreenshotCardOptions;
     try {
       return c.json(await generateScreenshotCards(workspace, options), 201);
+    } catch (error) {
+      return generatorError(c, error);
+    }
+  });
+
+  api.post('/generate/share-images', async (c) => {
+    const parsed = await readOptionalJsonObject(c);
+    if (!parsed.ok) return c.json({ error: parsed.error }, 400);
+    const options = pick(parsed.body, ['background', 'taglines', 'locales']) as ShareImageOptions;
+    try {
+      return c.json(await generateShareImages(workspace, options), 201);
     } catch (error) {
       return generatorError(c, error);
     }

@@ -25,6 +25,7 @@ entries left under `[Unreleased]` is rejected by `npm run check:release`.
 - Website screenshots: every uploaded screenshot in a device frame on transparency, with an optional shadow, as PNG and WebP in 1x and 2x per language. (#13)
 - Screenshot sets per language with headlines that move with their screenshot, a device matrix (iPhone 6.9"/6.5"/6.3", iPhone Duo, iPad 13", Android phone and tablets), fallback to the source language, and card generation for one, several or all languages. (#12)
 - Screenshots section: upload per language, choose store cards or frame only, edit headlines and the style per screenshot, see each card per device with its warnings, and generate the selected languages. (#14)
+- Share and social images from the logo: Open Graph, X card and WhatsApp preview per language with a tagline, profile pictures and banners for WhatsApp, Instagram, Facebook, LinkedIn, X, YouTube and TikTok, an email signature logo, and monochrome, inverse and square-mark logo variants. (#9)
 
 ### Fixed
 
