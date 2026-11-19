@@ -272,3 +272,16 @@
 - The machine was heavily loaded (another project's Playwright server and tsc, Defender, WMI): e2e failed 3 unrelated
   heading checks with default workers; `--workers=2` all 57 green. If local e2e flakes again, check machine load first.
 - Codex on PR #76: no findings.
+
+## #18 App Store header, search results and universal images — done (PR #79)
+
+- Core: `creative.json` (background, phrase per locale up to 60), `creativeLayout` / `renderCreativeAsset` (key art in
+  the safe area, fading row of same-size devices outside), `generateCreativeAssets` (header 3840×1646, search
+  3840×2560 via new catalogue `defaultSize`, universal 5244×2950), preview with safe area; `/api/catalogue` serves
+  `creativeImages` and `maxPhrase`.
+- librsvg's feDropShadow took 22 s for the universal image → shadow pre-blurred by sharp at quarter size (ms).
+  First composition (one huge device per side) looked wrong in the render → row of same-size devices fading out.
+- UI: purpose "header" enabled; new `LocaleTextFields` (also Logo taglines); `PreviewCard.guide` (dashed overlay).
+- Reviews: code-review 8, design-critic 5, security 0. Follow-up `useAutosave` noted on #64.
+- Bash heredocs with apostrophes failed again for long OpenSpec files → Write tool.
+- Codex on PR #78: no findings.
