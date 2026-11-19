@@ -49,7 +49,7 @@ import { latestCopyJob } from '../lib/ai-jobs';
 import { CREATIVE_PREVIEW_WIDTH, creativeLabelKey, isCreativePurpose, safeAreaPercent, safeAreaShares } from '../lib/creative';
 import type { CheckStatus } from '../lib/export';
 import { projectLocaleOptions, sourceLocaleFor } from '../lib/locale-selection';
-import { createSaveQueue } from '../lib/save-queue';
+import { SaveDiscardedError, createSaveQueue } from '../lib/save-queue';
 import { INHERIT, applyOverrides, backgroundChoices, backgroundKey, moveEntry, overrideIds, removeEntry, swatchCss, uploadName } from '../lib/screenshots';
 import { sectionHref } from '../lib/sections';
 
@@ -68,6 +68,11 @@ type Message = { tone: 'success' | 'warning' | 'error'; text: string; details?: 
 const LAYOUTS: readonly CardLayout[] = ['text-top', 'text-top-large', 'text-bottom'];
 const FRAME_KINDS = ['iphone', 'iphone-home', 'iphone-duo', 'ipad', 'android-phone', 'android-tablet'] as const;
 const SAVE_DELAY = 600;
+
+/** The server refused a save because the sets changed elsewhere (#85). */
+function isConflict(error: unknown): boolean {
+  return error instanceof ApiError && error.status === 409;
+}
 
 function messagesOf(error: unknown): string[] {
   return error instanceof ApiError ? error.messages : [];
@@ -160,9 +165,11 @@ export function ScreenshotsPage({ project, catalogue, selection, onSelectionChan
       // An answer older than a save this page already made is stale for the sets (uploads are still current).
       if (nextSets.revision >= knownRevision.current) {
         // The sets moved on elsewhere: an edit still waiting is based on the older version and must not be sent.
-        if (nextSets.revision > knownRevision.current && queue.current.hasPending()) {
-          queue.current.discard();
-          setSaveState('conflict');
+        if (nextSets.revision > knownRevision.current) {
+          // Drops the waiting edit and saves already queued behind a running one (#92).
+          if (queue.current.discard()) setSaveState('conflict');
+          // Texts or styles changed elsewhere: the card previews must show the loaded version (#92).
+          setPreviewVersion((v) => v + 1);
         }
         knownRevision.current = nextSets.revision;
         setSets(nextSets);
@@ -234,13 +241,16 @@ export function ScreenshotsPage({ project, catalogue, selection, onSelectionChan
     createSaveQueue<ScreenshotSets>(
       async (document) => {
         const saved = await saveScreenshots({ ...document, revision: knownRevision.current });
-        knownRevision.current = saved.revision;
+        // Never backwards: a reload may already have seen a newer revision than this save's answer.
+        knownRevision.current = Math.max(knownRevision.current, saved.revision);
         return saved;
       },
       () => {
         setSaveState('saved');
         setPreviewVersion((v) => v + 1);
       },
+      // A conflict drops every edit not yet sent, also those already queued behind it (#92).
+      { discardOn: isConflict },
     ),
   );
   const reloadRef = useRef(reload);
@@ -254,10 +264,9 @@ export function ScreenshotsPage({ project, catalogue, selection, onSelectionChan
     try {
       await queue.current.flush();
     } catch (error) {
-      if (error instanceof ApiError && error.status === 409) {
-        // Never retry it: the change is based on data that changed elsewhere. Show the current version instead. The
-        // caller (upload, generate, apply) may go on: nothing of this page waits to be saved any more.
-        queue.current.discard();
+      if (isConflict(error) || error instanceof SaveDiscardedError) {
+        // The queue already dropped everything not yet sent (never retried: it is based on data that changed
+        // elsewhere). Show the current version; the caller (upload, generate, apply) goes on once it is loaded.
         setSaveState('conflict');
         await reloadRef.current();
         return;
@@ -319,8 +328,7 @@ export function ScreenshotsPage({ project, catalogue, selection, onSelectionChan
     if (applyRunning.current) return;
     lockedAfter.current = null;
     setEditsLocked(false);
-    // The previews still show the texts from before the apply.
-    setPreviewVersion((v) => v + 1);
+    // The reload that released the lock brought a newer revision and already refreshed the previews.
   }, [releaseLock]);
 
   // Previews of the editing language on the chosen device, one request at a time; a newer version cancels the rest.
