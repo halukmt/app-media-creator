@@ -16,4 +16,8 @@
 
 ## Review log
 
-- Results of `/code-review` are recorded here after the review.
+- **/code-review:** fixed — non-finite or absurd coordinates throw instead of drawing to (0,0) (also keeps the
+  "never exponent notation" guarantee); shortest number form without `-0`; exhaustive switch that throws on unknown
+  command types; a unit test fails when `toPathData` / `toSVG` is called anywhere in `src/`; named layout constants in
+  the font regression test. Not changed: the ink-width check in the share test scans right of the logo for near-white
+  pixels; the test logo is a two-colour PNG, so it cannot add false ink.

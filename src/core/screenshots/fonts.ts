@@ -36,17 +36,25 @@ const require = createRequire(import.meta.url);
 
 type PathCommand = opentype.PathCommand;
 
-/** A coordinate with at most 2 decimals; never NaN or exponent notation. */
+/** Coordinates beyond this are a layout error, not text: no image is that large. */
+const MAX_COORDINATE = 1e9;
+
+/**
+ * A coordinate rounded to 2 decimals in its shortest form ("314", "1.5", never "-0" or exponent notation). A
+ * non-finite or absurd value is a bug upstream (e.g. a fit computed from a zero width) and throws instead of drawing
+ * somewhere wrong.
+ */
 function coordinate(value: number): string {
-  if (!Number.isFinite(value)) return '0';
-  const fixed = value.toFixed(2);
-  return fixed.endsWith('.00') ? fixed.slice(0, -3) : fixed;
+  if (!Number.isFinite(value) || Math.abs(value) > MAX_COORDINATE) throw new Error(`Invalid text coordinate: ${value}`);
+  const rounded = Math.round(value * 100) / 100;
+  return String(rounded === 0 ? 0 : rounded);
 }
 
 /**
  * SVG path data of glyph outline commands. opentype.js 2.0 `toPathData` rounds through a string with `"e+"` appended,
  * which gives `NaN` for coordinates a hair off an integer (e.g. 314.00000000000006 → "5.7e-14e+2"); librsvg then stops
- * drawing at that command and the text is cut off. So the commands are written here instead.
+ * drawing at that command and the text is cut off. So the commands are written here instead; do not call
+ * `toPathData` / `toSVG` elsewhere (a unit test checks this).
  */
 export function pathData(commands: readonly PathCommand[]): string {
   let data = '';
@@ -65,6 +73,11 @@ export function pathData(commands: readonly PathCommand[]): string {
       case 'Z':
         data += 'Z';
         break;
+      default: {
+        // A command type this writer does not know would silently drop part of the outline.
+        const unknown: never = command;
+        throw new Error(`Unknown path command: ${(unknown as { type: string }).type}`);
+      }
     }
   }
   return data;
