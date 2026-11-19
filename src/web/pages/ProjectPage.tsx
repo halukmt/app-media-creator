@@ -232,37 +232,44 @@ export function ProjectPage({ catalogue, project, onSaved, focusHeading }: Props
             {en.project.environmentsHeading}
           </h2>
           <p className="max-w-prose text-base-content/70">{en.project.environmentsIntro}</p>
-          <p className="sr-only" role="status">
-            {environmentNote}
-          </p>
           {form.environments.length === 0 ? <p>{en.project.noEnvironments}</p> : null}
-          <ol className="grid grid-cols-1 gap-3 xl:grid-cols-2">
-            {form.environments.map((environment, index) => (
-              <li key={index}>
-                <EnvironmentCard
-                  position={index}
-                  values={environment}
-                  headingId={environmentHeadingId(index)}
-                  onChange={(patch) => updateEnvironment(index, patch)}
-                  onRemove={() => removeEnvironment(index)}
-                  colorOptions={colorOptions}
-                  styleOptions={styleOptions}
-                  errors={environmentErrors(index)}
-                />
-              </li>
-            ))}
-          </ol>
+          {form.environments.length > 0 ? (
+            <ol className="grid grid-cols-1 gap-3 xl:grid-cols-2">
+              {form.environments.map((environment, index) => (
+                <li key={index}>
+                  <EnvironmentCard
+                    position={index}
+                    values={environment}
+                    headingId={environmentHeadingId(index)}
+                    onChange={(patch) => updateEnvironment(index, patch)}
+                    onRemove={() => removeEnvironment(index)}
+                    colorOptions={colorOptions}
+                    styleOptions={styleOptions}
+                    maxBadgeLength={catalogue.maxBadgeLength}
+                    errors={environmentErrors(index)}
+                  />
+                </li>
+              ))}
+            </ol>
+          ) : null}
           <div className="flex flex-wrap items-center gap-3">
             <button
               type="button"
-              className="btn btn-outline min-h-11"
+              className="btn btn-outline min-h-11 aria-disabled:cursor-not-allowed aria-disabled:opacity-60"
               aria-disabled={!canAddEnvironment}
+              aria-describedby="project-environments-limit"
               onClick={addEnvironment}
             >
               {en.project.addEnvironment}
             </button>
-            <span className="text-sm text-base-content/70">{en.project.maxEnvironments(catalogue.maxEnvironments)}</span>
+            <span id="project-environments-limit" className="text-sm text-base-content/70">
+              {canAddEnvironment ? en.project.maxEnvironments(catalogue.maxEnvironments) : en.project.environmentsFull(catalogue.maxEnvironments)}
+            </span>
           </div>
+          {/* Visible for everyone: what adding or removing means for the generated icons. */}
+          <p role="status" className="text-sm text-base-content/70">
+            {environmentNote}
+          </p>
         </section>
 
         <section aria-labelledby="project-claims" className="flex flex-col gap-2">

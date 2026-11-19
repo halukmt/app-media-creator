@@ -40,6 +40,10 @@ test.describe('The Logo section', () => {
     await page.getByRole('button', { name: 'Generate all' }).click();
     await expect(page.getByText(/files generated/)).toBeVisible({ timeout: 90_000 });
     await expect(page.getByRole('img', { name: 'Preview of App Store icon' }).first()).toBeVisible();
+    // The labelled icons of the default preview environment are a second icon set.
+    await page.getByRole('group', { name: /Icon set/ }).locator('label', { hasText: 'PREVIEW' }).click();
+    await expect(page.getByRole('img', { name: 'Preview of App Store icon (preview)' })).toBeVisible();
+    await expect(page.getByRole('img', { name: 'Preview of App Store icon', exact: true })).toHaveCount(0);
 
     await page.getByRole('button', { name: /Export →/ }).click();
     await page.getByRole('link', { name: 'Open Export section' }).click();

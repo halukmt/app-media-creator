@@ -3,7 +3,7 @@ import { registerOutputs, type OutputEntry, type RegisterOptions } from '../expo
 import { ANDROID_DENSITIES } from '../specs/index.js';
 import { readProject, type Workspace } from '../workspace/workspace.js';
 import { clampLogoScale } from './app-store-icons.js';
-import { SAFE_RADIUS, variantRenderer } from './environments.js';
+import { ICON_SAFE_RADIUS, variantRenderer } from './environments.js';
 import { GeneratorError, loadNewestLogo } from './logo.js';
 import { assertValidOutputs, fixedSizes, squareSize } from './outputs.js';
 import { isHexColor, rasterizeLogo, renderLogoSquare, renderSilhouette, type HexColor } from './render.js';
@@ -20,6 +20,8 @@ export interface AndroidIconOptions {
  * a square box with a diagonal of 66 dp (66 / √2 ≈ 46.7 dp) keeps even the corners of a square logo inside it.
  */
 export const ADAPTIVE_LOGO_SHARE = 66 / Math.SQRT2 / 108;
+/** Radius of that 66 dp safe circle as a share of the layer, for the environment label. */
+const ADAPTIVE_SAFE_RADIUS = 33 / 108;
 /** Largest box any Android render needs (the Play icon); the logo is rasterized once at this size. */
 const RASTER_BOX = 512;
 /** Monochrome layers are tinted by the system; only their coverage counts. */
@@ -112,9 +114,9 @@ export async function generateAndroidIcons(workspace: Workspace, options: Androi
         const bgSize = backgroundSizes[index]!;
         const legacySize = legacy[index]!;
         const [fgBytes, bgBytes, legacyBytes] = await Promise.all([
-          variant.transparent(fg, Math.floor(fg * ADAPTIVE_LOGO_SHARE), SAFE_RADIUS.adaptive),
+          variant.transparent(fg, Math.floor(fg * ADAPTIVE_LOGO_SHARE), ADAPTIVE_SAFE_RADIUS),
           variant.backgroundLayer(bgSize, background),
-          variant.opaque(legacySize, Math.round(legacySize * scale), background, SAFE_RADIUS.icon),
+          variant.opaque(legacySize, Math.round(legacySize * scale), background, ICON_SAFE_RADIUS),
         ]);
         // The themed (monochrome) icon is one colour by definition; it stays the production silhouette.
         const mono = files.find((f) => f.specId === 'google.adaptive-icon.monochrome' && f.subfolder === subfolder)!;

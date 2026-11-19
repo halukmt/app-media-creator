@@ -50,6 +50,7 @@ export interface Catalogue {
   devices: Record<TargetId, CatalogueDevice[]>;
   environmentColors: { id: EnvironmentColor; color: string }[];
   maxEnvironments: number;
+  maxBadgeLength: number;
 }
 
 /** An API error with the messages the server sent (validation errors or one error text). */

@@ -43,7 +43,8 @@ export function defaultEnvironments(): Environment[] {
 }
 
 const ENVIRONMENT_ID = /^[a-z][a-z0-9-]{0,19}$/;
-const RESERVED_ENVIRONMENTS = new Set(['production', 'shared']);
+/** `shared` and the locale folders (`de-de` is `de-DE` on case-insensitive file systems) hold other files. */
+const RESERVED_ENVIRONMENTS = new Set(['production', 'shared', ...LOCALE_IDS.map((id) => id.toLowerCase())]);
 
 export function isEnvironmentId(value: string): boolean {
   return ENVIRONMENT_ID.test(value) && !RESERVED_ENVIRONMENTS.has(value);
@@ -89,7 +90,7 @@ const targetSchema = z.object({
 });
 
 const environmentSchema = z.object({
-  id: z.string().trim().toLowerCase().refine(isEnvironmentId, 'must be lower-case letters, digits or dashes, start with a letter, and not be "production" or "shared"'),
+  id: z.string().trim().toLowerCase().refine(isEnvironmentId, 'must be lower-case letters, digits or dashes, start with a letter, and not be "production", "shared" or a language code'),
   badge: z.string().trim().toUpperCase().min(1, 'Badge text is required').max(MAX_BADGE_LENGTH, `at most ${MAX_BADGE_LENGTH} characters`),
   color: z.enum(Object.keys(ENVIRONMENT_COLORS) as [EnvironmentColor, ...EnvironmentColor[]]),
   style: z.enum(ENVIRONMENT_STYLES),

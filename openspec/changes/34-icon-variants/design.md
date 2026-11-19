@@ -50,4 +50,34 @@ Rejected for the block: a TargetCard mode, SlotEditor (each shares only the fram
 
 ## Review log
 
-- `/code-review`, `security-review` and design-critic results are recorded here after the reviews.
+- **security-review:** no findings ≥ 8. Verified:
+  - environment ids are regex-checked and re-derived in `checkEntry`;
+  - deletions only of own files of the given specs;
+  - badge text drawn as glyph paths;
+  - manifest name via `JSON.stringify`.
+- **/code-review:** fixed:
+  - Stale variant sets. The checklist warns about environments no longer in the project, and the ZIP leaves them
+    out. A configured environment without files is reported once the asset has variants.
+  - Ids equal to a lower-case language code (`de-de`) are reserved, because on case-insensitive file systems they
+    are the locale folder.
+  - Variant rows no longer say "Shared".
+  - The upper-cased badge is cut to the limit (ß becomes SS).
+  - The maskable label radius comes from the catalogue's safe area. The adaptive radius sits next to the existing
+    66 dp constant.
+  - Blueprint background and outline are cached per size.
+  - The badge limit comes from the catalogue.
+  - The Add button looks disabled at the limit.
+
+  Not changed:
+  - One shared "register full set" helper for the three generators (three short identical calls).
+  - icon.svg of a variant embeds a raster: no dark-mode switch, and the label needs the rendered pill.
+  - Style list and new-environment presets in the UI (texts are per style anyway).
+- **design-critic:** fixed:
+  - The Logo preview shows one icon set at a time (OptionGroup "Icon set": Production, then the environments in
+    project order), so the grid no longer grows with every environment.
+  - The checklist lists environments in project order.
+  - The Add button is styled as disabled and linked to the limit hint ("5 of 5 environments…").
+  - The add / remove note is visible.
+  - No empty list.
+  - Fields sit side by side by card width (`@container`).
+  - Blue label on blueprint: white pill with blue text.

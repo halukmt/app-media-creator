@@ -84,6 +84,7 @@ export const en = {
     removeEnvironment: (badge: string) => `Remove environment ${badge || 'without label'}`,
     noEnvironments: 'No preview or test icons: only the production icons are generated.',
     maxEnvironments: (max: number) => `Up to ${max} environments.`,
+    environmentsFull: (max: number) => `${max} of ${max} environments. Remove one to add another.`,
   },
   target: {
     enabled: (target: string) => `Create media for ${target}`,
@@ -181,6 +182,9 @@ export const en = {
     previewHeading: 'Preview',
     nothingYet: 'Nothing generated yet. Choose “Generate all”.',
     previewAlt: (name: string) => `Preview of ${name}`,
+    iconSetLabel: 'Icon set',
+    iconSetHint: 'Production icons and the labelled icons of each preview or test environment from the Project screen.',
+    iconSetProduction: 'Production',
     document: 'File without a preview',
     sizes: (count: number, smallest: number, largest: number) => `${count} files · ${smallest}–${largest} px wide`,
     exportHeading: 'Export',

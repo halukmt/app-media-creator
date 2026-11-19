@@ -91,7 +91,9 @@ export async function createExport(workspace: Workspace, options: ExportOptions 
   const selected = manifest.entries.filter(
     (entry) =>
       project.targets[getSpec(entry.specId).target].enabled &&
-      (entry.locale === undefined || locales.includes(entry.locale)),
+      (entry.locale === undefined || locales.includes(entry.locale)) &&
+      // Icon variants of an environment that was removed from the project are left out.
+      (entry.environment === undefined || project.environments.some((e) => e.id === entry.environment)),
   );
 
   const out = createWriteStream(file);

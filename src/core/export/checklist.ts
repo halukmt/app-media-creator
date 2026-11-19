@@ -159,11 +159,27 @@ export async function buildChecklist(input: ChecklistInput): Promise<Checklist> 
           items.push(await checkSet(spec, ofSpec.filter((e) => e.locale === locale), chosen.has(spec.id), input, locale));
         }
       } else {
-        items.push(await checkSet(spec, ofSpec.filter((e) => e.environment === undefined), chosen.has(spec.id), input));
-        // Icon variants of non-production environments: one set each, checked like the production set.
-        for (const environment of [...new Set(ofSpec.flatMap((e) => (e.environment ? [e.environment] : [])))].sort()) {
+        const production = ofSpec.filter((e) => e.environment === undefined);
+        items.push(await checkSet(spec, production, chosen.has(spec.id), input));
+        // Icon variants: one set per environment, checked like the production set, configured environments first in
+        // project order. Once an asset has variants, a configured environment without files is reported as missing.
+        const configured = input.project.environments.map((e) => e.id);
+        const registered = [...new Set(ofSpec.flatMap((e) => (e.environment ? [e.environment] : [])))];
+        const environments = [
+          ...(registered.length > 0 ? configured : []),
+          ...registered.filter((id) => !configured.includes(id)),
+        ];
+        for (const environment of environments) {
           const files = ofSpec.filter((e) => e.environment === environment);
-          items.push(await checkSet({ ...spec, required: false }, files, false, input, undefined, environment));
+          const item = await checkSet({ ...spec, required: false }, files, false, input, undefined, environment);
+          if (!configured.includes(environment)) {
+            item.messages.unshift({
+              level: 'warning',
+              text: `${environment} is no longer an environment of the project and is not exported; generate the icons again to delete its files`,
+            });
+            item.status = statusOf(item.messages);
+          }
+          items.push(item);
         }
       }
     }

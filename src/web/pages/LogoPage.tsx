@@ -50,6 +50,8 @@ const PACKS: readonly LogoPack[] = ['app-store', 'google-play', 'web', 'social']
 const PACK_TARGET: Record<LogoPack, TargetId> = { 'app-store': 'apple', 'google-play': 'google', web: 'web', social: 'web' };
 const SAVE_DELAY = 600;
 const PREVIEW_WIDTH = 240;
+/** Id of the production icon set in the icon set filter (environment ids never equal it). */
+const PRODUCTION = 'production';
 
 function messagesOf(error: unknown): string[] {
   return error instanceof ApiError ? error.messages : [];
@@ -71,6 +73,7 @@ export function LogoPage({ project, catalogue, selection, onSelectionChange, foc
   const [outputVersion, setOutputVersion] = useState(0);
   const [generateState, setGenerateState] = useState<{ pack: string; done: number; total: number } | null>(null);
   const [generateMessage, setGenerateMessage] = useState<Message>(null);
+  const [iconSet, setIconSet] = useState(PRODUCTION);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const localeOptions = projectLocaleOptions(catalogue.locales, project.locales);
@@ -213,7 +216,20 @@ export function LogoPage({ project, catalogue, selection, onSelectionChange, foc
     requestAnimationFrame(() => document.getElementById(`logo-step-${next}`)?.focus());
   }
 
-  const shownOutputs = outputs.filter((o) => o.locale === undefined || selection.includes(o.locale));
+  // Icon sets: production and every environment that has files, in project order. One set is shown at a time, so the
+  // grid does not grow with every environment.
+  const environmentIds = [
+    ...project.environments.map((e) => e.id).filter((id) => outputs.some((o) => o.environment === id)),
+    ...[...new Set(outputs.flatMap((o) => (o.environment ? [o.environment] : [])))].filter((id) => !project.environments.some((e) => e.id === id)),
+  ];
+  const shownSet = environmentIds.includes(iconSet) ? iconSet : PRODUCTION;
+  const iconSetOptions: Option[] = [
+    { id: PRODUCTION, label: en.logo.iconSetProduction },
+    ...environmentIds.map((id) => ({ id, label: project.environments.find((e) => e.id === id)?.badge ?? id })),
+  ];
+  const shownOutputs = outputs.filter(
+    (o) => (o.locale === undefined || selection.includes(o.locale)) && (o.environment ?? PRODUCTION) === shownSet,
+  );
 
   return (
     <SectionLayout
@@ -377,6 +393,9 @@ export function LogoPage({ project, catalogue, selection, onSelectionChange, foc
               </StatusAlert>
             ) : null}
           </div>
+          {environmentIds.length > 0 ? (
+            <OptionGroup label={en.logo.iconSetLabel} hint={en.logo.iconSetHint} options={iconSetOptions} value={[shownSet]} onSelect={setIconSet} />
+          ) : null}
           {shownOutputs.length === 0 ? <p>{en.logo.nothingYet}</p> : null}
           {chosen.map((pack) => {
             const files = shownOutputs.filter((o) => o.pack === pack);

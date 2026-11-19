@@ -61,7 +61,7 @@ export function ChecklistCard({ title, status, items, locales }: Props) {
             {group.environment ? <RequiredBadge label={en.export.environment(group.environment)} /> : null}
           </p>
           <p className="text-sm text-base-content/70">
-            {localized ? '' : `${en.export.shared} · `}
+            {localized ? '' : `${group.environment ? en.export.environment(group.environment) : en.export.shared} · `}
             {en.export.fileCount(files)}
           </p>
           {localized ? (

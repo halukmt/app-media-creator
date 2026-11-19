@@ -15,15 +15,12 @@ import { renderLogoSquare, renderSilhouette, type HexColor, type LogoSource } fr
  * get a colour bar along the bottom edge instead.
  */
 
-/** Radius of the visible circle as a share of the icon size, per kind of icon. */
-export const SAFE_RADIUS = {
-  /** App Store and touch icons, legacy launcher icons, manifest icons. */
-  icon: 0.46,
-  /** Android adaptive layers: the 66 dp safe zone of the 108 dp layer. */
-  adaptive: 33 / 108,
-  /** Maskable web icons: the inner 80 % circle. */
-  maskable: 0.4,
-} as const;
+/**
+ * Radius (share of the icon size) of the circle a label must stay in on App Store, touch, legacy launcher and manifest
+ * icons: inside the iOS rounded-square mask and round launcher masks. Layers with a store safe zone (adaptive layers,
+ * maskable icons) pass the radius of that zone instead, taken from the generator's constants and the catalogue.
+ */
+export const ICON_SAFE_RADIUS = 0.46;
 
 /** Icons smaller than this get a colour bar instead of a text label. */
 const LABEL_MIN_SIZE = 64;
@@ -34,7 +31,9 @@ const BLUEPRINT = { from: '#0b3a8c', to: '#1d63c9', line: '#ffffff' } as const;
 
 /** SVG elements of the environment label for an icon of `size` px whose visible circle has radius `radius` (share). */
 export function badgeSvg(environment: Environment, size: number, radius: number): string {
-  const color = ENVIRONMENT_COLORS[environment.color];
+  // A blue pill would vanish on the blue blueprint background: there the pill is white with blue text.
+  const inverted = environment.style === 'blueprint' && environment.color === 'blue';
+  const color = inverted ? '#ffffff' : ENVIRONMENT_COLORS[environment.color];
   if (size < LABEL_MIN_SIZE) {
     const height = Math.max(2, Math.round(size * 0.28));
     return `<rect x="0" y="${size - height}" width="${size}" height="${height}" fill="${color}"/>`;
@@ -51,7 +50,7 @@ export function badgeSvg(environment: Environment, size: number, radius: number)
   const textWidth = font.measure(text, textSize);
   const width = textWidth + 2 * padding;
   const x = (size - width) / 2;
-  const textColor = textColorFor({ kind: 'solid', color });
+  const textColor = inverted ? ENVIRONMENT_COLORS.blue : textColorFor({ kind: 'solid', color });
   const run = font.path(text, (size - textWidth) / 2, centerY + (CAP_HEIGHT * textSize) / 2, textSize);
   return [
     `<rect x="${n(x)}" y="${n(centerY - height / 2)}" width="${n(width)}" height="${n(height)}" rx="${n(height / 2)}" fill="${color}"`,
@@ -128,16 +127,28 @@ export function variantRenderer(logo: LogoSource, environment: Environment): Var
   const solid = (size: number, background: HexColor) => sharp({ create: { width: size, height: size, channels: 3, background } }).png().toBuffer();
 
   if (environment.style === 'blueprint') {
+    // The background and the outline are the expensive parts; several outputs share the same size.
+    const backgrounds = new Map<number, Promise<Buffer>>();
+    const marks = new Map<string, Promise<Buffer>>();
+    const background = (size: number) => {
+      if (!backgrounds.has(size)) backgrounds.set(size, blueprintBackground(size));
+      return backgrounds.get(size)!;
+    };
+    const markOf = (size: number, logoBox: number) => {
+      const key = `${size}/${logoBox}`;
+      if (!marks.has(key)) marks.set(key, blueprintMark(logo, size, logoBox));
+      return marks.get(key)!;
+    };
     const square = async (size: number, logoBox: number, radius: number) => {
-      const [background, mark] = await Promise.all([blueprintBackground(size), blueprintMark(logo, size, logoBox)]);
-      const drawn = await sharp(background).composite([{ input: mark, left: 0, top: 0 }]).png().toBuffer();
+      const [drawnBackground, mark] = await Promise.all([background(size), markOf(size, logoBox)]);
+      const drawn = await sharp(drawnBackground).composite([{ input: mark, left: 0, top: 0 }]).png().toBuffer();
       return opaqueOnly(await withBadge(drawn, environment, size, radius));
     };
     return {
       opaque: (size, logoBox, _background, radius) => square(size, logoBox, radius),
-      transparent: async (size, logoBox, radius) => withBadge(await blueprintMark(logo, size, logoBox), environment, size, radius),
+      transparent: async (size, logoBox, radius) => withBadge(await markOf(size, logoBox), environment, size, radius),
       standalone: (size, logoBox, radius) => square(size, logoBox, radius),
-      backgroundLayer: (size) => blueprintBackground(size),
+      backgroundLayer: (size) => background(size),
     };
   }
 

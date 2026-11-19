@@ -3,7 +3,7 @@ import { registerOutputs, type OutputEntry, type RegisterOptions } from '../expo
 import { getSpec, type Size } from '../specs/index.js';
 import { readProject, type Workspace } from '../workspace/workspace.js';
 import type { Environment } from '../workspace/project.js';
-import { SAFE_RADIUS, variantRenderer } from './environments.js';
+import { ICON_SAFE_RADIUS, variantRenderer } from './environments.js';
 import { GeneratorError, loadNewestLogo } from './logo.js';
 import { assertValidOutputs, fixedSizes } from './outputs.js';
 import { encodeIco, isHexColor, renderLogoSquare, type HexColor, type LogoSource } from './render.js';
@@ -161,9 +161,11 @@ export async function generateWebIcons(workspace: Workspace, options: WebIconOpt
 
   async function variantFiles(environment: Environment): Promise<RegisterOptions[]> {
     const variant = variantRenderer(logo, environment);
+    // The label of the maskable icon stays in the catalogue's safe zone (a circle of its width).
+    const maskableRadius = maskableSpec.safeArea!.width / 2 / maskable!.width;
     const common = { environment: environment.id, order: 1 };
     const variantIco = encodeIco(
-      await Promise.all(icoSizes.map(async ({ width }) => ({ size: width, png: await variant.standalone(width, width, SAFE_RADIUS.icon) }))),
+      await Promise.all(icoSizes.map(async ({ width }) => ({ size: width, png: await variant.standalone(width, width, ICON_SAFE_RADIUS) }))),
     );
     return [
       { ...common, specId: 'web.favicon-ico', name: 'favicon', extension: 'ico', bytes: variantIco },
@@ -172,14 +174,14 @@ export async function generateWebIcons(workspace: Workspace, options: WebIconOpt
         specId: 'web.icon-svg',
         name: 'icon',
         extension: 'svg',
-        bytes: variantIconSvg(await variant.opaque(512, 400, background, SAFE_RADIUS.icon)),
+        bytes: variantIconSvg(await variant.opaque(512, 400, background, ICON_SAFE_RADIUS)),
       },
       {
         ...common,
         specId: 'web.apple-touch-icon',
         name: 'apple-touch-icon',
         extension: 'png',
-        bytes: await variant.opaque(touch!.width, Math.round(touch!.width * TOUCH_ARTWORK_RATIO), background, SAFE_RADIUS.icon),
+        bytes: await variant.opaque(touch!.width, Math.round(touch!.width * TOUCH_ARTWORK_RATIO), background, ICON_SAFE_RADIUS),
       },
       ...(await Promise.all(
         manifestSizes.map(async ({ width }, index) => ({
@@ -187,7 +189,7 @@ export async function generateWebIcons(workspace: Workspace, options: WebIconOpt
           specId: 'web.manifest-icon',
           name: `icon-${width}`,
           extension: 'png',
-          bytes: await variant.standalone(width, Math.round(width * (1 - 2 * MANIFEST_MARGIN)), SAFE_RADIUS.icon),
+          bytes: await variant.standalone(width, Math.round(width * (1 - 2 * MANIFEST_MARGIN)), ICON_SAFE_RADIUS),
           order: index + 1,
         })),
       )),
@@ -196,7 +198,7 @@ export async function generateWebIcons(workspace: Workspace, options: WebIconOpt
         specId: 'web.maskable-icon',
         name: `icon-maskable-${maskable!.width}`,
         extension: 'png',
-        bytes: await variant.opaque(maskable!.width, maskableBox, background, SAFE_RADIUS.maskable),
+        bytes: await variant.opaque(maskable!.width, maskableBox, background, maskableRadius),
       },
       {
         ...common,

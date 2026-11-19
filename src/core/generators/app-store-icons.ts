@@ -1,7 +1,7 @@
 import sharp from 'sharp';
 import { registerOutputs, type OutputEntry, type RegisterOptions } from '../export/manifest.js';
 import { readProject, type Workspace } from '../workspace/workspace.js';
-import { SAFE_RADIUS, variantRenderer } from './environments.js';
+import { ICON_SAFE_RADIUS, variantRenderer } from './environments.js';
 import { GeneratorError, loadNewestLogo } from './logo.js';
 import { assertValidOutputs, squareSize } from './outputs.js';
 import { isHexColor, renderLogoSquare, type HexColor } from './render.js';
@@ -69,8 +69,8 @@ export async function generateAppStoreIcons(workspace: Workspace, options: AppSt
   for (const environment of environments) {
     const variant = variantRenderer(logo, environment);
     const [variantIcon, variantTransparent, variantBackground] = await Promise.all([
-      variant.opaque(size, logoBox, background, SAFE_RADIUS.icon),
-      variant.transparent(size, logoBox, SAFE_RADIUS.icon),
+      variant.opaque(size, logoBox, background, ICON_SAFE_RADIUS),
+      variant.transparent(size, logoBox, ICON_SAFE_RADIUS),
       variant.backgroundLayer(size, background),
     ]);
     const variantTinted = await sharp(variantTransparent).greyscale().png().toBuffer();

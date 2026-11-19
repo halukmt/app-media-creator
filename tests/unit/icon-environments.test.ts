@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import sharp from 'sharp';
 import { describe, expect, test } from 'vitest';
-import { exportChecklist, outputPath, readManifest } from '../../src/core/export/index.js';
+import { createExport, exportChecklist, outputPath, readManifest } from '../../src/core/export/index.js';
 import { generateAndroidIcons } from '../../src/core/generators/android-icons.js';
 import { generateAppStoreIcons } from '../../src/core/generators/app-store-icons.js';
 import { blueprintBackground } from '../../src/core/generators/environments.js';
@@ -141,7 +141,38 @@ describe('The two styles look different', () => {
   }, 30_000);
 });
 
+describe('Environment ids that would share a folder with something else', () => {
+  test('rejects a language code in lower case, which is the locale folder on Windows and macOS', () => {
+    const result = validateProject(projectInputFactory({ environments: [{ id: 'de-de', badge: 'DE', color: 'red', style: 'badge' }] }));
+    expect(result.ok).toBe(false);
+    expect(result.ok ? '' : result.errors.join('\n')).toMatch(/environments\.0\.id: .*language code/);
+  });
+});
+
 describe('Removing an environment', () => {
+  test('warns in the checklist and leaves its files out of the ZIP until the icons are generated again', async () => {
+    const workspace = await workspaceWith({ name: 'logo.svg', bytes: transparentSvg() }, [PREVIEW, DEV]);
+    await generateAppStoreIcons(workspace);
+    expect((await saveProject(workspace, projectInputFactory({ environments: [PREVIEW] }))).ok).toBe(true);
+
+    const checklist = await exportChecklist(workspace);
+    const dev = checklist.targets.flatMap((t) => t.items).find((i) => i.specId === 'apple.icon' && i.environment === 'dev');
+    expect(dev?.status).toBe('warning');
+    expect(dev?.messages[0]?.text).toMatch(/no longer an environment of the project/);
+    const { entries } = await createExport(workspace);
+    expect(entries).toContain('apple/preview/icon/app-icon.png');
+    expect(entries.some((e) => e.startsWith('apple/dev/'))).toBe(false);
+  }, 60_000);
+
+  test('reports a configured environment without files once the asset has variants', async () => {
+    const workspace = await workspaceWith({ name: 'logo.svg', bytes: transparentSvg() }, [PREVIEW]);
+    await generateAppStoreIcons(workspace);
+    expect((await saveProject(workspace, projectInputFactory({ environments: [PREVIEW, DEV] }))).ok).toBe(true);
+    const items = (await exportChecklist(workspace)).targets.flatMap((t) => t.items).filter((i) => i.specId === 'apple.icon');
+    expect(items.map((i) => i.environment)).toEqual([undefined, 'preview', 'dev']);
+    expect(items[2]?.messages.map((m) => m.text).join(' ')).toMatch(/not been generated yet for dev/);
+  }, 60_000);
+
   test('removes its files on the next generation and keeps the remaining environment', async () => {
     const workspace = await workspaceWith({ name: 'logo.svg', bytes: transparentSvg() }, [PREVIEW, DEV]);
     await generateAppStoreIcons(workspace);

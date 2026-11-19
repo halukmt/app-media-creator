@@ -13,6 +13,8 @@ interface Props {
   styleOptions: readonly Option[];
   /** Element id of the heading, so the page can move focus to it after adding or removing. */
   headingId: string;
+  /** Longest label text (from the catalogue). */
+  maxBadgeLength: number;
   errors?: Partial<Record<keyof Environment, string>>;
 }
 
@@ -20,11 +22,12 @@ interface Props {
  * One non-production environment (preview, dev, beta) on the Project screen: folder name, label text, label colour and
  * style of its icon variants, with a remove action.
  */
-export function EnvironmentCard({ position, values, onChange, onRemove, colorOptions, styleOptions, headingId, errors = {} }: Props) {
+export function EnvironmentCard({ position, values, onChange, onRemove, colorOptions, styleOptions, headingId, maxBadgeLength, errors = {} }: Props) {
   const title = en.project.environmentLegend(values.badge, position);
   return (
     <section className="card card-sm border border-base-300 bg-base-100" aria-labelledby={headingId}>
-      <div className="card-body gap-3 p-4">
+      {/* A container, so the fields sit side by side only when the card itself is wide (cards are two per row on xl). */}
+      <div className="@container card-body gap-3 p-4">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <h3 id={headingId} tabIndex={-1} className="card-title text-base wrap-anywhere focus:outline-none">
             {title}
@@ -33,7 +36,7 @@ export function EnvironmentCard({ position, values, onChange, onRemove, colorOpt
             {en.project.removeShort}
           </button>
         </div>
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-3 @lg:grid-cols-2">
           <TextField
             label={en.project.environmentIdLabel}
             hint={en.project.environmentIdHint}
@@ -47,9 +50,10 @@ export function EnvironmentCard({ position, values, onChange, onRemove, colorOpt
             label={en.project.environmentBadgeLabel}
             hint={en.project.environmentBadgeHint}
             value={values.badge}
-            // Locale-independent upper case: a Turkish browser must not turn "i" into "İ".
-            onChange={(next) => onChange({ badge: next.toLocaleUpperCase('en-US') })}
-            maxLength={10}
+            // Locale-independent upper case (a Turkish browser must not turn "i" into "İ"); "ß" becomes "SS" and could
+            // exceed the limit, so the result is cut to it.
+            onChange={(next) => onChange({ badge: next.toLocaleUpperCase('en-US').slice(0, maxBadgeLength) })}
+            maxLength={maxBadgeLength}
             required
             {...(errors.badge ? { error: errors.badge } : {})}
           />
