@@ -1,3 +1,5 @@
+import { readFile } from 'node:fs/promises';
+import path from 'node:path';
 import { Hono, type Context } from 'hono';
 import { bodyLimit } from 'hono/body-limit';
 import {
@@ -6,6 +8,7 @@ import {
   ProjectFileError,
   isInputKind,
   listInputs,
+  listScreenshots,
   readScreenshotSets,
   saveScreenshotSets,
   readProject,
@@ -49,6 +52,21 @@ export function workspaceRoutes(workspace: Workspace): Hono {
   });
 
   api.get('/inputs', async (c) => c.json(await listInputs(workspace)));
+
+  // Serves an uploaded screenshot for thumbnails. Only paths listed as raster screenshot uploads are served (no
+  // SVG, no other files), with headers that keep the browser from running or sniffing the content.
+  api.get('/inputs/file', async (c) => {
+    const requested = c.req.query('path') ?? '';
+    const input = (await listScreenshots(workspace)).find((s) => s.path === requested);
+    if (!input) return c.json({ error: 'Not an uploaded screenshot' }, 404);
+    const bytes = await readFile(path.join(workspace.root, input.path));
+    return c.body(new Uint8Array(bytes), 200, {
+      'content-type': `image/${input.format}`,
+      'x-content-type-options': 'nosniff',
+      'content-security-policy': "sandbox; default-src 'none'",
+      'cache-control': 'no-store',
+    });
+  });
 
   api.get('/screenshots', async (c) => c.json(await readScreenshotSets(workspace)));
 

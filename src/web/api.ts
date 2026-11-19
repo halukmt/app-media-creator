@@ -30,6 +30,7 @@ export interface CatalogueDevice {
   name: string;
   required: boolean;
   condition?: string;
+  size: { width: number; height: number };
 }
 
 export interface Catalogue {
@@ -122,5 +123,109 @@ export function saveProject(project: ProjectSettings): Promise<ProjectSettings> 
     method: 'PUT',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify(project),
+  });
+}
+
+export interface StoredInput {
+  kind: 'logo' | 'screenshot' | 'video';
+  locale?: string;
+  path: string;
+  format: string;
+  bytes: number;
+}
+
+export type Background = { kind: 'solid'; color: string } | { kind: 'gradient'; from: string; to: string; angle: number };
+export type CardLayout = 'text-top' | 'text-top-large' | 'text-bottom';
+
+export interface ScreenshotEntry {
+  input: string;
+  headline: string;
+  subline: string;
+  layout?: CardLayout;
+  background?: Background;
+  frame?: 'device' | 'none';
+}
+
+export interface ScreenshotSets {
+  version: 1;
+  style: { layout: CardLayout; background: Background };
+  sets: Partial<Record<string, ScreenshotEntry[]>>;
+  known: string[];
+}
+
+export interface BackgroundPreset {
+  id: string;
+  name: string;
+  background: Background;
+}
+
+export interface CardPreviewResult {
+  image: string;
+  width: number;
+  height: number;
+  warnings: { code: string; message: string }[];
+  fallbackInput: boolean;
+}
+
+export interface CardGenerationResult {
+  entries: { path: string; specId: string; locale?: string }[];
+  warnings: { code: string; message: string; path: string }[];
+  skipped: string[];
+}
+
+export function fetchInputs(): Promise<StoredInput[]> {
+  return request<StoredInput[]>('/api/inputs');
+}
+
+/** URL of an uploaded screenshot for thumbnails. */
+export function inputFileUrl(inputPath: string): string {
+  return `/api/inputs/file?path=${encodeURIComponent(inputPath)}`;
+}
+
+export function uploadScreenshot(file: File, locale: string): Promise<StoredInput> {
+  const form = new FormData();
+  form.append('file', file);
+  form.append('locale', locale);
+  return request<StoredInput>('/api/inputs/screenshot', { method: 'POST', body: form });
+}
+
+export function fetchScreenshots(): Promise<ScreenshotSets> {
+  return request<ScreenshotSets>('/api/screenshots');
+}
+
+export function saveScreenshots(sets: ScreenshotSets): Promise<ScreenshotSets> {
+  return request<ScreenshotSets>('/api/screenshots', {
+    method: 'PUT',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(sets),
+  });
+}
+
+export function fetchBackgrounds(): Promise<{ presets: BackgroundPreset[]; palette: BackgroundPreset[] }> {
+  return request('/api/screenshots/backgrounds');
+}
+
+export function previewCard(locale: string, device: string, index: number, signal?: AbortSignal): Promise<CardPreviewResult> {
+  return request<CardPreviewResult>('/api/screenshots/preview', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ locale, device, index }),
+    ...(signal ? { signal } : {}),
+  });
+}
+
+export function generateScreenshotCards(locales: readonly string[]): Promise<CardGenerationResult> {
+  return request<CardGenerationResult>('/api/generate/screenshot-cards', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ locales }),
+  });
+}
+
+export function generateFramedScreenshots(locales: readonly string[], frame: string, shadow: boolean): Promise<{ path: string }[]> {
+  return request('/api/generate/framed-screenshots', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ locales, frame, shadow }),
   });
 }

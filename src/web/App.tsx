@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ApiError, fetchCatalogue, fetchProject, type Catalogue, type ProjectSettings } from './api';
+import { ProgressStatus } from './components/ProgressStatus';
 import { StatusAlert } from './components/StatusAlert';
 import { en } from './i18n/en';
 import { AppShell } from './layouts/AppShell';
@@ -7,6 +8,7 @@ import { selectionForProject } from './lib/locale-selection';
 import { sectionFromHash, type SectionId } from './lib/sections';
 import { ProjectPage } from './pages/ProjectPage';
 import { ExportPage } from './pages/ExportPage';
+import { ScreenshotsPage } from './pages/ScreenshotsPage';
 import { SectionPage } from './pages/SectionPage';
 
 interface Health {
@@ -75,10 +77,9 @@ export function App() {
   return (
     <AppShell current={section} status={health ? en.app.serverConnected(health.version) : undefined}>
       {load.kind === 'loading' ? (
-        <p role="status" className="flex items-center gap-3">
-          <span className="loading loading-spinner" aria-hidden="true" />
-          {en.app.loading}
-        </p>
+        <div role="status">
+          <ProgressStatus label={en.app.loading} />
+        </div>
       ) : null}
       {load.kind === 'failed' ? (
         <div className="flex flex-col items-start gap-3">
@@ -116,7 +117,16 @@ export function App() {
           focusHeading={navigated}
         />
       ) : null}
-      {load.kind === 'ready' && section !== 'project' && section !== 'export' ? (
+      {load.kind === 'ready' && section === 'screenshots' ? (
+        <ScreenshotsPage
+          project={load.project}
+          catalogue={load.catalogue}
+          selection={selection}
+          onSelectionChange={setSelection}
+          focusHeading={navigated}
+        />
+      ) : null}
+      {load.kind === 'ready' && section !== 'project' && section !== 'export' && section !== 'screenshots' ? (
         <SectionPage
           key={section}
           section={section}

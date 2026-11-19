@@ -2,9 +2,10 @@ import { Hono, type Context } from 'hono';
 import { generateAndroidIcons, type AndroidIconOptions } from '../core/generators/android-icons.js';
 import { generateAppStoreIcons, type AppStoreIconOptions } from '../core/generators/app-store-icons.js';
 import { generateFramedScreenshots, type FramedScreenshotOptions } from '../core/generators/framed-screenshots.js';
-import { generateScreenshotCards, type ScreenshotCardOptions } from '../core/generators/screenshot-cards.js';
+import { generateScreenshotCards, renderCardPreview, type ScreenshotCardOptions } from '../core/generators/screenshot-cards.js';
 import { GeneratorError, loadNewestLogo } from '../core/generators/logo.js';
 import { logoPalette } from '../core/generators/render.js';
+import { BACKGROUND_PRESETS, backgroundsFromPalette, type BackgroundPreset } from '../core/screenshots/index.js';
 import { generateWebIcons, type WebIconOptions } from '../core/generators/web-icons.js';
 import { ProjectFileError, type Workspace } from '../core/workspace/index.js';
 import { readOptionalJsonObject } from './json-body.js';
@@ -89,6 +90,39 @@ export function generateRoutes(workspace: Workspace): Hono {
     } catch (error) {
       return generatorError(c, error);
     }
+  });
+
+  api.post('/screenshots/preview', async (c) => {
+    const parsed = await readOptionalJsonObject(c);
+    if (!parsed.ok) return c.json({ error: parsed.error }, 400);
+    const { locale, device, index, width } = parsed.body;
+    if (typeof locale !== 'string' || typeof device !== 'string' || typeof index !== 'number' || (width !== undefined && typeof width !== 'number')) {
+      return c.json({ error: 'Send locale and device as text and index (and width) as numbers' }, 400);
+    }
+    try {
+      const preview = await renderCardPreview(workspace, { locale, device, index, ...(width !== undefined ? { width } : {}) });
+      return c.json({
+        image: `data:image/png;base64,${preview.png.toString('base64')}`,
+        width: preview.width,
+        height: preview.height,
+        warnings: preview.warnings,
+        fallbackInput: preview.fallbackInput,
+      });
+    } catch (error) {
+      return generatorError(c, error);
+    }
+  });
+
+  // Background choices for screenshot cards: the neutral presets plus the logo's colours (when a logo exists).
+  // The UI never defines colours itself; they are data from here.
+  api.get('/screenshots/backgrounds', async (c) => {
+    let palette: BackgroundPreset[] = [];
+    try {
+      palette = backgroundsFromPalette(await logoPalette(await loadNewestLogo(workspace)));
+    } catch (error) {
+      if (!(error instanceof GeneratorError)) throw error;
+    }
+    return c.json({ presets: BACKGROUND_PRESETS, palette });
   });
 
   api.get('/logo/palette', async (c) => {

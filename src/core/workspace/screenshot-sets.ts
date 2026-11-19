@@ -23,7 +23,14 @@ export interface ScreenshotEntry {
   input: string;
   headline: string;
   subline: string;
+  /** Per-slot overrides of the card style; absent means the project style. */
+  layout?: CardLayout;
+  background?: Background;
+  /** `device`: the device's default frame (none on Google Play); `none`: no frame for this slot. */
+  frame?: SlotFrame;
 }
+
+export type SlotFrame = 'device' | 'none';
 
 export interface CardStyle {
   layout: CardLayout;
@@ -59,6 +66,9 @@ const entrySchema = z.object({
   input: z.string().min(1),
   headline: z.string().max(MAX_TEXT),
   subline: z.string().max(MAX_TEXT),
+  layout: z.custom<CardLayout>(isCardLayout, { message: 'unknown layout' }).optional(),
+  background: z.custom<Background>(isBackground, { message: 'must be a #rrggbb colour or a gradient of two' }).optional(),
+  frame: z.enum(['device', 'none']).optional(),
 });
 
 const documentSchema = z.object({
@@ -101,7 +111,14 @@ export function validateScreenshotSets(input: unknown, screenshots: readonly Sto
         if (!lenient) errors.push(`sets.${locale}.${index}.input: ${entry.input} ${problem}`);
         return;
       }
-      kept.push({ input: entry.input, headline: entry.headline.trim(), subline: entry.subline.trim() });
+      kept.push({
+        input: entry.input,
+        headline: entry.headline.trim(),
+        subline: entry.subline.trim(),
+        ...(entry.layout ? { layout: entry.layout } : {}),
+        ...(entry.background ? { background: entry.background } : {}),
+        ...(entry.frame ? { frame: entry.frame } : {}),
+      });
     });
     sets[locale] = kept;
   }
