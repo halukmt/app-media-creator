@@ -175,3 +175,17 @@
 - Default background white (a logo colour hid the logo). Taglines in the request; storing them belongs to #10.
 - Watch: CI e2e took 7m48s on PR #61 (usually ~1 min); if it repeats, look at the screenshots e2e / runner load.
 - Next: #10 Logo section UI (now unblocked).
+
+## #10 Logo section UI — done (PR #65)
+
+- LogoPage: Upload → Options (packs, solid background from presets + palette, taglines per locale, autosave to
+  `logo.json`) → Preview (Generate all per pack with progress; grid grouped per asset + locale via `src/web/lib/logo.ts`)
+  → Export. API: logo preview, logo settings, `generate/logo/:pack`, logo output, `/api/output/file` (manifest images,
+  own files only, downscale).
+- Grouping took the 375 px preview from 11 453 px to ~8 100 px; checkerboard behind logo previews.
+- Review fixes: stale taglines of removed locales ignored, empty locale selection, reload keeps unsaved settings, e2e
+  ZIP step waits for dialog or download.
+- New issues: #62 clipped app name on share images without tagline (Ready, P1/XS — shared generator code),
+  #63 empty monochrome layer for one-colour opaque logos (Backlog), #64 deferred polish (Backlog).
+- CI e2e back to 1m23s (the 7m48s on #61 did not repeat).
+- Next: #62, then #34.
