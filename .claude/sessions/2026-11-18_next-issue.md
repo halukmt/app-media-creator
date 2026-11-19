@@ -167,3 +167,11 @@
 
 - Codex on PR #58 (P1): a failed older save could be restored after a newer version was already queued → version
   counter; restore only if still the latest. Regression test checked to fail on the old code.
+
+## #9 Share and social images — done (PR #61)
+
+- `generateShareImages`: OG / X / WhatsApp (JPEG ≤ 300 KB) per locale with tagline; profiles, banners, email signature;
+  logo variants `web.logo.*`. `textBlockSvg` now shared with the card renderer (goldens unchanged).
+- Default background white (a logo colour hid the logo). Taglines in the request; storing them belongs to #10.
+- Watch: CI e2e took 7m48s on PR #61 (usually ~1 min); if it repeats, look at the screenshots e2e / runner load.
+- Next: #10 Logo section UI (now unblocked).

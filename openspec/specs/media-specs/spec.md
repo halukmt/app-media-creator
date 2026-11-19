@@ -126,3 +126,11 @@ screenshot entries SHALL carry the overlay text limit of 20 % and mark device fr
 #### Scenario: Default sizes are valid
 - **WHEN** the catalogue is checked
 - **THEN** the default sizes of `google.screenshot.phone` (1080×1920), `google.screenshot.tablet-7` (1080×1920) and `google.screenshot.tablet-10` (1440×2560) satisfy their size rules, and no fixed-size entry has a default size
+
+### Requirement: Logo variant entries
+The catalogue SHALL contain `web.logo.monochrome`, `web.logo.inverse` and `web.logo.mark`: web target, group `logo`,
+1024×1024 PNG with alpha, not localized, tool-defined.
+
+#### Scenario: Variant entry
+- **WHEN** `web.logo.mark` is looked up
+- **THEN** it requires a 1024×1024 PNG with an alpha channel
