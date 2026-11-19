@@ -50,6 +50,7 @@ import { headlineLocales } from '../lib/ai-jobs';
 import { CREATIVE_PREVIEW_WIDTH, creativeLabelKey, isCreativePurpose, safeAreaPercent, safeAreaShares } from '../lib/creative';
 import type { CheckStatus } from '../lib/export';
 import { projectLocaleOptions, sourceLocaleFor } from '../lib/locale-selection';
+import { pendingSaves } from '../lib/pending-saves';
 import { createSaveQueue } from '../lib/save-queue';
 import { INHERIT, applyOverrides, backgroundChoices, backgroundKey, moveEntry, overrideIds, removeEntry, swatchCss, uploadName } from '../lib/screenshots';
 import { sectionHref } from '../lib/sections';
@@ -113,6 +114,7 @@ export function ScreenshotsPage({ project, catalogue, selection, onSelectionChan
   }, []);
   // Uploads and screenshot sets load together; the sets carry the revision of the autosave (#85).
   const autosave = useRevisionAutosave<ScreenshotSets, [StoredInput[], ScreenshotSets]>({
+    section: 'screenshots',
     load: () => Promise.all([fetchInputs(), fetchScreenshots()]),
     documentOf: ([, loadedSets]) => loadedSets,
     save: saveScreenshots,
@@ -132,7 +134,12 @@ export function ScreenshotsPage({ project, catalogue, selection, onSelectionChan
     fetchBackgrounds()
       .then(setBackgrounds)
       .catch(() => setBackgrounds({ presets: [], palette: [] }));
-    void loadCreative();
+    // A save started when this section was left a moment ago must land first (#98).
+    let active = true;
+    void pendingSaves.settled().then(() => (active ? loadCreative() : undefined));
+    return () => {
+      active = false;
+    };
   }, [loadCreative]);
 
   // Devices the project picked for the stores that are enabled.
@@ -162,6 +169,7 @@ export function ScreenshotsPage({ project, catalogue, selection, onSelectionChan
   const creativeQueue = useRef(
     createSaveQueue<CreativeSettings>(saveCreativeSettings, () => {
       setCreativeSaveState('saved');
+      pendingSaves.reportSaved('screenshots');
       setPreviewVersion((v) => v + 1);
     }),
   );
@@ -184,7 +192,7 @@ export function ScreenshotsPage({ project, catalogue, selection, onSelectionChan
     if (creativeTimer.current) clearTimeout(creativeTimer.current);
     creativeTimer.current = setTimeout(() => void flushCreative().catch(() => undefined), SAVE_DELAY);
   }
-  useEffect(() => () => void flushCreative().catch(() => undefined), [flushCreative]);
+  useEffect(() => () => pendingSaves.track('screenshots', flushCreative()), [flushCreative]);
 
   function updateEntries(entries: ScreenshotEntry[]): boolean {
     if (!sets) return false;

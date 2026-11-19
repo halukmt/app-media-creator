@@ -1,11 +1,15 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { isConflict, messagesOf } from '../api';
 import type { SaveState } from '../components/SaveStatus';
+import { DroppedSaveError, pendingSaves } from '../lib/pending-saves';
 import { SaveDiscardedError, createSaveQueue } from '../lib/save-queue';
+import type { SectionId } from '../lib/sections';
 
 const SAVE_DELAY = 600;
 
 export interface RevisionAutosaveOptions<T extends { revision: number }, L> {
+  /** The section that owns the document; named when an edit made just before leaving it is lost (#98). */
+  section: SectionId;
   /** Loads the stored state; may bring more than the document (e.g. the uploads next to the screenshot sets). */
   load: () => Promise<L>;
   /** The revisioned document inside a load answer. */
@@ -88,6 +92,8 @@ export function useRevisionAutosave<T extends { revision: number }, L = T>(optio
       },
       () => {
         setSaveState('saved');
+        // An edit lost earlier after leaving this section is out of date once a later one is stored.
+        pendingSaves.reportSaved(current.current.section);
         current.current.onSaved?.();
       },
       // A conflict drops every edit not yet sent, also those already queued behind it (#92).
@@ -124,30 +130,53 @@ export function useRevisionAutosave<T extends { revision: number }, L = T>(optio
   }, [queue]);
 
   useEffect(() => {
-    void reload();
+    // A save started when this section was left a moment ago must land first, or this load shows the older version.
+    let active = true;
+    void pendingSaves.settled().then(() => (active ? reload() : undefined));
+    return () => {
+      active = false;
+    };
   }, [reload]);
 
-  const flush = useCallback(async (): Promise<void> => {
+  /**
+   * Sends pending edits; resolves true when they were dropped because of a conflict. Then the stored version is loaded,
+   * unless the page is being left (`reloadOnConflict` false): nobody would see it.
+   */
+  const send = useCallback(async (reloadOnConflict = true): Promise<boolean> => {
     if (saveTimer.current) {
       clearTimeout(saveTimer.current);
       saveTimer.current = null;
     }
     try {
       await queue.flush();
+      return false;
     } catch (error) {
       if (isConflict(error) || error instanceof SaveDiscardedError) {
         // The queue already dropped everything not yet sent (never retried: it is based on data that changed
         // elsewhere). Show the current version; the caller (upload, generate, apply) goes on once it is loaded.
         setSaveState('conflict');
-        await reload();
-        return;
+        if (reloadOnConflict) await reload();
+        return true;
       }
       setSaveState('failed');
       throw error;
     }
   }, [queue, reload]);
-  // Leaving the section sends a pending edit instead of dropping it.
-  useEffect(() => () => void flush().catch(() => undefined), [flush]);
+  const flush = useCallback(async (): Promise<void> => {
+    await send();
+  }, [send]);
+  // Leaving the section sends a pending edit instead of dropping it. Nobody awaits it any more: it is tracked, so
+  // other pages wait for it and a failed or dropped edit is reported (#98).
+  useEffect(
+    () => () =>
+      pendingSaves.track(
+        current.current.section,
+        send(false).then((dropped) => {
+          if (dropped) throw new DroppedSaveError();
+        }),
+      ),
+    [send],
+  );
 
   const update = useCallback(
     (next: T): boolean => {

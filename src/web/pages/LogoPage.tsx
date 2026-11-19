@@ -31,6 +31,7 @@ import { en } from '../i18n/en';
 import { SectionLayout } from '../layouts/SectionLayout';
 import type { CheckStatus } from '../lib/export';
 import { projectLocaleOptions } from '../lib/locale-selection';
+import { pendingSaves } from '../lib/pending-saves';
 import { groupOutputs, groupStatus, MAX_TAGLINE } from '../lib/logo';
 import { createSaveQueue } from '../lib/save-queue';
 import { backgroundChoices, backgroundKey, swatchCss } from '../lib/screenshots';
@@ -96,7 +97,12 @@ export function LogoPage({ project, catalogue, selection, onSelectionChange, foc
     }
   }, []);
   useEffect(() => {
-    void reload();
+    // A save started when this section was left a moment ago must land first (#98).
+    let active = true;
+    void pendingSaves.settled().then(() => (active ? reload() : undefined));
+    return () => {
+      active = false;
+    };
   }, [reload]);
 
   // Validation state per generated file, from the export checklist of the selected languages.
@@ -117,7 +123,10 @@ export function LogoPage({ project, catalogue, selection, onSelectionChange, foc
   }, [outputs, selection]);
 
   // Settings are saved shortly after each change; generate and leaving the page send pending changes first.
-  const [queue] = useState(() => ({ current: createSaveQueue<LogoSettings>(saveLogoSettings, () => setSaveState('saved')) }));
+  const [queue] = useState(() => ({ current: createSaveQueue<LogoSettings>(saveLogoSettings, () => {
+      setSaveState('saved');
+      pendingSaves.reportSaved('logo');
+    }) }));
   const flushSave = useCallback(async () => {
     if (saveTimer.current) {
       clearTimeout(saveTimer.current);
@@ -130,7 +139,8 @@ export function LogoPage({ project, catalogue, selection, onSelectionChange, foc
       throw error;
     }
   }, []);
-  useEffect(() => () => void flushSave().catch(() => undefined), [flushSave]);
+  // Leaving the section sends pending changes; they are tracked, so other pages wait and a failure is reported (#98).
+  useEffect(() => () => pendingSaves.track('logo', flushSave()), [flushSave]);
 
   function update(next: LogoSettings) {
     setSettings(next);
