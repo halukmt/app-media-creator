@@ -119,3 +119,11 @@
 - Renderer validates its input (`CardInputError`), ready for an HTTP route in #12/#14. Landscape cards rejected for now.
 - Golden images in `tests/golden/` (295×640, 3 layouts × de-DE/tr-TR), same result on Windows and Linux CI.
 - Codex on PR #46: race between download result and selection change → #48 (Backlog, P2/XS).
+
+## #13 Frame-only screenshots for websites — done (PR #50)
+
+- `generateFramedScreenshots` → `web/<locale>/framed-screenshots/<1x|2x>/NN-<name>.png|webp`; only languages with own
+  screenshots; a run replaces the sets of its languages (`registerOutputs(..., { replaceSets })`).
+- Manifest set position now includes `subfolder`. Catalogue: group `mockup`, field `baseWidth`.
+- Device drawing shared in `screenshots/device.ts`; user bezels in `<workspace>/frames/user/` (`Workspace.userFramesDir`).
+- Codex on PR #49: review status "failed" (no findings delivered).
