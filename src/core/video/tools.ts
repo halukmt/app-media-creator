@@ -43,16 +43,17 @@ export function ffmpegBinary(env: NodeJS.ProcessEnv = process.env): string {
 }
 
 /**
- * The ffprobe binary: `FFPROBE_PATH` when set; otherwise next to `FFMPEG_PATH` when that names a file and an ffprobe
- * lies beside it (ffmpeg builds ship both); otherwise `ffprobe` from the PATH.
+ * The ffprobe binary: `FFPROBE_PATH` when set; otherwise next to `FFMPEG_PATH` when that names a file called
+ * `ffmpeg…` and an `ffprobe…` lies beside it (ffmpeg builds ship both); otherwise `ffprobe` from the PATH.
  */
 export function ffprobeBinary(env: NodeJS.ProcessEnv = process.env, exists: (file: string) => boolean = existsSync): string {
   const explicit = env.FFPROBE_PATH?.trim();
   if (explicit) return explicit;
   const ffmpeg = env.FFMPEG_PATH?.trim();
-  if (ffmpeg && /[\\/]/.test(ffmpeg)) {
-    const name = path.basename(ffmpeg).replace(/^ffmpeg/i, 'ffprobe');
-    const sibling = path.join(path.dirname(ffmpeg), name);
+  const base = ffmpeg ? path.basename(ffmpeg) : '';
+  // Only a name that starts with "ffmpeg" has a matching ffprobe; otherwise the "sibling" would be ffmpeg itself (#106).
+  if (ffmpeg && /[\\/]/.test(ffmpeg) && /^ffmpeg/i.test(base)) {
+    const sibling = path.join(path.dirname(ffmpeg), base.replace(/^ffmpeg/i, 'ffprobe'));
     if (exists(sibling)) return sibling;
   }
   return 'ffprobe';
