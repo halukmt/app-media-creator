@@ -80,3 +80,23 @@ export function uploadName(inputPath: string): string {
 export function swatchCss(background: BackgroundLike): string {
   return background.kind === 'solid' ? background.color : `linear-gradient(${background.angle}deg, ${background.from}, ${background.to})`;
 }
+
+/**
+ * Background choices: the offered ones plus every stored background that is no longer offered (e.g. a colour of a
+ * replaced logo), named `currentName`, so the shown selection is always true. Duplicates are dropped.
+ */
+export function backgroundChoices<T extends { name: string; background: BackgroundLike }>(
+  offered: readonly T[],
+  stored: readonly BackgroundLike[],
+  currentName: string,
+): { name: string; background: BackgroundLike }[] {
+  const keys = new Set(offered.map((o) => backgroundKey(o.background)));
+  const extra: { name: string; background: BackgroundLike }[] = [];
+  for (const background of stored) {
+    const key = backgroundKey(background);
+    if (keys.has(key)) continue;
+    keys.add(key);
+    extra.push({ name: currentName, background });
+  }
+  return [...offered, ...extra];
+}

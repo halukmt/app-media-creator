@@ -4,11 +4,11 @@ import type { CheckStatus } from '../lib/export';
 import { StatusBadge } from './StatusBadge';
 
 interface Props {
-  /** The picture (an img, later a video), already with its alt text. */
-  media: ReactNode;
+  /** The picture (an img, later a video), already with its alt text; omitted for documents without a preview. */
+  media?: ReactNode;
   title: string;
-  /** Pixel size of the real asset, e.g. "1179 × 2556". */
-  size: string;
+  /** File name and pixel size of the real asset, e.g. "app-icon.png · 1024 × 1024 px". */
+  size?: string;
   /** Validation state; omitted while the preview is still loading. */
   status?: CheckStatus;
   messages: readonly string[];
@@ -18,13 +18,13 @@ interface Props {
 export function PreviewCard({ media, title, size, status, messages }: Props) {
   return (
     <li className="card card-border card-sm bg-base-100">
-      <figure className="bg-base-200 p-2">{media}</figure>
+      {media ? <figure className="bg-base-200 p-2">{media}</figure> : null}
       <div className="card-body gap-1">
         <div className="flex items-start justify-between gap-2">
           <p className="font-medium">{title}</p>
           {status ? <StatusBadge status={status} /> : null}
         </div>
-        <p className="text-sm text-base-content/70">{size}</p>
+        {size ? <p className="text-sm text-base-content/70 wrap-anywhere">{size}</p> : null}
         {messages.length > 0 ? (
           <ul className="flex flex-col gap-1 text-sm wrap-anywhere">
             {messages.map((message, index) => (

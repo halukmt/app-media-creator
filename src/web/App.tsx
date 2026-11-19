@@ -8,6 +8,7 @@ import { selectionForProject } from './lib/locale-selection';
 import { sectionFromHash, type SectionId } from './lib/sections';
 import { ProjectPage } from './pages/ProjectPage';
 import { ExportPage } from './pages/ExportPage';
+import { LogoPage } from './pages/LogoPage';
 import { ScreenshotsPage } from './pages/ScreenshotsPage';
 import { SectionPage } from './pages/SectionPage';
 
@@ -117,6 +118,15 @@ export function App() {
           focusHeading={navigated}
         />
       ) : null}
+      {load.kind === 'ready' && section === 'logo' ? (
+        <LogoPage
+          project={load.project}
+          catalogue={load.catalogue}
+          selection={selection}
+          onSelectionChange={setSelection}
+          focusHeading={navigated}
+        />
+      ) : null}
       {load.kind === 'ready' && section === 'screenshots' ? (
         <ScreenshotsPage
           project={load.project}
@@ -126,7 +136,7 @@ export function App() {
           focusHeading={navigated}
         />
       ) : null}
-      {load.kind === 'ready' && section !== 'project' && section !== 'export' && section !== 'screenshots' ? (
+      {load.kind === 'ready' && section !== 'project' && section !== 'export' && section !== 'screenshots' && section !== 'logo' ? (
         <SectionPage
           key={section}
           section={section}

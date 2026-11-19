@@ -1,0 +1,76 @@
+// conventions: RULE-TESTING-3301
+import { readFileSync } from 'node:fs';
+import AxeBuilder from '@axe-core/playwright';
+import { expect, test } from '@playwright/test';
+import { unzipSync } from 'fflate';
+import { viewportWidths } from '../factories/web.js';
+import { projectInputFactory, svgBytes } from '../factories/workspace.js';
+
+/** German and Turkish only, so the share images stay few. */
+function smallProject() {
+  return { ...projectInputFactory(), sourceLocale: 'de-DE', locales: ['de-DE', 'tr-TR'] };
+}
+
+test.describe('The Logo section', () => {
+  test.describe.configure({ mode: 'serial' });
+
+  test.beforeAll(async ({ request }) => {
+    expect((await request.put('/api/project', { data: smallProject() })).ok()).toBe(true);
+  });
+
+  test.afterAll(async ({ request }) => {
+    await request.put('/api/project', { data: projectInputFactory() });
+  });
+
+  test('uploads a logo, sets options, generates all packs and exports them per target', async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await page.goto('/#/logo');
+    await expect(page.getByRole('heading', { level: 1, name: 'Logo' })).toBeVisible();
+
+    await page.getByLabel('Logo', { exact: true }).setInputFiles({ name: 'logo.svg', mimeType: 'image/svg+xml', buffer: Buffer.from(svgBytes()) });
+    await expect(page.getByText('Logo uploaded.')).toBeVisible();
+    await expect(page.getByRole('img', { name: 'Your current logo' })).toBeVisible();
+
+    await page.getByRole('button', { name: /Options →/ }).click();
+    await page.getByRole('group', { name: /Background colour/ }).locator('label', { hasText: 'Navy' }).click();
+    await page.getByLabel('Tagline (German)').fill('Faire Teams in Sekunden');
+    await expect(page.getByText('Changes saved.')).toBeVisible();
+
+    await page.getByRole('button', { name: /Preview →/ }).click();
+    await page.getByRole('button', { name: 'Generate all' }).click();
+    await expect(page.getByText(/files generated/)).toBeVisible({ timeout: 90_000 });
+    await expect(page.getByRole('img', { name: 'Preview of App Store icon' }).first()).toBeVisible();
+
+    await page.getByRole('button', { name: /Export →/ }).click();
+    await page.getByRole('link', { name: 'Open Export section' }).click();
+    await page.getByRole('button', { name: 'Download ZIP' }).click();
+    const downloading = page.waitForEvent('download');
+    const dialog = page.getByRole('dialog');
+    if (await dialog.isVisible()) await dialog.getByRole('button', { name: 'Download anyway' }).click();
+    const names = Object.keys(unzipSync(new Uint8Array(readFileSync(await (await downloading).path()))));
+    // Files per target.
+    expect(names).toEqual(
+      expect.arrayContaining([
+        'apple/shared/icon/app-icon.png',
+        'google/shared/icon/play-icon.png',
+        'web/shared/favicons/favicon.ico',
+        'web/de-DE/og-image/01-og-image.png',
+        'web/tr-TR/whatsapp-preview/01-whatsapp-preview.jpg',
+      ]),
+    );
+  });
+
+  for (const width of viewportWidths()) {
+    test(`shows the preview step at ${width} px without accessibility violations`, async ({ page }) => {
+      await page.setViewportSize({ width, height: 900 });
+      await page.goto('/#/logo');
+      await page.getByRole('button', { name: 'Preview', exact: true }).click();
+      await expect(page.getByRole('heading', { level: 3, name: 'App Store icons' })).toBeVisible();
+      const results = await new AxeBuilder({ page }).analyze();
+      expect(results.violations.filter((v) => v.impact === 'serious' || v.impact === 'critical')).toEqual([]);
+      const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+      expect(overflow).toBeLessThanOrEqual(0);
+      await page.screenshot({ path: `test-results/screenshots/logo-preview-${width}.png`, fullPage: true });
+    });
+  }
+});

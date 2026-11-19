@@ -7,8 +7,10 @@ export interface Option {
   label: string;
   /** Second line under the label (card variant). */
   description?: string;
-  /** Small picture next to the label (swatch, layout sketch); decorative, the label carries the meaning. */
+  /** Small picture next to the label (layout sketch); decorative, the label carries the meaning. */
   visual?: ReactNode;
+  /** CSS background of a colour swatch shown next to the label (colour data, e.g. a background preset). */
+  swatch?: string;
   disabled?: boolean;
   /** Short marker shown as a badge, e.g. "Comes later". */
   note?: string;
@@ -81,6 +83,9 @@ export function OptionGroup({ label, options, value, onSelect, multiple = false,
         />
         <span className="flex flex-wrap items-center gap-2">
           <CheckMark />
+          {option.swatch ? (
+            <span aria-hidden="true" className="inline-block size-5 shrink-0 rounded border border-base-content/20" style={{ background: option.swatch }} />
+          ) : null}
           {option.visual}
           <span className={variant === 'card' ? 'font-semibold' : ''} lang={option.lang}>
             {option.label}

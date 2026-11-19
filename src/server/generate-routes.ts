@@ -5,10 +5,11 @@ import { generateFramedScreenshots, type FramedScreenshotOptions } from '../core
 import { generateScreenshotCards, renderCardPreview, type ScreenshotCardOptions } from '../core/generators/screenshot-cards.js';
 import { generateShareImages, type ShareImageOptions } from '../core/generators/share-images.js';
 import { GeneratorError, loadNewestLogo } from '../core/generators/logo.js';
-import { logoPalette } from '../core/generators/render.js';
+import { generateLogoPack, listLogoOutputs } from '../core/generators/logo-packs.js';
+import { logoPalette, renderLogoSquare } from '../core/generators/render.js';
 import { BACKGROUND_PRESETS, backgroundsFromPalette, type BackgroundPreset } from '../core/screenshots/index.js';
 import { generateWebIcons, type WebIconOptions } from '../core/generators/web-icons.js';
-import { ProjectFileError, type Workspace } from '../core/workspace/index.js';
+import { ProjectFileError, readLogoSettings, saveLogoSettings, type Workspace } from '../core/workspace/index.js';
 import { readOptionalJsonObject } from './json-body.js';
 
 /** Maps known generator errors to JSON responses; rethrows everything else. */
@@ -136,6 +137,52 @@ export function generateRoutes(workspace: Workspace): Hono {
       palette = [];
     }
     return c.json({ presets: BACKGROUND_PRESETS, palette });
+  });
+
+  // The newest logo as a small PNG for the UI. SVG logos are rasterized here and never sent to the browser as markup.
+  api.get('/inputs/logo-preview', async (c) => {
+    try {
+      const png = await renderLogoSquare(await loadNewestLogo(workspace), { size: 256, logoBox: 256 });
+      return c.body(new Uint8Array(png), 200, {
+        'content-type': 'image/png',
+        'x-content-type-options': 'nosniff',
+        'content-security-policy': "sandbox; default-src 'none'",
+        'cache-control': 'no-store',
+      });
+    } catch (error) {
+      if (error instanceof GeneratorError) return c.json({ error: error.message }, 404);
+      throw error;
+    }
+  });
+
+  api.get('/logo/settings', async (c) => c.json(await readLogoSettings(workspace)));
+
+  // One logo pack with the saved settings; `locales` limits the share images.
+  api.post('/generate/logo/:pack', async (c) => {
+    const parsed = await readOptionalJsonObject(c);
+    if (!parsed.ok) return c.json({ error: parsed.error }, 400);
+    const { locales } = parsed.body;
+    if (locales !== undefined && typeof locales !== 'string' && !(Array.isArray(locales) && locales.every((l) => typeof l === 'string'))) {
+      return c.json({ error: 'locales must be "all", a locale id or a list of locale ids' }, 400);
+    }
+    try {
+      return c.json(await generateLogoPack(workspace, c.req.param('pack'), locales !== undefined ? { locales: locales as string | string[] } : {}), 201);
+    } catch (error) {
+      return generatorError(c, error);
+    }
+  });
+
+  api.get('/logo/output', async (c) => c.json(await listLogoOutputs(workspace)));
+
+  api.put('/logo/settings', async (c) => {
+    let body: unknown;
+    try {
+      body = await c.req.json();
+    } catch {
+      return c.json({ errors: ['The request body must be JSON'] }, 400);
+    }
+    const result = await saveLogoSettings(workspace, body);
+    return result.ok ? c.json(result.settings) : c.json({ errors: result.errors }, 400);
   });
 
   api.get('/logo/palette', async (c) => {

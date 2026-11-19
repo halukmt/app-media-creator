@@ -34,7 +34,7 @@ import { SectionLayout } from '../layouts/SectionLayout';
 import type { CheckStatus } from '../lib/export';
 import { projectLocaleOptions, sourceLocaleFor } from '../lib/locale-selection';
 import { createSaveQueue } from '../lib/save-queue';
-import { INHERIT, applyOverrides, backgroundKey, moveEntry, overrideIds, removeEntry, swatchCss, uploadName } from '../lib/screenshots';
+import { INHERIT, applyOverrides, backgroundChoices, backgroundKey, moveEntry, overrideIds, removeEntry, swatchCss, uploadName } from '../lib/screenshots';
 import { sectionHref } from '../lib/sections';
 
 interface Props {
@@ -262,14 +262,11 @@ export function ScreenshotsPage({ project, catalogue, selection, onSelectionChan
   // offered (e.g. a colour of a replaced logo) stays selectable as "Current background", so the shown choice is true.
   const offered = [...backgrounds.presets, ...backgrounds.palette];
   const stored = sets ? [sets.style.background, ...Object.values(sets.sets).flatMap((entries) => (entries ?? []).flatMap((e) => (e.background ? [e.background] : [])))] : [];
-  const extra = stored
-    .filter((bg, i) => !offered.some((o) => backgroundKey(o.background) === backgroundKey(bg)) && stored.findIndex((s) => backgroundKey(s) === backgroundKey(bg)) === i)
-    .map((background) => ({ id: backgroundKey(background), name: en.screenshots.currentBackground, background }));
-  const backgroundList = [...offered, ...extra];
+  const backgroundList = backgroundChoices(offered, stored, en.screenshots.currentBackground);
   const backgroundOptions: Option[] = backgroundList.map((preset) => ({
     id: backgroundKey(preset.background),
     label: preset.name,
-    visual: <span aria-hidden="true" className="inline-block size-5 rounded border border-base-content/20" style={{ background: swatchCss(preset.background) }} />,
+    swatch: swatchCss(preset.background),
   }));
   const layoutOptions: Option[] = LAYOUTS.map((layout) => ({ id: layout, label: en.screenshots.layouts[layout] }));
   const inheritOption: Option = { id: INHERIT, label: en.screenshots.inherit };
