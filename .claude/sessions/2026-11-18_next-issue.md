@@ -330,3 +330,12 @@
 - `gh project item-edit` right after `gh issue create` fails ("field-id must be provided" = empty item id): wait and
   look the item up by number.
 - Next: #16 (amc-copy skill), #24 (store texts).
+
+## #87 Codex finding on #86: lock recovery — done (PR #88)
+
+- Edit lock redesigned in ScreenshotsPage: `applyRunning` + `lockedAfter` (reload number); numbered reloads drop late
+  answers; every apply attempt reloads before edits; info line while locked; e2e with a failing GET after apply,
+  recovery via upload (fails on old code).
+- Two code-review rounds; root cause is the missing revision check on saves → #85, suggested P1 (Haluk to decide).
+- CI flake: "Install Chromium" failed with apt exit 100 → `gh run rerun --failed` was enough.
+- Codex on PR #86 led to this issue.
