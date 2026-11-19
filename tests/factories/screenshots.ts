@@ -32,3 +32,8 @@ export async function appScreenshot(width = 1179, height = 2556): Promise<Uint8A
       .toBuffer(),
   );
 }
+
+/** Share image taglines with long German words and Turkish characters. */
+export function shareTaglines(): { 'de-DE': string; 'tr-TR': string } {
+  return { 'de-DE': 'Faire Mannschaftsaufstellung in Sekunden', 'tr-TR': 'Şampiyonluğa giden yolda İstanbul’un takımları' };
+}

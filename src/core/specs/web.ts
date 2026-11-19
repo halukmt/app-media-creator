@@ -210,6 +210,7 @@ export const WEB_SPECS: readonly SpecEntry[] = [
     kind: 'image',
     required: false,
     dimensions: { kind: 'range', min: { width: 300, height: 75 }, aspect: { maxRatio: 4 }, orientation: 'landscape' },
+    defaultSize: { width: 1200, height: 630 },
     formats: ['png', 'jpeg'],
     alpha: 'allowed',
     maxBytes: 300 * KB,
@@ -236,4 +237,28 @@ export const WEB_SPECS: readonly SpecEntry[] = [
   },
   social('tiktok-profile', 'TikTok profile picture', [1080, 1080], RESEARCH, 'Minimum 200×200.'),
   social('email-signature-logo', 'Email signature logo', [300, 100], RESEARCH, 'Shown at about 150×50 (@2x).'),
+  ...(
+    [
+      ['monochrome', 'Logo, monochrome (black on transparency)'],
+      ['inverse', 'Logo, inverse (white on transparency)'],
+      ['mark', 'Logo as a square mark on transparency'],
+    ] as const
+  ).map(
+    ([variant, name]): SpecEntry => ({
+      id: `web.logo.${variant}`,
+      target: 'web',
+      group: 'logo',
+      folder: 'logo',
+      name,
+      kind: 'image',
+      required: false,
+      dimensions: fixed([1024, 1024]),
+      formats: ['png'],
+      alpha: 'required',
+      localized: false,
+      verified: true,
+      sourceUrl: RESEARCH,
+      notes: 'Logo variant for dark or light backgrounds and print; written by this tool, no store limits.',
+    }),
+  ),
 ];
