@@ -364,3 +364,11 @@
   reports drops. Page: `isConflict`, reload with newer revision drops queued edits + refreshes previews, knownRevision
   never goes back.
 - Codex on PR #91 led to this issue (P1). Next: #16 (amc-copy skill), #24 (store texts).
+
+## #16 amc-copy skill (PR #94, merged)
+
+- `skills/amc-copy/`: SKILL.md (job workflow), `references/copy-rules.md` (12 generic rules), `scripts/check.mjs`
+  (no deps; exit 0 OK, 1 errors, 2 not a job folder). Forbidden claims from `claims.json` and `../../project.json`.
+- Brief slots carry `layout` + `limits` (`COPY_LIMITS`: text-top 30/40, text-top-large 26/40, text-bottom 34/44);
+  `limitsFor` falls back for older briefs. Tool warnings name the slot.
+- `/code-review` 10 findings, all fixed. Next: #24 (store texts, P1 L).
