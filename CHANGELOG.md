@@ -39,4 +39,5 @@ entries left under `[Unreleased]` is rejected by `npm run check:release`.
 - When screenshot edits cannot be saved, upload and generate stop and the edits are kept instead of being lost or ignored. (#57)
 - A failed older save of screenshot edits can no longer overwrite newer edits. (#59)
 - The app name on share images and banners is drawn completely instead of being cut off after part of the first letter. (#62)
+- Environment labels with characters the icon font cannot draw (e.g. Cyrillic or Chinese) are rejected at the label field instead of vanishing from the icons. (#68)
 
