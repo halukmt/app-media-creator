@@ -229,3 +229,67 @@ export function generateFramedScreenshots(locales: readonly string[], frame: str
     body: JSON.stringify({ locales, frame, shadow }),
   });
 }
+
+export type LogoPack = 'app-store' | 'google-play' | 'web' | 'social';
+
+export interface LogoSettings {
+  version: 1;
+  packs: LogoPack[];
+  background: string;
+  taglines: Partial<Record<string, string>>;
+}
+
+export interface LogoOutput {
+  path: string;
+  specId: string;
+  name: string;
+  locale?: string;
+  pack: LogoPack;
+  width?: number;
+  height?: number;
+}
+
+export interface PackResult {
+  entries: { path: string }[];
+  warnings: { code: string; message: string; path: string }[];
+}
+
+export function uploadLogo(file: File): Promise<StoredInput> {
+  const form = new FormData();
+  form.append('file', file);
+  return request<StoredInput>('/api/inputs/logo', { method: 'POST', body: form });
+}
+
+/** URL of the newest logo as a PNG; `version` changes after an upload so the browser loads it again. */
+export function logoPreviewUrl(version: number): string {
+  return `/api/inputs/logo-preview?v=${version}`;
+}
+
+/** URL of a generated image, scaled to `width` for previews; `version` changes after each generate run. */
+export function outputFileUrl(outputPath: string, width: number, version: number): string {
+  return `/api/output/file?path=${encodeURIComponent(outputPath)}&width=${width}&v=${version}`;
+}
+
+export function fetchLogoSettings(): Promise<LogoSettings> {
+  return request<LogoSettings>('/api/logo/settings');
+}
+
+export function saveLogoSettings(settings: LogoSettings): Promise<LogoSettings> {
+  return request<LogoSettings>('/api/logo/settings', {
+    method: 'PUT',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(settings),
+  });
+}
+
+export function fetchLogoOutputs(): Promise<LogoOutput[]> {
+  return request<LogoOutput[]>('/api/logo/output');
+}
+
+export function generateLogoPack(pack: LogoPack, locales: readonly string[]): Promise<PackResult> {
+  return request<PackResult>(`/api/generate/logo/${pack}`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ locales }),
+  });
+}

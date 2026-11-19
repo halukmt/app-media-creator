@@ -14,6 +14,8 @@ interface Props {
     options: readonly CatalogueLocale[];
     selection: readonly string[];
     onChange: (next: string[]) => void;
+    /** What the languages are used for in this section. */
+    hint?: string;
   };
   /** L2 step flow of the section (rendered between heading and locale bar). */
   steps?: { items: readonly Step[]; current: string; onSelect: (id: string) => void; unavailableHint?: string };
@@ -41,6 +43,7 @@ export function SectionLayout({ section, focusHeading, localeBar, steps, childre
             options={localeBar.options}
             value={localeBar.selection}
             onChange={localeBar.onChange}
+            {...(localeBar.hint ? { hint: localeBar.hint } : {})}
           />
         ) : null}
         {children}

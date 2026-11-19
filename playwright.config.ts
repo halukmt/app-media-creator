@@ -17,10 +17,11 @@ export default defineConfig({
   // project.spec, export.spec and screenshots.spec change the shared workspace: they run one after another,
   // everything else in parallel.
   projects: [
-    { name: 'chromium', use: { ...devices['Desktop Chrome'] }, testIgnore: /(project|export|screenshots)\.spec\.ts/ },
+    { name: 'chromium', use: { ...devices['Desktop Chrome'] }, testIgnore: /(project|export|screenshots|logo)\.spec\.ts/ },
     { name: 'settings', use: { ...devices['Desktop Chrome'] }, testMatch: /project\.spec\.ts/ },
     { name: 'export', use: { ...devices['Desktop Chrome'] }, testMatch: /export\.spec\.ts/, dependencies: ['settings'] },
     { name: 'screenshots', use: { ...devices['Desktop Chrome'] }, testMatch: /screenshots\.spec\.ts/, dependencies: ['export'] },
+    { name: 'logo', use: { ...devices['Desktop Chrome'] }, testMatch: /logo\.spec\.ts/, dependencies: ['screenshots'] },
   ],
   webServer: {
     command: `npm run build && node dist/cli/index.js --port ${port} --no-open --workspace ${workspace}`,

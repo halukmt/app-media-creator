@@ -3,7 +3,7 @@ import { outputPath, registerOutputs, type OutputEntry, type RegisterOptions } f
 import { isLocaleId, resolveLocales, type LocaleId, type LocaleSelection } from '../locales/index.js';
 import { cardFont, cardSizeForSpec, textBlockSvg, textColorFor, type CardWarning } from '../screenshots/index.js';
 import { getSpec, listSpecs, type Rect, type SpecEntry } from '../specs/index.js';
-import { readProject, type Workspace } from '../workspace/index.js';
+import { MAX_TAGLINE, readProject, type Workspace } from '../workspace/index.js';
 import { GeneratorError, loadNewestLogo } from './logo.js';
 import { assertValidOutputs, fixedSizes } from './outputs.js';
 import { isHexColor, rasterizeLogo, renderLogoSquare, renderSilhouette, type HexColor, type LogoSource } from './render.js';
@@ -29,7 +29,6 @@ export interface ShareImageResult {
   warnings: ShareWarning[];
 }
 
-const MAX_TAGLINE = 120;
 /** Logo share of a profile picture, small enough for the circle crop of Instagram, WhatsApp and others. */
 const PROFILE_LOGO_SHARE = 0.6;
 const SHARE_SPECS = ['web.og-image', 'web.x-card', 'web.whatsapp-preview'] as const;
