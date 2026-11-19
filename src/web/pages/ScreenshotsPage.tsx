@@ -70,6 +70,8 @@ type Message = { tone: 'success' | 'warning' | 'error'; text: string; details?: 
 const LAYOUTS: readonly CardLayout[] = ['text-top', 'text-top-large', 'text-bottom'];
 const FRAME_KINDS = ['iphone', 'iphone-home', 'iphone-duo', 'ipad', 'android-phone', 'android-tablet'] as const;
 const SAVE_DELAY = 600;
+/** The header image settings: a document of their own next to the screenshot sets (#103). */
+const CREATIVE_SETTINGS = { section: 'screenshots', document: 'creative-settings' } as const;
 
 /** The Screenshots section: upload per language, choose the purpose, edit headlines and style, preview, generate. */
 export function ScreenshotsPage({ project, catalogue, selection, onSelectionChange, focusHeading }: Props) {
@@ -169,7 +171,7 @@ export function ScreenshotsPage({ project, catalogue, selection, onSelectionChan
   const creativeQueue = useRef(
     createSaveQueue<CreativeSettings>(saveCreativeSettings, () => {
       setCreativeSaveState('saved');
-      pendingSaves.reportSaved('screenshots');
+      pendingSaves.reportSaved(CREATIVE_SETTINGS);
       setPreviewVersion((v) => v + 1);
     }),
   );
@@ -192,7 +194,7 @@ export function ScreenshotsPage({ project, catalogue, selection, onSelectionChan
     if (creativeTimer.current) clearTimeout(creativeTimer.current);
     creativeTimer.current = setTimeout(() => void flushCreative().catch(() => undefined), SAVE_DELAY);
   }
-  useEffect(() => () => pendingSaves.track('screenshots', flushCreative()), [flushCreative]);
+  useEffect(() => () => pendingSaves.track(CREATIVE_SETTINGS, flushCreative()), [flushCreative]);
 
   function updateEntries(entries: ScreenshotEntry[]): boolean {
     if (!sets) return false;

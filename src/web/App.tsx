@@ -5,7 +5,7 @@ import { StatusAlert } from './components/StatusAlert';
 import { en } from './i18n/en';
 import { AppShell } from './layouts/AppShell';
 import { selectionForProject } from './lib/locale-selection';
-import { pendingSaves, type SaveOutcome } from './lib/pending-saves';
+import { lostSections, pendingSaves, withOutcome, type LostEdit } from './lib/pending-saves';
 import { sectionFromHash, sectionHref, type SectionId } from './lib/sections';
 import { ProjectPage } from './pages/ProjectPage';
 import { ExportPage } from './pages/ExportPage';
@@ -44,33 +44,17 @@ function useSection(): [SectionId, boolean] {
   return [section, navigated];
 }
 
-interface LostEdit {
-  section: SectionId;
-  reason: Exclude<SaveOutcome, 'saved'>;
-}
-
 /**
  * Sections whose last edit was lost after the user left them: the save failed or was dropped because the data changed
- * elsewhere (#98). The message stays, also in the section opened again, until the user dismisses it or a later save
- * in that section works.
+ * elsewhere (#98). Outcomes are kept per document, so a save of one document never clears the loss of another
+ * (#103). The message stays, also in the section opened again, until the user dismisses it or a later save of the
+ * lost document works.
  */
-function useLostEdits(): [LostEdit[], (section: SectionId) => void] {
+function useLostEdits(): [ReturnType<typeof lostSections>, (section: SectionId) => void] {
   const [lost, setLost] = useState<LostEdit[]>([]);
-  useEffect(
-    () =>
-      pendingSaves.subscribe((section, outcome) =>
-        setLost((current) => {
-          const others = current.filter((entry) => entry.section !== section);
-          if (outcome === 'saved') return others.length === current.length ? current : others;
-          // Two saves of one section can be lost at once (Screenshots: sets and header settings): the failure wins.
-          const reason = current.some((entry) => entry.section === section && entry.reason === 'failed') ? 'failed' : outcome;
-          return [...others, { section, reason }];
-        }),
-      ),
-    [],
-  );
+  useEffect(() => pendingSaves.subscribe((source, outcome) => setLost((current) => withOutcome(current, source, outcome))), []);
   const dismiss = useCallback((section: SectionId) => setLost((current) => current.filter((entry) => entry.section !== section)), []);
-  return [lost, dismiss];
+  return [lostSections(lost), dismiss];
 }
 
 export function App() {

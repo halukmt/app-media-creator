@@ -5,6 +5,9 @@ import { DroppedSaveError, pendingSaves } from '../lib/pending-saves';
 import { SaveDiscardedError, createSaveQueue } from '../lib/save-queue';
 import type { SectionId } from '../lib/sections';
 
+/** The revisioned document of a section, as the pending-saves tracker names it. */
+const sourceOf = (section: SectionId) => ({ section, document: section });
+
 const SAVE_DELAY = 600;
 
 export interface RevisionAutosaveOptions<T extends { revision: number }, L> {
@@ -93,7 +96,7 @@ export function useRevisionAutosave<T extends { revision: number }, L = T>(optio
       () => {
         setSaveState('saved');
         // An edit lost earlier after leaving this section is out of date once a later one is stored.
-        pendingSaves.reportSaved(current.current.section);
+        pendingSaves.reportSaved(sourceOf(current.current.section));
         current.current.onSaved?.();
       },
       // A conflict drops every edit not yet sent, also those already queued behind it (#92).
@@ -170,7 +173,7 @@ export function useRevisionAutosave<T extends { revision: number }, L = T>(optio
   useEffect(
     () => () =>
       pendingSaves.track(
-        current.current.section,
+        sourceOf(current.current.section),
         send(false).then((dropped) => {
           if (dropped) throw new DroppedSaveError();
         }),
