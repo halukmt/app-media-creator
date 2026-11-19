@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { ApiError, downloadExport, fetchChecklist, type CatalogueLocale, type Checklist, type ProjectSettings } from '../api';
+import { downloadExport, fetchChecklist, messagesOf, type CatalogueLocale, type Checklist, type ProjectSettings } from '../api';
 import { BusyButton } from '../components/BusyButton';
 import { ChecklistCard } from '../components/ChecklistCard';
 import { ConfirmDialog } from '../components/ConfirmDialog';
@@ -71,7 +71,7 @@ export function ExportPage({ project, locales, selection, onSelectionChange, foc
         if (controller.signal.aborted) return;
         setChecklist(null);
         setLoading(false);
-        setLoadError(error instanceof ApiError ? error.messages : []);
+        setLoadError(messagesOf(error));
       });
     return () => {
       controller.abort();
@@ -100,7 +100,7 @@ export function ExportPage({ project, locales, selection, onSelectionChange, foc
       setDownload({ kind: 'done', fileName, changed: isWorseStatus(result.status, checklist.status) });
     } catch (error) {
       if (controller.signal.aborted) return;
-      setDownload({ kind: 'failed', messages: error instanceof ApiError ? error.messages : [] });
+      setDownload({ kind: 'failed', messages: messagesOf(error) });
     } finally {
       // Only the run that registered itself clears the slot; an aborted run never clears a newer one.
       if (runningDownload.current === controller) runningDownload.current = null;

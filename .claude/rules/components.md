@@ -26,6 +26,8 @@ paths:
   Visible focus (`focus-visible`), `aria-expanded`, `aria-current`, `aria-live` for progress and errors.
 - Mobile first: design at 375 px, then `sm:`, `md:`, `lg:`. Tap targets at least 44 px.
 - Every component is used by at least one page. Remove dead components.
+- **Hooks** (`src/web/hooks/`): state logic shared by pages, one `useX` per `.ts` file, no markup and no UI strings
+  (hooks return states; pages map them to `en.ts`). Page-specific effects come as callbacks.
 
 ## App layout (tool UI, not a marketing site)
 

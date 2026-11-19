@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ApiError, fetchCatalogue, fetchProject, type Catalogue, type ProjectSettings } from './api';
+import { fetchCatalogue, messagesOf, fetchProject, type Catalogue, type ProjectSettings } from './api';
 import { ProgressStatus } from './components/ProgressStatus';
 import { StatusAlert } from './components/StatusAlert';
 import { en } from './i18n/en';
@@ -58,7 +58,7 @@ export function App() {
         setSelection((current) => selectionForProject(current, project.locales));
       })
       // Server messages (e.g. which fields of project.json are invalid) are shown; a network error has none.
-      .catch((error: unknown) => setLoad({ kind: 'failed', messages: error instanceof ApiError ? error.messages : [] }));
+      .catch((error: unknown) => setLoad({ kind: 'failed', messages: messagesOf(error) }));
   }, []);
 
   useEffect(() => {
