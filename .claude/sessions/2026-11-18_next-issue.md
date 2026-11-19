@@ -420,3 +420,9 @@
   New #101 (Backlog, P2 S): shared plain autosave hook for Logo and creative settings.
 - `src/web/lib` files imported by unit tests need `.js` in their own relative imports (tsconfig.test is nodenext).
 - E2E took 8.7 min locally under load; CI Playwright 6 min.
+
+## #103 Lost edits per document (Codex on #102) — done (PR #104)
+
+- Codex P2 on PR #102: the creative settings save cleared the loss of the screenshot sets (same section). Taken right
+  away (lost-data message). `SaveSource` = section + document; `withOutcome` / `lostSections` pure and tested; a no-op
+  save returns the same array (code review: avoids an App re-render on every autosave).
