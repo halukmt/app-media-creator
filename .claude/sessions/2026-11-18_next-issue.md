@@ -127,3 +127,9 @@
 - Manifest set position now includes `subfolder`. Catalogue: group `mockup`, field `baseWidth`.
 - Device drawing shared in `screenshots/device.ts`; user bezels in `<workspace>/frames/user/` (`Workspace.userFramesDir`).
 - Codex on PR #49: review status "failed" (no findings delivered).
+
+## #51 Review finding from #50 — done (PR #52)
+
+- Codex on PR #50: user bezel shadow darkened the screenshot edges. Bezel now drawn twice (shadowed beneath, plain on
+  top). The test bezels had no real opening (`dest-out` with a transparent shape removes nothing) — fixed.
+- CI e2e took about 5 minutes this time (usually under 1); keep an eye on it.
