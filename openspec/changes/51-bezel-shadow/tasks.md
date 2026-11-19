@@ -7,5 +7,5 @@
 
 ## 2. Verification loop
 
-- [ ] 2.1 `npm run build`, `npm run check`, `npm run check:all`, `npm test`, `npm run test:e2e` all pass
-- [ ] 2.2 `/code-review` on the change; findings in the review log of `design.md`
+- [x] 2.1 `npm run build`, `npm run check`, `npm run check:all`, `npm test`, `npm run test:e2e` all pass
+- [x] 2.2 `/code-review` on the change; findings in the review log of `design.md`
