@@ -3,7 +3,8 @@ import { describe, expect, test } from 'vitest';
 import { buildChecklist, checklistMarkdown, type Manifest } from '../../src/core/export/index.js';
 import { defaultProject, type ProjectSettings } from '../../src/core/workspace/index.js';
 import { measureFactory, outputEntryFactory, screenshotEntries } from '../factories/export.js';
-import { imagePropsFactory } from '../factories/media.js';
+import { imagePropsFactory, videoPropsFactory } from '../factories/media.js';
+import { FfmpegMissingError } from '../../src/core/video/index.js';
 
 const valid63 = imagePropsFactory({ width: 1206, height: 2622 });
 
@@ -109,10 +110,19 @@ describe('buildChecklist reports what the stores still need', () => {
     expect(item(checklist, 'apple.icon')).toMatchObject({ status: 'error', required: true });
   });
 
-  test('warns that videos are not measured yet', async () => {
+  test('checks a preview video against its limits and warns when ffprobe is missing', async () => {
     const preview = outputEntryFactory({ specId: 'apple.preview.iphone', locale: 'de-DE', path: 'apple/de-DE/preview-iphone/01-p.mp4' });
-    const checklist = await run([preview]);
-    expect(item(checklist, 'apple.preview.iphone', 'de-DE')?.messages[0]?.text).toContain('video is not measured yet');
+    const video = videoPropsFactory({ format: 'mov,mp4,m4a,3gp,3g2,mj2' });
+    const base = { project: defaultProject('Demo'), manifest: { version: 1 as const, entries: [preview], problems: [] }, locales: ['de-DE'] as const, outputDir: '/out', locate: async () => 'own' as const };
+    const valid = await buildChecklist({ ...base, measureVideo: async () => video });
+    expect(item(valid, 'apple.preview.iphone', 'de-DE')).toMatchObject({ status: 'ok' });
+    const tooShort = await buildChecklist({ ...base, measureVideo: async () => ({ ...video, durationSeconds: 9, audioChannels: undefined }) });
+    expect(item(tooShort, 'apple.preview.iphone', 'de-DE')?.messages.map((m) => m.text)).toEqual([
+      'apple/de-DE/preview-iphone/01-p.mp4: Duration 9 s is outside 15–30 s',
+      'apple/de-DE/preview-iphone/01-p.mp4: Audio must have 2 channels (stereo); got no audio track',
+    ]);
+    const missing = await buildChecklist({ ...base, measureVideo: async () => Promise.reject(new FfmpegMissingError('ffprobe was not found')) });
+    expect(item(missing, 'apple.preview.iphone', 'de-DE')).toMatchObject({ status: 'warning', messages: [{ text: 'apple/de-DE/preview-iphone/01-p.mp4: not measured: ffprobe was not found' }] });
   });
 
   test('lists the chosen devices that have no files yet as warnings', async () => {

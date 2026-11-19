@@ -35,7 +35,7 @@ function screenshot(
   };
 }
 
-function preview(id: string, name: string, dims: Size[], rotatable: boolean): SpecEntry {
+function preview(id: string, name: string, dims: Size[], rotatable: boolean, extraNote = ''): SpecEntry {
   return {
     id: `apple.preview.${id}`,
     target: 'apple',
@@ -52,7 +52,7 @@ function preview(id: string, name: string, dims: Size[], rotatable: boolean): Sp
     localized: true,
     verified: true,
     sourceUrl: PREVIEWS,
-    notes: 'H.264 10–12 Mbps or ProRes 422 HQ; stereo AAC 256 kbps; only footage captured from the app.',
+    notes: `H.264 10–12 Mbps or ProRes 422 HQ; stereo AAC 256 kbps; only footage captured from the app.${extraNote}`,
   };
 }
 
@@ -112,7 +112,7 @@ export const APPLE_SPECS: readonly SpecEntry[] = [
   }),
 
   // App previews
-  preview('iphone', 'App preview iPhone (incl. iPhone Duo, 6.9" to 6.1")', sizes([886, 1920]), true),
+  preview('iphone', 'App preview iPhone (incl. iPhone Duo, 6.9" to 6.1")', sizes([886, 1920]), true, ' iPhone Duo previews are experimental: Apple accepts only 886×1920 and native Duo proportions failed processing (developer forums thread 849757).'),
   preview('iphone-5.5', 'App preview iPhone 5.5" and 4"', sizes([1080, 1920]), true),
   preview('iphone-4.7', 'App preview iPhone 4.7"', sizes([750, 1334]), true),
   preview('ipad', 'App preview iPad 13", 11", 10.5"', sizes([1200, 1600]), true),

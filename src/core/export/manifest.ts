@@ -1,5 +1,5 @@
 import { randomBytes } from 'node:crypto';
-import { lstat, mkdir, readFile, realpath, rename, rm, writeFile } from 'node:fs/promises';
+import { copyFile, lstat, mkdir, readFile, realpath, rename, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { getLocale, isLocaleId, type LocaleId } from '../locales/index.js';
 import { getSpec, type SpecEntry } from '../specs/index.js';
@@ -201,11 +201,13 @@ export async function readManifest(workspace: Workspace): Promise<Manifest> {
   return { version: 1, entries, problems };
 }
 
-export interface RegisterOptions extends OutputPathOptions {
+/**
+ * One file to register: its content as bytes, or a file on disk that is copied (large videos are not held in memory).
+ */
+export type RegisterOptions = OutputPathOptions & {
   specId: string;
-  bytes: Uint8Array;
   fallbackInput?: boolean;
-}
+} & ({ bytes: Uint8Array; sourceFile?: never } | { sourceFile: string; bytes?: never });
 
 let queue: Promise<unknown> = Promise.resolve();
 
@@ -247,7 +249,7 @@ export function registerOutputs(
         path: relative,
         fallbackInput: options.fallbackInput ?? false,
       };
-      return { entry, bytes: options.bytes };
+      return { entry, content: options };
     });
 
     const paths = new Map<string, string>();
@@ -262,7 +264,7 @@ export function registerOutputs(
     // Stage: write every file under a temporary name first. If one write fails, nothing has been replaced yet.
     const staged: { tmp: string; target: string }[] = [];
     try {
-      for (const { entry, bytes } of planned) {
+      for (const { entry, content } of planned) {
         const target = path.join(workspace.outputDir, entry.path);
         await mkdir(path.dirname(target), { recursive: true });
         await assertRealFolderInside(path.dirname(target), workspace.outputDir);
@@ -271,7 +273,8 @@ export function registerOutputs(
         if (existing && !existing.isFile()) throw new Error(`${entry.path} exists and is not a file`);
         const tmp = `${target}.${randomBytes(4).toString('hex')}.tmp`;
         staged.push({ tmp, target });
-        await writeFile(tmp, bytes);
+        if (content.sourceFile !== undefined) await copyFile(content.sourceFile, tmp);
+        else await writeFile(tmp, content.bytes);
       }
     } catch (error) {
       await Promise.all(staged.map(({ tmp }) => rm(tmp, { force: true })));

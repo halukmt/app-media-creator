@@ -33,6 +33,7 @@ export function selectExportLocales(project: ProjectSettings, selection: LocaleS
 export interface ExportOptions {
   locales?: LocaleSelection;
   measure?: MeasureFile;
+  measureVideo?: MeasureFile;
   locate?: LocateFile;
   /** Clock for the file name; injectable for tests. */
   now?: Date;
@@ -67,6 +68,7 @@ async function prepare(workspace: Workspace, options: ExportOptions) {
     storeTexts,
     outputDir: workspace.outputDir,
     ...(options.measure ? { measure: options.measure } : {}),
+    ...(options.measureVideo ? { measureVideo: options.measureVideo } : {}),
     ...(options.locate ? { locate: options.locate } : {}),
   });
   if (storeTextsProblem) {

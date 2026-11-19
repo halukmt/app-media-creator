@@ -60,6 +60,9 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
       - run: npm ci
+      # The video tests render real previews with ffmpeg and measure them with ffprobe.
+      - name: Install ffmpeg
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ffmpeg
       - name: Type check
         run: npm run check
       - name: Project checks

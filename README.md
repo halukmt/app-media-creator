@@ -77,7 +77,18 @@ AI is optional and never needs your credentials inside the tool:
 ## Requirements
 
 - Node.js ≥ 22.12
-- ffmpeg on `PATH` (or `FFMPEG_PATH` in `.env`) for video features
+- ffmpeg and ffprobe on `PATH` (or `FFMPEG_PATH` / `FFPROBE_PATH` in `.env`) for video features. Without them
+  everything else works; video generation says what is missing, and the export checklist cannot measure videos.
+
+### App Store preview videos
+
+`POST /api/generate/store-previews` turns each uploaded screen recording (up to three per language) into App Store
+previews: 886×1920 for iPhone (also used by iPhone Duo, experimental) and 1200×1600 for iPad when the project picked
+an iPad size; a landscape recording gets the landscape size. The recording is trimmed (`trim`), padded to the store size
+(never cropped), faded in and out and framed by optional text cards per language (`intro`, `outro`, `cardSeconds`).
+Output: H.264 at 30 fps and 11 Mbps, stereo AAC (silence when the recording has no audio), 15–30 s, checked with ffprobe.
+App Store Connect sets the poster frame per preview (default: the frame at 5 s); `GET /api/video/frame` shows a frame
+of a generated preview to choose it. Only real app footage belongs in a preview.
 
 ## Local development
 

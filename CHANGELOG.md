@@ -12,6 +12,8 @@ entries left under `[Unreleased]` is rejected by `npm run check:release`.
 
 ### Added
 
+- App Store preview videos from screen recordings: trimmed, padded to 886×1920 (iPad 1200×1600), faded, with text
+  cards per language and stereo audio, checked with ffprobe; the export checklist now measures videos. (#20)
 - Project setup: package scaffold, OpenSpec, GitHub issue workflow, Claude Code skills `next-issue` and `release`, CI. (#1)
 - Spec catalogue for all App Store, Google Play and web media assets, locale catalogue for the 6 media languages, and validation of generated images against their spec. (#2)
 - Workspace folder (`.app-media/` or `--workspace`) with project settings, input uploads per locale checked by file content, and a local API that rejects requests from other websites. (#3)
