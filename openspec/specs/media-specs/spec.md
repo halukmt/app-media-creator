@@ -134,3 +134,11 @@ The catalogue SHALL contain `web.logo.monochrome`, `web.logo.inverse` and `web.l
 #### Scenario: Variant entry
 - **WHEN** `web.logo.mark` is looked up
 - **THEN** it requires a 1024×1024 PNG with an alpha channel
+
+### Requirement: iPad app preview sizes per generation
+The catalogue SHALL accept 1200×1600 and 900×1200 app previews for the iPad 12.9" (2nd generation) and only 900×1200
+for the iPad 9.7", as separate entries.
+
+#### Scenario: 12.9-inch preview at the larger size
+- **WHEN** a 1200×1600 app preview is checked against the iPad 12.9" (2nd gen) entry
+- **THEN** its dimensions are valid, while the same size is invalid for the iPad 9.7" entry

@@ -298,3 +298,11 @@
   Never run formatters the project does not use.
 - Deferred: max media height on PreviewCard for the 9:16 event details card (component-architect first).
 - Codex on PR #79: no findings.
+
+## #30 Review findings from #29 — done (PR #82)
+
+- iPad preview entry split: `apple.preview.ipad-12.9` (1200×1600, 900×1200) and `apple.preview.ipad-9.7` (900×1200).
+- `resolveLocales` validates entries before expanding "all"; code review found the same early "all" return in
+  `selectExportLocales` → fixed. Generators expand "all" to all catalogue locales instead of project locales → #81
+  (Backlog, P2/S).
+- Codex on PR #80: no findings.
