@@ -426,3 +426,16 @@
 - Codex P2 on PR #102: the creative settings save cleared the loss of the screenshot sets (same section). Taken right
   away (lost-data message). `SaveSource` = section + document; `withOutcome` / `lostSections` pure and tested; a no-op
   save returns the same array (code review: avoids an App re-render on every autosave).
+
+## #20 App Store preview video pipeline — done (PR #105)
+
+- `src/core/video/` (tools, probe, preview), `generateStorePreviews` + `renderPreviewFrame`, `src/server/video-routes.ts`
+  (`GET /api/video/tools`, `POST /api/generate/store-previews`, `GET /api/video/frame`). Checklist measures videos
+  with ffprobe (warning without it). `RegisterOptions.sourceFile` copies large files instead of holding bytes.
+- Decisions: pad never crop (bars in card colour), CBR 11 Mbps (`nal-hrd=cbr`), preset veryfast, cards keep their
+  length and the recording is cut, < 15 s is an error; poster frame is set in App Store Connect, the frame route helps
+  choose it; `-protocol_whitelist file` on workspace inputs (security hardening).
+- Code review 10 findings, all fixed; security review clean. CI now installs ffmpeg (apt); the 16 video tests ran in
+  CI in 45 s, locally ~170 s under load.
+- Heredocs with apostrophes failed again for the OpenSpec files → Write tool (keep doing that).
+- Next Ready: #21 (embed / loop videos, builds on this). #23 (Video UI) waits for #22 (amc-video skill).
