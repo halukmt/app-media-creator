@@ -408,3 +408,15 @@
   consider with #98.
 - One e2e flake: "header image preview at 768 px" failed once under load, green in two reruns. Watch.
 - No delta spec (`skip_specs`), no design-critic (no visible change), no security review (client only).
+
+## #98 Pending saves when leaving a section — done (PR #102)
+
+- Codex finding on PR #95. `src/web/lib/pending-saves.ts` (track / settled max 10 s / reportSaved / subscribe); the
+  autosave hook (`section` option, conflict on leave → `DroppedSaveError`, no reload), Logo and creative settings track
+  their unmount flush; first loads and the Export checklist wait for `settled()` (cancelled when the page is gone).
+- App shows lost edits in one mounted `role="alert"` (StatusAlert error / warning for a conflict, link button back,
+  Dismiss); stays until dismissed or a later save there works.
+- design-critic 5 (4 applied; message below the page heading needs a PageHeader slot), code review 7 (5 fixed).
+  New #101 (Backlog, P2 S): shared plain autosave hook for Logo and creative settings.
+- `src/web/lib` files imported by unit tests need `.js` in their own relative imports (tsconfig.test is nodenext).
+- E2E took 8.7 min locally under load; CI Playwright 6 min.
