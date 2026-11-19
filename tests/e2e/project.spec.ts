@@ -93,7 +93,10 @@ test.describe('The Project screen edits the workspace settings', () => {
   test('adds a blueprint environment, shows a field error for a reserved name and saves the fixed list', async ({ page, request }) => {
     await page.setViewportSize({ width: 375, height: 900 });
     await page.goto('/#/project');
-    await expect(page.getByRole('heading', { level: 3, name: 'Environment 1: PREVIEW' })).toBeVisible();
+    // A new project has no environments (#70); the first one added is suggested as PREVIEW.
+    await expect(page.getByText('No preview or test icons: only the production icons are generated.')).toBeVisible();
+    await page.getByRole('button', { name: 'Add environment' }).click();
+    await expect(page.getByRole('heading', { level: 3, name: 'Environment 1: PREVIEW' })).toBeFocused();
     await page.getByRole('button', { name: 'Add environment' }).click();
     const second = page.getByRole('region', { name: /^Environment 2:/ });
     await expect(page.getByRole('heading', { level: 3, name: 'Environment 2: DEV' })).toBeFocused();
@@ -126,6 +129,7 @@ test.describe('The Project screen edits the workspace settings', () => {
 
   test('shows an error at the label field for characters the icon font cannot draw', async ({ page }) => {
     await page.goto('/#/project');
+    await page.getByRole('button', { name: 'Add environment' }).click();
     const label = page.getByRole('region', { name: /^Environment 1:/ }).getByLabel('Label on the icon');
     await label.fill('ТЕСТ');
     await page.getByRole('button', { name: 'Save project' }).click();

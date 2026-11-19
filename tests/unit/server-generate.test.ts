@@ -1,14 +1,18 @@
 // conventions: RULE-TESTING-3301
 import { describe, expect, test } from 'vitest';
-import { saveInput } from '../../src/core/workspace/index.js';
+import { saveInput, saveProject } from '../../src/core/workspace/index.js';
 import { createApp } from '../../src/server/app.js';
 import { packageInfoFactory } from '../factories/package-info.js';
-import { svgBytes, workspaceFactory } from '../factories/workspace.js';
+import { projectInputFactory, svgBytes, workspaceFactory } from '../factories/workspace.js';
 
 const URL = 'http://localhost:4790/api/generate/web-icons';
 
-async function appFactory(withLogo: boolean) {
+async function appFactory(withLogo: boolean, environments: unknown[] = []) {
   const workspace = await workspaceFactory();
+  if (environments.length > 0) {
+    const saved = await saveProject(workspace, projectInputFactory({ environments }));
+    if (!saved.ok) throw new Error(saved.errors.join('; '));
+  }
   if (withLogo) await saveInput(workspace, 'en-US', { kind: 'logo', originalName: 'logo.svg', bytes: svgBytes() });
   return createApp({ webRoot: 'does-not-exist', packageInfo: packageInfoFactory(), workspace });
 }
@@ -21,10 +25,18 @@ describe('The generate API builds the web icons', () => {
     const response = await post(await appFactory(true), JSON.stringify({ background: '#0079dd' }));
     expect(response.status).toBe(201);
     const entries = (await response.json()) as { path: string; environment?: string }[];
-    // 8 production files plus the same set for the default preview environment.
+    // A new project has no environments: only the 8 production files (#70).
     expect(entries.filter((e) => !e.environment)).toHaveLength(8);
-    expect(entries.filter((e) => e.environment === 'preview')).toHaveLength(8);
+    expect(entries.filter((e) => e.environment)).toHaveLength(0);
     expect(entries[0]?.path).toBe('web/shared/favicons/favicon.ico');
+  });
+
+  test('returns the environment of every icon variant (#70)', async () => {
+    const preview = { id: 'preview', badge: 'PREVIEW', color: 'orange', style: 'badge' };
+    const response = await post(await appFactory(true, [preview]), JSON.stringify({ background: '#0079dd' }));
+    const entries = (await response.json()) as { path: string; environment?: string }[];
+    expect(entries.filter((e) => e.environment === 'preview')).toHaveLength(8);
+    expect(entries.filter((e) => e.environment === 'preview').every((e) => e.path.startsWith('web/preview/'))).toBe(true);
   });
 
   test('asks for a logo with 400 when none was uploaded', async () => {
@@ -66,7 +78,7 @@ describe('The generate API builds the App Store icons and offers the logo palett
     expect(response.status).toBe(201);
     const entries = (await response.json()) as { environment?: string }[];
     expect(entries.filter((e) => !e.environment)).toHaveLength(5);
-    expect(entries.filter((e) => e.environment === 'preview')).toHaveLength(5);
+    expect(entries.filter((e) => e.environment)).toHaveLength(0);
   });
 
   test('rejects a logo scale that is not a number and a missing logo', async () => {
@@ -92,8 +104,7 @@ describe('The generate API builds the Android icons', () => {
     expect(response.status).toBe(201);
     const entries = (await response.json()) as { environment?: string }[];
     expect(entries.filter((e) => !e.environment)).toHaveLength(22);
-    // The Play icon is a store asset without variants.
-    expect(entries.filter((e) => e.environment === 'preview')).toHaveLength(21);
+    expect(entries.filter((e) => e.environment)).toHaveLength(0);
   });
 
   test('asks for a logo with 400 when none was uploaded', async () => {
