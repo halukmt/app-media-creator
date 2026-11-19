@@ -157,3 +157,8 @@
 - Learnings: debounced autosave needs a flush before upload/generate/unmount; DaisyUI `btn` is nowrap (chips need
   `whitespace-normal`); DaisyUI card-side forces img height (use `h-auto!`); Windows rename EPERM under parallel reads.
 - Codex on PR #55: no findings. Remaining Ready: #10 (blocked by #9), #9 (P2), #34 (P2).
+
+## #57 Review finding from #56 — done (PR #58)
+
+- Codex on PR #56: failed save was swallowed. New `src/web/lib/save-queue.ts` (newest wins, failure keeps the edit,
+  flush waits for and fails with a running save); upload/generate stop on a failed flush.
