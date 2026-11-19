@@ -339,3 +339,10 @@
 - Two code-review rounds; root cause is the missing revision check on saves → #85, suggested P1 (Haluk to decide).
 - CI flake: "Install Chromium" failed with apt exit 100 → `gh run rerun --failed` was enough.
 - Codex on PR #86 led to this issue.
+
+## #89 Codex finding on #88: cleanup after a failed save — done (PR #90)
+
+- Failed flush before an AI apply cleans up in its own branch (busy, paused note, retries a waiting reload). E2E
+  counts apply requests (0) and checks that edits work; fails on old code.
+- Third lock fix in a row (#84, #87, #89) → #85 (revision check on saves) raised to P1 and Ready, before #16.
+- Codex on PR #88 led to this issue.
