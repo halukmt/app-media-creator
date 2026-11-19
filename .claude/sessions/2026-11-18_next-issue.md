@@ -138,3 +138,12 @@
 
 - Codex on PR #52: `feDropShadow` in the lower layer drew the bezel twice → shadow-only filter (blur SourceAlpha,
   offset, flood, composite). Lesson: for a "shadow layer" never use feDropShadow (it merges the source).
+
+## #12 Screenshot inputs per locale and device matrix — done (PR #55)
+
+- `specs/matrix.ts` (SCREENSHOT_MATRIX) drives `deviceOptions`; old project.json devices outside it are dropped on read.
+- `<workspace>/screenshots.json` (style + sets + known) via `readScreenshotSets` / `saveScreenshotSets`; lenient read,
+  `known` keeps removed screenshots out. `effectiveSet` = own set or source set (fallback input).
+- `generateScreenshotCards` renders everything first, caches identical cards, replaces all matrix devices per locale,
+  warns `too-few-screenshots`. API: GET/PUT /api/screenshots, POST /api/generate/screenshot-cards.
+- Codex on PR #54: no findings. Next: #14 Screenshots section UI (needs component-architect + daisyui).
