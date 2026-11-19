@@ -147,3 +147,13 @@
 - `generateScreenshotCards` renders everything first, caches identical cards, replaces all matrix devices per locale,
   warns `too-few-screenshots`. API: GET/PUT /api/screenshots, POST /api/generate/screenshot-cards.
 - Codex on PR #54: no findings. Next: #14 Screenshots section UI (needs component-architect + daisyui).
+
+## #14 Screenshots section UI — done (PR #56)
+
+- `ScreenshotsPage` with steps (StepsBar via SectionLayout), upload per language, purpose (cards / frame only), slot
+  editor with previews inside the slots, generate per language. New components: OptionGroup (LocaleSelector on it),
+  StepsBar, FileField, SlotEditor, PreviewCard, ProgressStatus, ToggleField.
+- Server: GET /api/inputs/file, POST /api/screenshots/preview, GET /api/screenshots/backgrounds; per-slot overrides.
+- Learnings: debounced autosave needs a flush before upload/generate/unmount; DaisyUI `btn` is nowrap (chips need
+  `whitespace-normal`); DaisyUI card-side forces img height (use `h-auto!`); Windows rename EPERM under parallel reads.
+- Codex on PR #55: no findings. Remaining Ready: #10 (blocked by #9), #9 (P2), #34 (P2).
