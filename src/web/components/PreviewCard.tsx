@@ -9,7 +9,8 @@ interface Props {
   title: string;
   /** Pixel size of the real asset, e.g. "1179 × 2556". */
   size: string;
-  status: CheckStatus;
+  /** Validation state; omitted while the preview is still loading. */
+  status?: CheckStatus;
   messages: readonly string[];
 }
 
@@ -21,7 +22,7 @@ export function PreviewCard({ media, title, size, status, messages }: Props) {
       <div className="card-body gap-1">
         <div className="flex items-start justify-between gap-2">
           <p className="font-medium">{title}</p>
-          <StatusBadge status={status} />
+          {status ? <StatusBadge status={status} /> : null}
         </div>
         <p className="text-sm text-base-content/70">{size}</p>
         {messages.length > 0 ? (

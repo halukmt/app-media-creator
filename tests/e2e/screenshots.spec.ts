@@ -63,7 +63,7 @@ test.describe('The Screenshots section', () => {
     await expect(page.getByText(/files generated/)).toBeVisible({ timeout: 60_000 });
 
     // Export: download the ZIP for both languages.
-    await page.getByRole('link', { name: 'Go to Export' }).click();
+    await page.getByRole('link', { name: 'Open Export section' }).click();
     await expect(page.getByRole('heading', { level: 1, name: 'Export' })).toBeVisible();
     await page.getByRole('button', { name: 'Download ZIP' }).click();
     const downloading = page.waitForEvent('download');

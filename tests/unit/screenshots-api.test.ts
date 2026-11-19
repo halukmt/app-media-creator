@@ -1,7 +1,10 @@
 // conventions: RULE-TESTING-3301
+import { rmSync } from 'node:fs';
+import path from 'node:path';
 import sharp from 'sharp';
 import { describe, expect, test } from 'vitest';
-import { renderCardPreview } from '../../src/core/generators/screenshot-cards.js';
+import { readManifest } from '../../src/core/export/index.js';
+import { generateScreenshotCards, renderCardPreview } from '../../src/core/generators/screenshot-cards.js';
 import { readScreenshotSets, saveInput, saveProject, saveScreenshotSets, type Workspace } from '../../src/core/workspace/index.js';
 import { createApp } from '../../src/server/app.js';
 import { packageInfoFactory } from '../factories/package-info.js';
@@ -96,4 +99,26 @@ describe('Background choices come from the server', () => {
     const body = (await (await appFor(workspace).request('/api/screenshots/backgrounds')).json()) as { palette: { id: string }[] };
     expect(body.palette.length).toBeGreaterThan(0);
   });
+});
+
+describe('Generation per language keeps the outputs tidy', () => {
+  test('removes the old cards of a language that has no screenshots any more', async () => {
+    const { workspace, input } = await workspaceWithShot();
+    const turkish = await saveInput(workspace, 'de-DE', { kind: 'screenshot', locale: 'tr-TR', originalName: 'tr.png', bytes: await appScreenshot(118, 256) });
+    const project = await saveProject(workspace, { ...projectInputFactory(), sourceLocale: 'de-DE', locales: ['de-DE', 'tr-TR'], targets: { apple: { enabled: true, devices: ['apple.screenshot.iphone-6.3'] }, google: { enabled: false, devices: [] }, web: { enabled: true, devices: [] } } });
+    expect(project.ok).toBe(true);
+    await generateScreenshotCards(workspace);
+    rmSync(path.join(workspace.root, input));
+    const result = await generateScreenshotCards(workspace, { locales: 'de-DE' });
+    expect(result.skipped).toEqual(['de-DE']);
+    expect((await readManifest(workspace)).entries.map((e) => e.path)).toEqual([`apple/tr-TR/iphone-6.3/01-tr.png`]);
+    expect(turkish.path).toContain('tr-TR');
+  }, 60_000);
+
+  test('says in the preview when a screenshot is beyond the store maximum', async () => {
+    const { workspace } = await workspaceWithShot();
+    for (let i = 2; i <= 9; i += 1) await saveInput(workspace, 'de-DE', { kind: 'screenshot', locale: 'de-DE', originalName: `s${i}.png`, bytes: await appScreenshot(118, 256) });
+    const preview = await renderCardPreview(workspace, { locale: 'de-DE', device: 'google.screenshot.phone', index: 8, width: 120 });
+    expect(preview.warnings.map((w) => w.code)).toContain('not-exported');
+  }, 60_000);
 });

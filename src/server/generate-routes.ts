@@ -119,8 +119,9 @@ export function generateRoutes(workspace: Workspace): Hono {
     let palette: BackgroundPreset[] = [];
     try {
       palette = backgroundsFromPalette(await logoPalette(await loadNewestLogo(workspace)));
-    } catch (error) {
-      if (!(error instanceof GeneratorError)) throw error;
+    } catch {
+      // No logo, or a logo that cannot be read: the presets alone are still a full choice.
+      palette = [];
     }
     return c.json({ presets: BACKGROUND_PRESETS, palette });
   });

@@ -97,11 +97,16 @@ export interface CardPreviewRequest {
   width?: number;
 }
 
+export interface PreviewWarning {
+  code: CardWarningCode | 'not-exported';
+  message: string;
+}
+
 export interface CardPreview {
   png: Buffer;
   width: number;
   height: number;
-  warnings: { code: CardWarningCode; message: string }[];
+  warnings: PreviewWarning[];
   fallbackInput: boolean;
 }
 
@@ -134,7 +139,12 @@ export async function renderCardPreview(workspace: Workspace, request: CardPrevi
     // The text share limit is relative, so it applies unchanged to the smaller preview.
     renderScreenshotCard({ ...full, width, height }),
   );
-  return { png: card.png, width, height, warnings: card.warnings, fallbackInput: entry.fallbackInput };
+  // The store takes only the first maxCount screenshots; say so instead of showing a card that is never exported.
+  const warnings: PreviewWarning[] = [...card.warnings];
+  if (spec.maxCount !== undefined && request.index >= spec.maxCount) {
+    warnings.push({ code: 'not-exported', message: `${spec.name} takes only the first ${spec.maxCount} screenshots; this one is not exported` });
+  }
+  return { png: card.png, width, height, warnings, fallbackInput: entry.fallbackInput };
 }
 
 /**
@@ -179,7 +189,6 @@ export async function generateScreenshotCards(workspace: Workspace, options: Scr
     }
     for (const specId of devices) {
       const spec = getSpec(specId);
-      const defaults = cardDefaultsForSpec(spec);
       const used = entries.slice(0, spec.maxCount ?? entries.length);
       if (spec.minCount !== undefined && used.length < spec.minCount) {
         result.warnings.push({
@@ -215,7 +224,8 @@ export async function generateScreenshotCards(workspace: Workspace, options: Scr
   }
 
   const allFiles = [...perLocale.values()].flat();
-  if (allFiles.length === 0) throw new GeneratorError(`Upload screenshots for ${project.sourceLocale} first`);
+  // Only a project without any screenshot is an error; languages without one are skipped and still cleaned up below.
+  if (screenshots.length === 0) throw new GeneratorError(`Upload screenshots for ${project.sourceLocale} first`);
   await withContext('Screenshot cards', () => assertValidOutputs(allFiles));
 
   for (const [locale, files] of perLocale) {

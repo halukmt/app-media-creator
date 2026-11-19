@@ -1,3 +1,4 @@
+import { useId } from 'react';
 import { en } from '../i18n/en';
 
 export interface Step {
@@ -20,6 +21,7 @@ interface Props {
  * current one is marked for screen readers, done and current steps are coloured.
  */
 export function StepsBar({ steps, current, onSelect, unavailableHint }: Props) {
+  const hintId = useId();
   const currentIndex = steps.findIndex((step) => step.id === current);
   return (
     <nav aria-label={en.steps.label} className="flex flex-col gap-1">
@@ -31,6 +33,7 @@ export function StepsBar({ steps, current, onSelect, unavailableHint }: Props) {
               className="btn btn-ghost btn-sm min-h-11 h-auto whitespace-normal px-1 font-medium"
               aria-current={step.id === current ? 'step' : undefined}
               aria-disabled={step.disabled ? true : undefined}
+              aria-describedby={step.disabled && unavailableHint ? hintId : undefined}
               onClick={() => {
                 if (!step.disabled) onSelect(step.id);
               }}
@@ -40,7 +43,9 @@ export function StepsBar({ steps, current, onSelect, unavailableHint }: Props) {
           </li>
         ))}
       </ol>
-      {unavailableHint && steps.some((step) => step.disabled) ? <p className="text-sm text-base-content/70">{unavailableHint}</p> : null}
+      {unavailableHint && steps.some((step) => step.disabled) ? <p id={hintId} className="text-sm text-base-content/70">
+          {unavailableHint}
+        </p> : null}
     </nav>
   );
 }

@@ -40,7 +40,7 @@ interface Props {
 // Unselected: light outline. Selected: active fill, strong border and a check mark, so the state does not rely on
 // colour alone. The focus ring uses the text colour of the theme, visible on both states.
 const CHIP =
-  'group btn btn-outline min-h-11 h-auto py-2 border-base-300 font-medium ' +
+  'group btn btn-outline min-h-11 h-auto max-w-full whitespace-normal text-left py-2 border-base-300 font-medium ' +
   'has-[:checked]:btn-active has-[:checked]:border-base-content ' +
   'has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-base-content ' +
   'has-[:disabled]:opacity-60 has-[:disabled]:cursor-not-allowed';
