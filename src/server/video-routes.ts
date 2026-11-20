@@ -2,7 +2,7 @@ import { Hono } from 'hono';
 import { generateStorePreviews, renderPreviewFrame, type StorePreviewOptions } from '../core/generators/store-previews.js';
 import { generateEmbedVideos, generateLoopVideos, type EmbedVideoOptions, type LoopVideoOptions } from '../core/generators/video-assets.js';
 import { checkVideoTools } from '../core/video/index.js';
-import type { Workspace } from '../core/workspace/index.js';
+import { readVideoSettings, saveVideoSettings, type Workspace } from '../core/workspace/index.js';
 import { generatorError, pick } from './generate-routes.js';
 import { readOptionalJsonObject } from './json-body.js';
 
@@ -12,6 +12,19 @@ export function videoRoutes(workspace: Workspace): Hono {
 
   // Whether ffmpeg and ffprobe can be started, so the UI can explain what to install before anything runs.
   api.get('/video/tools', async (c) => c.json(await checkVideoTools()));
+
+  // Settings of the Video section (#23).
+  api.get('/video/settings', async (c) => c.json(await readVideoSettings(workspace)));
+  api.put('/video/settings', async (c) => {
+    let body: unknown;
+    try {
+      body = await c.req.json();
+    } catch {
+      return c.json({ errors: ['The request body must be JSON'] }, 400);
+    }
+    const result = await saveVideoSettings(workspace, body);
+    return result.ok ? c.json(result.settings) : c.json({ errors: result.errors }, 400);
+  });
 
   api.post('/generate/store-previews', async (c) => {
     const parsed = await readOptionalJsonObject(c);

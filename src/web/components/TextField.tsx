@@ -23,10 +23,12 @@ interface Props {
   messages?: readonly { level: 'error' | 'warning'; text: string }[];
   /** Read-only while an operation runs; stays focusable (`aria-disabled`). */
   disabled?: boolean;
+  /** Keyboard on touch devices, e.g. `decimal` for seconds; the input stays `type="text"` (no scroll-wheel changes). */
+  inputMode?: 'decimal' | 'numeric' | 'text';
 }
 
 /** A labelled text input or textarea with hint, counter, error and check messages, wired for screen readers. */
-export function TextField({ label, value, onChange, hint, error, multiline = false, rows = 4, required, maxLength, lang, counter, messages = [], disabled = false }: Props) {
+export function TextField({ label, value, onChange, hint, error, multiline = false, rows = 4, required, maxLength, lang, counter, messages = [], disabled = false, inputMode }: Props) {
   const id = useId();
   const hintId = `${id}-hint`;
   const counterId = `${id}-counter`;
@@ -45,6 +47,7 @@ export function TextField({ label, value, onChange, hint, error, multiline = fal
     'aria-disabled': disabled || undefined,
     'aria-invalid': invalid || undefined,
     'aria-describedby': describedBy,
+    ...(inputMode && !multiline ? { inputMode } : {}),
   };
 
   return (

@@ -12,6 +12,9 @@ entries left under `[Unreleased]` is rejected by `npm run check:release`.
 
 ### Added
 
+- Video section: upload a screen recording per language, choose App Store preview, device video or header and search
+  loop, set trim, text cards and formats, make the videos for the selected languages and watch them with their
+  validation state. (#23)
 - Device videos for web and social (9:16, 16:9, 1:1) with a line of text per language, and seamless, muted looping
   App Store header and search videos with the recording playing in the key-art device. (#21)
 - App Store preview videos from screen recordings: trimmed, padded to 886×1920 (iPad 1200×1600), faded, with text

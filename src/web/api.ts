@@ -3,6 +3,7 @@
  * because that code depends on Node modules.
  */
 import type { CheckStatus } from './lib/export';
+import type { VideoFormat, VideoPurpose } from './lib/video';
 import type { CreativePurpose } from './lib/creative';
 import type { TargetId } from './lib/sections';
 
@@ -56,6 +57,8 @@ export interface Catalogue {
   maxPhrase: number;
   /** Store text fields with their limits (paste order per store). */
   storeTexts: StoreTextSpec[];
+  /** The videos the tool writes: render size and allowed length, from the catalogue. */
+  videos: { specId: string; name: string; size: { width: number; height: number }; minSeconds: number; maxSeconds: number }[];
 }
 
 export type StoreTextField =
@@ -271,6 +274,84 @@ export function fetchInputs(): Promise<StoredInput[]> {
 /** URL of an uploaded screenshot for thumbnails. */
 export function inputFileUrl(inputPath: string): string {
   return `/api/inputs/file?path=${encodeURIComponent(inputPath)}`;
+}
+
+/** Uploads a screen recording (MP4, MOV, M4V) for one media locale. */
+export function uploadVideo(file: File, locale: string): Promise<StoredInput> {
+  const form = new FormData();
+  form.append('file', file);
+  form.append('locale', locale);
+  return request<StoredInput>('/api/inputs/video', { method: 'POST', body: form });
+}
+
+export type { VideoFormat, VideoPurpose };
+
+/** Settings of the Video section, as `/api/video/settings` stores them. */
+export interface VideoSettings {
+  version: 1;
+  purpose: VideoPurpose;
+  trim: { start?: number; end?: number };
+  intro: Partial<Record<string, string>>;
+  outro: Partial<Record<string, string>>;
+  cardSeconds: number;
+  formats: VideoFormat[];
+  frame: string;
+  texts: Partial<Record<string, string>>;
+}
+
+export function fetchVideoSettings(): Promise<VideoSettings> {
+  return request<VideoSettings>('/api/video/settings');
+}
+
+export function saveVideoSettings(settings: VideoSettings): Promise<VideoSettings> {
+  return request<VideoSettings>('/api/video/settings', {
+    method: 'PUT',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(settings),
+  });
+}
+
+/** Whether ffmpeg and ffprobe can be started on the machine running the tool. */
+export function fetchVideoTools(): Promise<{ ffmpeg: boolean; ffprobe: boolean }> {
+  return request<{ ffmpeg: boolean; ffprobe: boolean }>('/api/video/tools');
+}
+
+export interface VideoGenerationResult {
+  entries: { path: string; specId: string; locale?: string }[];
+  warnings: { path: string; message: string }[];
+  skipped: string[];
+}
+
+const VIDEO_ROUTES: Record<VideoPurpose, string> = {
+  'store-preview': '/api/generate/store-previews',
+  'device-video': '/api/generate/embed-videos',
+  loop: '/api/generate/loop-videos',
+};
+
+/** Generates the videos of one purpose for the given locales with the saved settings. */
+export function generateVideos(purpose: VideoPurpose, locales: readonly string[], settings: VideoSettings): Promise<VideoGenerationResult> {
+  const trim = settings.trim.start !== undefined || settings.trim.end !== undefined ? { trim: settings.trim } : {};
+  const body =
+    purpose === 'store-preview'
+      ? { locales, ...trim, intro: settings.intro, outro: settings.outro, cardSeconds: settings.cardSeconds }
+      : purpose === 'device-video'
+        ? { locales, ...trim, formats: settings.formats, frame: settings.frame, texts: settings.texts }
+        : { locales, ...trim };
+  return request<VideoGenerationResult>(VIDEO_ROUTES[purpose], {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+}
+
+/** The generated files (manifest entries). */
+export function fetchOutputs(): Promise<{ path: string; specId: string; locale?: string; fallbackInput: boolean }[]> {
+  return request<{ path: string; specId: string; locale?: string; fallbackInput: boolean }[]>('/api/output');
+}
+
+/** URL of a generated MP4 for a `<video>` preview; `version` changes after a new render. */
+export function outputVideoUrl(outputPath: string, version: number): string {
+  return `/api/output/file?path=${encodeURIComponent(outputPath)}&v=${version}`;
 }
 
 export function uploadScreenshot(file: File, locale: string): Promise<StoredInput> {

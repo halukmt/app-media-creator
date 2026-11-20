@@ -14,15 +14,16 @@ export default defineConfig({
     baseURL: `http://127.0.0.1:${port}`,
     trace: 'retain-on-failure',
   },
-  // project.spec, export.spec, screenshots.spec, logo.spec and store-texts.spec change the shared workspace: they run
-  // one after another, everything else in parallel.
+  // project.spec, export.spec, screenshots.spec, logo.spec, store-texts.spec and video.spec change the shared workspace:
+  // they run one after another, everything else in parallel.
   projects: [
-    { name: 'chromium', use: { ...devices['Desktop Chrome'] }, testIgnore: /(project|export|screenshots|logo|store-texts)\.spec\.ts/ },
+    { name: 'chromium', use: { ...devices['Desktop Chrome'] }, testIgnore: /(project|export|screenshots|logo|store-texts|video)\.spec\.ts/ },
     { name: 'settings', use: { ...devices['Desktop Chrome'] }, testMatch: /project\.spec\.ts/ },
     { name: 'export', use: { ...devices['Desktop Chrome'] }, testMatch: /export\.spec\.ts/, dependencies: ['settings'] },
     { name: 'screenshots', use: { ...devices['Desktop Chrome'] }, testMatch: /screenshots\.spec\.ts/, dependencies: ['export'] },
     { name: 'logo', use: { ...devices['Desktop Chrome'] }, testMatch: /logo\.spec\.ts/, dependencies: ['screenshots'] },
     { name: 'store-texts', use: { ...devices['Desktop Chrome'] }, testMatch: /store-texts\.spec\.ts/, dependencies: ['logo'] },
+    { name: 'video', use: { ...devices['Desktop Chrome'] }, testMatch: /video\.spec\.ts/, dependencies: ['store-texts'] },
   ],
   webServer: {
     command: `npm run build && node dist/cli/index.js --port ${port} --no-open --workspace ${workspace}`,
