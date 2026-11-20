@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import {
   fetchBackgrounds,
   fetchChecklist,
@@ -27,13 +27,13 @@ import { SectionEmptyState } from '../components/SectionEmptyState';
 import { SaveStatus } from '../components/SaveStatus';
 import { StatusAlert } from '../components/StatusAlert';
 import { LocaleTextFields } from '../components/LocaleTextFields';
+import { useAutosave } from '../hooks/useAutosave';
+import { useLoadAfterSaves } from '../hooks/useLoadAfterSaves';
 import { en } from '../i18n/en';
 import { SectionLayout } from '../layouts/SectionLayout';
 import type { CheckStatus } from '../lib/export';
 import { projectLocaleOptions } from '../lib/locale-selection';
-import { pendingSaves } from '../lib/pending-saves';
 import { groupOutputs, groupStatus, MAX_TAGLINE } from '../lib/logo';
-import { createSaveQueue } from '../lib/save-queue';
 import { backgroundChoices, backgroundKey, swatchCss } from '../lib/screenshots';
 import { sectionHref, type TargetId } from '../lib/sections';
 
@@ -50,7 +50,6 @@ type Message = { tone: 'success' | 'warning' | 'error'; text: string; details?: 
 
 const PACKS: readonly LogoPack[] = ['app-store', 'google-play', 'web', 'social'];
 const PACK_TARGET: Record<LogoPack, TargetId> = { 'app-store': 'apple', 'google-play': 'google', web: 'web', social: 'web' };
-const SAVE_DELAY = 600;
 const PREVIEW_WIDTH = 240;
 /** Id of the production icon set in the icon set filter (environment ids never equal it). */
 const PRODUCTION = 'production';
@@ -67,14 +66,12 @@ export function LogoPage({ project, catalogue, selection, onSelectionChange, foc
   const [loadError, setLoadError] = useState<string[] | null>(null);
   const [uploading, setUploading] = useState(false);
   const [uploadMessage, setUploadMessage] = useState<Message>(null);
-  const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved' | 'failed'>('idle');
   const [outputs, setOutputs] = useState<LogoOutput[]>([]);
   const [statuses, setStatuses] = useState<Map<string, { status: CheckStatus; messages: string[] }>>(new Map());
   const [outputVersion, setOutputVersion] = useState(0);
   const [generateState, setGenerateState] = useState<{ pack: string; done: number; total: number } | null>(null);
   const [generateMessage, setGenerateMessage] = useState<Message>(null);
   const [iconSet, setIconSet] = useState(PRODUCTION);
-  const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const localeOptions = projectLocaleOptions(catalogue.locales, project.locales);
   const localeName = (id: string) => catalogue.locales.find((locale) => locale.id === id)?.name ?? id;
@@ -98,14 +95,8 @@ export function LogoPage({ project, catalogue, selection, onSelectionChange, foc
       setLoadError(messagesOf(error));
     }
   }, []);
-  useEffect(() => {
-    // A save started when this section was left a moment ago must land first (#98).
-    let active = true;
-    void pendingSaves.settled().then(() => (active ? reload() : undefined));
-    return () => {
-      active = false;
-    };
-  }, [reload]);
+  // A save started when this section was left a moment ago must land first (#98).
+  useLoadAfterSaves(reload);
 
   // Validation state per generated file, from the export checklist of the selected languages.
   useEffect(() => {
@@ -124,32 +115,12 @@ export function LogoPage({ project, catalogue, selection, onSelectionChange, foc
     return () => controller.abort();
   }, [outputs, selection]);
 
-  // Settings are saved shortly after each change; generate and leaving the page send pending changes first.
-  const [queue] = useState(() => ({ current: createSaveQueue<LogoSettings>(saveLogoSettings, () => {
-      setSaveState('saved');
-      pendingSaves.reportSaved(LOGO_SETTINGS);
-    }) }));
-  const flushSave = useCallback(async () => {
-    if (saveTimer.current) {
-      clearTimeout(saveTimer.current);
-      saveTimer.current = null;
-    }
-    try {
-      await queue.current.flush();
-    } catch (error) {
-      setSaveState('failed');
-      throw error;
-    }
-  }, []);
-  // Leaving the section sends pending changes; they are tracked, so other pages wait and a failure is reported (#98).
-  useEffect(() => () => pendingSaves.track(LOGO_SETTINGS, flushSave()), [flushSave]);
+  // Settings are saved shortly after each change; generate and leaving the page send pending changes first (#101).
+  const { saveState, schedule, flush: flushSave } = useAutosave<LogoSettings>({ source: LOGO_SETTINGS, save: saveLogoSettings });
 
   function update(next: LogoSettings) {
     setSettings(next);
-    queue.current.schedule(next);
-    setSaveState('saving');
-    if (saveTimer.current) clearTimeout(saveTimer.current);
-    saveTimer.current = setTimeout(() => void flushSave().catch(() => undefined), SAVE_DELAY);
+    schedule(next);
   }
 
   async function upload(files: File[]) {

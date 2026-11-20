@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ApiError,
   applyJob,
@@ -43,6 +43,8 @@ import { SlotEditor, type SlotValues } from '../components/SlotEditor';
 import { StatusAlert } from '../components/StatusAlert';
 import { ToggleField } from '../components/ToggleField';
 import { useAiJob } from '../hooks/useAiJob';
+import { useAutosave } from '../hooks/useAutosave';
+import { useLoadAfterSaves } from '../hooks/useLoadAfterSaves';
 import { useRevisionAutosave } from '../hooks/useRevisionAutosave';
 import { en } from '../i18n/en';
 import { SectionLayout } from '../layouts/SectionLayout';
@@ -50,8 +52,6 @@ import { headlineLocales } from '../lib/ai-jobs';
 import { CREATIVE_PREVIEW_WIDTH, creativeLabelKey, isCreativePurpose, safeAreaPercent, safeAreaShares } from '../lib/creative';
 import type { CheckStatus } from '../lib/export';
 import { projectLocaleOptions, sourceLocaleFor } from '../lib/locale-selection';
-import { pendingSaves } from '../lib/pending-saves';
-import { createSaveQueue } from '../lib/save-queue';
 import { INHERIT, applyOverrides, backgroundChoices, backgroundKey, moveEntry, overrideIds, removeEntry, swatchCss, uploadName } from '../lib/screenshots';
 import { sectionHref } from '../lib/sections';
 
@@ -69,7 +69,6 @@ type Message = { tone: 'success' | 'warning' | 'error'; text: string; details?: 
 
 const LAYOUTS: readonly CardLayout[] = ['text-top', 'text-top-large', 'text-bottom'];
 const FRAME_KINDS = ['iphone', 'iphone-home', 'iphone-duo', 'ipad', 'android-phone', 'android-tablet'] as const;
-const SAVE_DELAY = 600;
 /** The header image settings: a document of their own next to the screenshot sets (#103). */
 const CREATIVE_SETTINGS = { section: 'screenshots', document: 'creative-settings' } as const;
 
@@ -91,11 +90,9 @@ export function ScreenshotsPage({ project, catalogue, selection, onSelectionChan
   const [frameKind, setFrameKind] = useState<string>('iphone');
   const [shadow, setShadow] = useState(true);
   const [creative, setCreative] = useState<CreativeSettings | null>(null);
-  const [creativeSaveState, setCreativeSaveState] = useState<'idle' | 'saving' | 'saved' | 'failed'>('idle');
   const [creativePreviews, setCreativePreviews] = useState<Partial<Record<string, CreativePreviewResult | 'failed'>>>({});
   const [creativeLoadFailed, setCreativeLoadFailed] = useState(false);
   const [showSafeArea, setShowSafeArea] = useState(true);
-  const creativeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const localeOptions = projectLocaleOptions(catalogue.locales, project.locales);
   const editOptions = localeOptions.filter((locale) => selection.includes(locale.id));
@@ -136,13 +133,9 @@ export function ScreenshotsPage({ project, catalogue, selection, onSelectionChan
     fetchBackgrounds()
       .then(setBackgrounds)
       .catch(() => setBackgrounds({ presets: [], palette: [] }));
-    // A save started when this section was left a moment ago must land first (#98).
-    let active = true;
-    void pendingSaves.settled().then(() => (active ? loadCreative() : undefined));
-    return () => {
-      active = false;
-    };
-  }, [loadCreative]);
+  }, []);
+  // A save started when this section was left a moment ago must land first (#98).
+  useLoadAfterSaves(loadCreative);
 
   // Devices the project picked for the stores that are enabled.
   const devices = useMemo(() => {
@@ -167,34 +160,20 @@ export function ScreenshotsPage({ project, catalogue, selection, onSelectionChan
   const shownEntries = usesFallback ? (sets?.sets[project.sourceLocale] ?? []) : ownEntries;
   const hasUploads = inputs.length > 0;
 
-  // Header and search image settings: same autosave as the sets, with their own queue.
-  const creativeQueue = useRef(
-    createSaveQueue<CreativeSettings>(saveCreativeSettings, () => {
-      setCreativeSaveState('saved');
-      pendingSaves.reportSaved(CREATIVE_SETTINGS);
-      setPreviewVersion((v) => v + 1);
-    }),
-  );
-  const flushCreative = useCallback(async (): Promise<void> => {
-    if (creativeTimer.current) {
-      clearTimeout(creativeTimer.current);
-      creativeTimer.current = null;
-    }
-    try {
-      await creativeQueue.current.flush();
-    } catch (error) {
-      setCreativeSaveState('failed');
-      throw error;
-    }
-  }, []);
+  // Header and search image settings: the shared autosave with their own queue (#101).
+  const {
+    saveState: creativeSaveState,
+    flush: flushCreative,
+    schedule: scheduleCreative,
+  } = useAutosave<CreativeSettings>({
+    source: CREATIVE_SETTINGS,
+    save: saveCreativeSettings,
+    onSaved: () => setPreviewVersion((v) => v + 1),
+  });
   function updateCreative(next: CreativeSettings) {
     setCreative(next);
-    creativeQueue.current.schedule(next);
-    setCreativeSaveState('saving');
-    if (creativeTimer.current) clearTimeout(creativeTimer.current);
-    creativeTimer.current = setTimeout(() => void flushCreative().catch(() => undefined), SAVE_DELAY);
+    scheduleCreative(next);
   }
-  useEffect(() => () => pendingSaves.track(CREATIVE_SETTINGS, flushCreative()), [flushCreative]);
 
   function updateEntries(entries: ScreenshotEntry[]): boolean {
     if (!sets) return false;

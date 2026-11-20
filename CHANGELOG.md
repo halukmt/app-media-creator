@@ -40,6 +40,8 @@ entries left under `[Unreleased]` is rejected by `npm run check:release`.
 
 ### Changed
 
+- Logo settings, header image settings, screenshot sets and store texts share one autosave core that saves pending
+  edits when leaving a section and waits for them before loading; nothing visible changes. (#101)
 - The Screenshots and Store texts sections share one hook for following AI jobs and one for the revision-checked
   autosave with its edit lock, so fixes land in one place; nothing visible changes. (#96)
 - New projects start without a preview environment, so only the production icons are generated until you add one on the Project screen. (#70)
