@@ -463,3 +463,16 @@
   and `useLoadAfterSaves`; `useRevisionAutosave`, Logo settings and creative settings build on them. Circular
   reload ↔ autosave dependency solved with a ref set in useLayoutEffect. Code review 7 (6 fixed; no hook unit tests
   without a DOM setup — e2e covers #84–#98). No visible change.
+
+## #23 Video section UI — done (PR #110)
+
+- `VideoPage` (Upload → Purpose → Options → Export), `video.json` settings via `useAutosave`, MP4 from
+  `/api/output/file` with byte ranges, `catalogue.videos`; reuse `useOutputStatuses`, `lib/frames.ts`, TextField
+  `inputMode`; generic `SectionPage` removed. CI e2e job installs ffmpeg.
+- Decisions: step 3 "Options" (no instant video preview); one generate request for all selected languages (keeps the
+  generators' encode-once); sizes / lengths only from the catalogue.
+- Reviews: architect (no new component), design-critic 8 (7 applied), code review 10 (9 fixed), security clean.
+- Mistakes: nested `<li>` (PreviewCard is the list item itself) caught by axe; node -e with template literals failed
+  twice again → Write / Edit tools only.
+- Under 100 % CPU a full local run timed out twice (render test, logo e2e); green alone and on rerun.
+- M5 is done except #22 (promo reels, Backlog: needs Haluk's decision on the engine).
