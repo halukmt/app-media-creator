@@ -87,6 +87,9 @@ jobs:
       - run: npm ci
       - name: Install Chromium
         run: npx playwright install --with-deps chromium
+      # The Video section test renders a real App Store preview.
+      - name: Install ffmpeg
+        run: sudo apt-get install -y --no-install-recommends ffmpeg
       - name: End-to-end tests
         run: npm run test:e2e
       - uses: actions/upload-artifact@v7

@@ -38,6 +38,29 @@ export interface Catalogue {
   maxPhrase: number;
   /** Store text fields with their limits, in catalogue order (paste order per store). */
   storeTexts: StoreTextSpec[];
+  /** The videos the tool writes: the size it renders (portrait for previews) and the allowed length. */
+  videos: { specId: string; name: string; size: { width: number; height: number }; minSeconds: number; maxSeconds: number }[];
+}
+
+/** Video entries the Video section writes (#20, #21). */
+const VIDEO_SPECS = [
+  'apple.preview.iphone',
+  'apple.preview.ipad',
+  'web.video.vertical',
+  'web.video.landscape',
+  'web.video.square',
+  'apple.creative.header-video',
+  'apple.creative.search-video',
+] as const;
+
+function videosOf(): Catalogue['videos'] {
+  return VIDEO_SPECS.map((id) => {
+    const spec = getSpec(id);
+    const rule = spec.dimensions;
+    const size = rule.kind === 'fixed' ? rule.sizes[0] : rule.kind === 'range' ? rule.min : undefined;
+    if (!size || !spec.video) throw new Error(`${id} has no video size or limits`);
+    return { specId: id, name: spec.name, size: { width: size.width, height: size.height }, minSeconds: spec.video.minSeconds, maxSeconds: spec.video.maxSeconds };
+  });
 }
 
 function devicesOf(target: Target): CatalogueDevice[] {
@@ -72,6 +95,7 @@ export function buildCatalogue(): Catalogue {
     }),
     maxPhrase: MAX_PHRASE,
     storeTexts: [...STORE_TEXT_SPECS],
+    videos: videosOf(),
   };
 }
 

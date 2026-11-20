@@ -11,8 +11,8 @@ import { ProjectPage } from './pages/ProjectPage';
 import { ExportPage } from './pages/ExportPage';
 import { LogoPage } from './pages/LogoPage';
 import { ScreenshotsPage } from './pages/ScreenshotsPage';
-import { SectionPage } from './pages/SectionPage';
 import { StoreTextsPage } from './pages/StoreTextsPage';
+import { VideoPage } from './pages/VideoPage';
 
 interface Health {
   version: string;
@@ -186,12 +186,10 @@ export function App() {
           focusHeading={navigated}
         />
       ) : null}
-      {load.kind === 'ready' && section !== 'project' && section !== 'export' && section !== 'screenshots' && section !== 'logo' && section !== 'store-texts' ? (
-        <SectionPage
-          key={section}
-          section={section}
+      {load.kind === 'ready' && section === 'video' ? (
+        <VideoPage
           project={load.project}
-          locales={load.catalogue.locales}
+          catalogue={load.catalogue}
           selection={selection}
           onSelectionChange={setSelection}
           focusHeading={navigated}

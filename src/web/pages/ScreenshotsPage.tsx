@@ -51,6 +51,7 @@ import { SectionLayout } from '../layouts/SectionLayout';
 import { headlineLocales } from '../lib/ai-jobs';
 import { CREATIVE_PREVIEW_WIDTH, creativeLabelKey, isCreativePurpose, safeAreaPercent, safeAreaShares } from '../lib/creative';
 import type { CheckStatus } from '../lib/export';
+import { FRAME_KINDS } from '../lib/frames';
 import { projectLocaleOptions, sourceLocaleFor } from '../lib/locale-selection';
 import { INHERIT, applyOverrides, backgroundChoices, backgroundKey, moveEntry, overrideIds, removeEntry, swatchCss, uploadName } from '../lib/screenshots';
 import { sectionHref } from '../lib/sections';
@@ -68,7 +69,6 @@ type Purpose = 'cards' | 'frame' | 'header' | 'feature';
 type Message = { tone: 'success' | 'warning' | 'error'; text: string; details?: string[] } | null;
 
 const LAYOUTS: readonly CardLayout[] = ['text-top', 'text-top-large', 'text-bottom'];
-const FRAME_KINDS = ['iphone', 'iphone-home', 'iphone-duo', 'ipad', 'android-phone', 'android-tablet'] as const;
 /** The header image settings: a document of their own next to the screenshot sets (#103). */
 const CREATIVE_SETTINGS = { section: 'screenshots', document: 'creative-settings' } as const;
 

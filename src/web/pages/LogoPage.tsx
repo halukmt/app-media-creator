@@ -1,7 +1,6 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useState } from 'react';
 import {
   fetchBackgrounds,
-  fetchChecklist,
   fetchInputs,
   fetchLogoOutputs,
   fetchLogoSettings,
@@ -29,9 +28,9 @@ import { StatusAlert } from '../components/StatusAlert';
 import { LocaleTextFields } from '../components/LocaleTextFields';
 import { useAutosave } from '../hooks/useAutosave';
 import { useLoadAfterSaves } from '../hooks/useLoadAfterSaves';
+import { useOutputStatuses } from '../hooks/useOutputStatuses';
 import { en } from '../i18n/en';
 import { SectionLayout } from '../layouts/SectionLayout';
-import type { CheckStatus } from '../lib/export';
 import { projectLocaleOptions } from '../lib/locale-selection';
 import { groupOutputs, groupStatus, MAX_TAGLINE } from '../lib/logo';
 import { backgroundChoices, backgroundKey, swatchCss } from '../lib/screenshots';
@@ -67,7 +66,6 @@ export function LogoPage({ project, catalogue, selection, onSelectionChange, foc
   const [uploading, setUploading] = useState(false);
   const [uploadMessage, setUploadMessage] = useState<Message>(null);
   const [outputs, setOutputs] = useState<LogoOutput[]>([]);
-  const [statuses, setStatuses] = useState<Map<string, { status: CheckStatus; messages: string[] }>>(new Map());
   const [outputVersion, setOutputVersion] = useState(0);
   const [generateState, setGenerateState] = useState<{ pack: string; done: number; total: number } | null>(null);
   const [generateMessage, setGenerateMessage] = useState<Message>(null);
@@ -99,21 +97,7 @@ export function LogoPage({ project, catalogue, selection, onSelectionChange, foc
   useLoadAfterSaves(reload);
 
   // Validation state per generated file, from the export checklist of the selected languages.
-  useEffect(() => {
-    if (outputs.length === 0 || selection.length === 0) return undefined;
-    const controller = new AbortController();
-    fetchChecklist(selection, controller.signal)
-      .then((checklist) => {
-        const map = new Map<string, { status: CheckStatus; messages: string[] }>();
-        for (const item of checklist.targets.flatMap((t) => t.items)) {
-          const messages = item.messages.filter((m) => m.level !== 'info').map((m) => m.text);
-          for (const file of item.files) map.set(file, { status: item.status, messages });
-        }
-        setStatuses(map);
-      })
-      .catch(() => undefined);
-    return () => controller.abort();
-  }, [outputs, selection]);
+  const statuses = useOutputStatuses(outputs, selection);
 
   // Settings are saved shortly after each change; generate and leaving the page send pending changes first (#101).
   const { saveState, schedule, flush: flushSave } = useAutosave<LogoSettings>({ source: LOGO_SETTINGS, save: saveLogoSettings });

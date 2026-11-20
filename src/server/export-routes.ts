@@ -1,5 +1,5 @@
 import { createReadStream } from 'node:fs';
-import { readFile } from 'node:fs/promises';
+import { readFile, stat } from 'node:fs/promises';
 import path from 'node:path';
 import { Readable } from 'node:stream';
 import { Hono } from 'hono';
@@ -8,7 +8,29 @@ import { ExportError, createExport, exportChecklist, locateOutputFile, readManif
 import { ProjectFileError, type Workspace } from '../core/workspace/index.js';
 import { readOptionalJsonObject } from './json-body.js';
 
-const PREVIEW_TYPES: Record<string, string> = { png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', webp: 'image/webp' };
+const PREVIEW_TYPES: Record<string, string> = { png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', webp: 'image/webp', mp4: 'video/mp4' };
+
+/**
+ * One byte range of a `Range: bytes=…` header (the only form browsers send for media): `start-end`, `start-` or
+ * `-suffix`. Undefined when the whole file is sent: no header, several ranges, or an invalid range such as `5-3`
+ * (RFC 9110 says to ignore it). 'invalid' (416) only for a range that cannot be satisfied: it starts after the file or
+ * asks for a suffix of 0 bytes.
+ */
+export function byteRange(header: string | undefined, size: number): { start: number; end: number } | 'invalid' | undefined {
+  const match = /^bytes=(\d*)-(\d*)$/.exec(header?.trim() ?? '');
+  if (!match) return undefined;
+  const [, first = '', last = ''] = match;
+  if (first === '' && last === '') return undefined;
+  if (first === '') {
+    const suffix = Number(last);
+    if (suffix === 0 || size === 0) return 'invalid';
+    return { start: Math.max(0, size - suffix), end: size - 1 };
+  }
+  const start = Number(first);
+  if (last !== '' && Number(last) < start) return undefined;
+  if (start >= size) return 'invalid';
+  return { start, end: last === '' ? size - 1 : Math.min(Number(last), size - 1) };
+}
 
 /** Parses `?locales=all` or `?locales=de-DE,tr-TR`; absent means all locales of the project. */
 function parseLocalesQuery(value: string | undefined): string[] | undefined {
@@ -41,8 +63,8 @@ export function exportRoutes(workspace: Workspace): Hono {
   // The generated files (manifest entries) for previews.
   api.get('/output', async (c) => c.json((await readManifest(workspace)).entries));
 
-  // Serves one generated raster image for a preview: only a path the manifest lists, that lies inside the output
-  // folder (no links), and that is PNG, JPEG or WebP. Headers keep the browser from running or sniffing it.
+  // Serves one generated raster image or MP4 video for a preview: only a path the manifest lists, that lies inside the
+  // output folder (no links), and that is PNG, JPEG, WebP or MP4. Headers keep the browser from running or sniffing it.
   api.get('/output/file', async (c) => {
     const requested = c.req.query('path') ?? '';
     const entry = (await readManifest(workspace)).entries.find((e) => e.path === requested);
@@ -50,6 +72,25 @@ export function exportRoutes(workspace: Workspace): Hono {
     if (!entry || !type) return c.json({ error: 'Not a generated image' }, 404);
     const file = path.join(workspace.outputDir, entry.path);
     if ((await locateOutputFile(file, workspace.outputDir)) !== 'own') return c.json({ error: 'Not a generated image' }, 404);
+    if (type === 'video/mp4') {
+      // Streamed (previews can be tens of megabytes), with byte ranges so a <video> can seek and Safari plays it.
+      const size = (await stat(file)).size;
+      const headers = {
+        'content-type': type,
+        'accept-ranges': 'bytes',
+        'x-content-type-options': 'nosniff',
+        'content-security-policy': "sandbox; default-src 'none'",
+        'cache-control': 'no-store',
+      };
+      const range = byteRange(c.req.header('range'), size);
+      if (range === 'invalid') return c.body(null, 416, { 'content-range': `bytes */${size}` });
+      if (!range) return c.body(Readable.toWeb(createReadStream(file)) as ReadableStream, 200, { ...headers, 'content-length': String(size) });
+      return c.body(Readable.toWeb(createReadStream(file, range)) as ReadableStream, 206, {
+        ...headers,
+        'content-range': `bytes ${range.start}-${range.end}/${size}`,
+        'content-length': String(range.end - range.start + 1),
+      });
+    }
     // ?width= gives a smaller copy for preview grids (never larger than the file).
     const width = Number(c.req.query('width'));
     const scaled = Number.isInteger(width) && width >= 16 && width <= 1024;

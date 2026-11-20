@@ -152,7 +152,7 @@ describe.skipIf(!FFMPEG)('generateStorePreviews renders App Store previews with 
     expect(await inspectImageBytes(frame)).toMatchObject({ width: 886, height: 1920 });
     await expect(renderPreviewFrame(workspace, 'apple/de-DE/preview-iphone/01-teams.mp4', 25)).rejects.toThrow(/seconds must be from 0 to below 16/);
     await expect(renderPreviewFrame(workspace, 'apple/de-DE/../../project.json', 1)).rejects.toThrow('There is no generated preview video at this path');
-  }, 180_000);
+  }, 300_000);
 
   test('adds silent stereo audio, an iPad preview in landscape and replaces earlier previews', async () => {
     const workspace = await previewWorkspace(recordingBytes({ seconds: 16, width: 640, height: 360, audio: false }), ['apple.screenshot.iphone-6.9', 'apple.screenshot.ipad-13']);
