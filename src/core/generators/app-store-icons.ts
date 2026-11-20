@@ -4,7 +4,7 @@ import { readProject, type Workspace } from '../workspace/workspace.js';
 import { ICON_SAFE_RADIUS, variantRenderer } from './environments.js';
 import { GeneratorError, loadNewestLogo } from './logo.js';
 import { assertValidOutputs, squareSize } from './outputs.js';
-import { isHexColor, renderLogoSquare, type HexColor } from './render.js';
+import { isHexColor, renderLogoSquare, type HexColor, type LogoSource } from './render.js';
 
 export interface AppStoreIconOptions {
   /** Background of the App Store icon and of the Icon Composer background layer. Default white. */
@@ -24,6 +24,19 @@ export const DEFAULT_LOGO_SCALE = 0.7;
 export function clampLogoScale(scale: number | undefined): number {
   if (scale === undefined || !Number.isFinite(scale)) return DEFAULT_LOGO_SCALE;
   return Math.min(MAX_LOGO_SCALE, Math.max(MIN_LOGO_SCALE, scale));
+}
+
+/**
+ * The three iOS appearances of an app icon: light (the logo on the background, opaque), dark (the logo on transparency)
+ * and tinted (the logo in grey tones on transparency). Shared by the App Store and the Expo pack.
+ */
+export async function renderIosAppearances(logo: LogoSource, size: number, logoBox: number, background: HexColor): Promise<{ light: Buffer; dark: Buffer; tinted: Buffer }> {
+  const [light, dark, tinted] = await Promise.all([
+    renderLogoSquare(logo, { size, logoBox, background }),
+    renderLogoSquare(logo, { size, logoBox }),
+    renderLogoSquare(logo, { size, logoBox, grayscale: true }),
+  ]);
+  return { light, dark, tinted };
 }
 
 async function solid(size: number, background: HexColor): Promise<Buffer> {
@@ -51,12 +64,7 @@ export async function generateAppStoreIcons(workspace: Workspace, options: AppSt
   const logoBox = Math.round(size * scale);
 
   // The dark appearance and the foreground layer are the same render: the logo on transparency.
-  const [icon, onTransparent, tinted, layerBackground] = await Promise.all([
-    renderLogoSquare(logo, { size, logoBox, background }),
-    renderLogoSquare(logo, { size, logoBox }),
-    renderLogoSquare(logo, { size, logoBox, grayscale: true }),
-    solid(size, background),
-  ]);
+  const [{ light: icon, dark: onTransparent, tinted }, layerBackground] = await Promise.all([renderIosAppearances(logo, size, logoBox, background), solid(size, background)]);
 
   const files: RegisterOptions[] = [
     { specId: 'apple.icon', name: 'app-icon', extension: 'png', order: 1, bytes: icon },

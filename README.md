@@ -10,7 +10,7 @@ Turn a **logo, screenshots and a video** into every media asset your app needs f
 
 | Input | Output |
 |---|---|
-| **Logo** | App Store icon 1024 (+ dark / tinted, layer-ready files for Icon Composer), Google Play icon 512 and adaptive icon layers with mipmaps, favicon set and `site.webmanifest`, Open Graph / X / WhatsApp previews, social profile and banner sizes, monochrome and inverse variants, and labelled icon variants for preview and test installs ([docs](docs/icon-variants.md)) |
+| **Logo** | App Store icon 1024 (+ dark / tinted, layer-ready files for Icon Composer), Google Play icon 512 and adaptive icon layers with mipmaps, favicon set and `site.webmanifest`, Open Graph / X / WhatsApp previews, social profile and banner sizes, monochrome and inverse variants, labelled icon variants for preview and test installs ([docs](docs/icon-variants.md)), and Expo / React Native icons with their `app.json` lines ([docs](docs/expo-icons.md)) |
 | **Screenshots** | Store screenshots with headline card, background and device frame (3 layouts) — or frame-only images for your website; all iPhone (incl. iPhone Duo), iPad and Android phone / tablet sizes; App Store product page header and search result assets; Google Play feature graphic |
 | **Video, URL or repo** | App Store app previews (886×1920, 15–30 s, spec-checked), looping header / search videos, promo reels for Google Play, web and social, or your video embedded in a styled background |
 | **AI copy (optional)** | Screenshot headlines that tell a story, and store texts (name, subtitle, description, keywords …) ready to paste |

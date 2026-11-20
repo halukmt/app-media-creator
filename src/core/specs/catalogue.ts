@@ -1,10 +1,11 @@
 import { APPLE_SPECS } from './apple.js';
+import { EXPO_SPECS } from './expo.js';
 import { GOOGLE_SPECS } from './google.js';
 import type { AssetGroup, SpecEntry, Target } from './types.js';
 import { WEB_SPECS } from './web.js';
 
-/** Every spec entry of every target, in the order Apple, Google Play, web. */
-export const SPECS: readonly SpecEntry[] = Object.freeze([...APPLE_SPECS, ...GOOGLE_SPECS, ...WEB_SPECS]);
+/** Every spec entry of every target, in the order Apple, Google Play, web, then the Expo icons of both stores. */
+export const SPECS: readonly SpecEntry[] = Object.freeze([...APPLE_SPECS, ...GOOGLE_SPECS, ...WEB_SPECS, ...EXPO_SPECS]);
 
 const BY_ID = new Map(SPECS.map((entry) => [entry.id, entry]));
 

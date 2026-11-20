@@ -25,7 +25,7 @@ const ADAPTIVE_SAFE_RADIUS = 33 / 108;
 /** Largest box any Android render needs (the Play icon); the logo is rasterized once at this size. */
 const RASTER_BOX = 512;
 /** Monochrome layers are tinted by the system; only their coverage counts. */
-const MONOCHROME_COLOR: HexColor = '#ffffff';
+export const MONOCHROME_COLOR: HexColor = '#ffffff';
 
 const ADAPTIVE_XML = `<?xml version="1.0" encoding="utf-8"?>
 <adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">

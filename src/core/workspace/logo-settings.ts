@@ -11,7 +11,7 @@ import { writeJsonAtomic, type Workspace } from './workspace.js';
  * icons and share images, and the tagline per locale for the share images.
  */
 
-export const LOGO_PACKS = ['app-store', 'google-play', 'web', 'social'] as const;
+export const LOGO_PACKS = ['app-store', 'google-play', 'expo', 'web', 'social'] as const;
 export type LogoPack = (typeof LOGO_PACKS)[number];
 
 export interface LogoSettings {
@@ -26,7 +26,8 @@ const FILE = 'logo.json';
 export const MAX_TAGLINE = 120;
 
 export function defaultLogoSettings(): LogoSettings {
-  return { version: 1, packs: [...LOGO_PACKS], background: '#ffffff', taglines: {} };
+  // Expo icons only matter for Expo / React Native projects: chosen by the user, not by default (#42).
+  return { version: 1, packs: LOGO_PACKS.filter((pack) => pack !== 'expo'), background: '#ffffff', taglines: {} };
 }
 
 const schema = z.object({
