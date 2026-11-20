@@ -1,14 +1,12 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { isConflict, messagesOf } from '../api';
 import type { SaveState } from '../components/SaveStatus';
-import { DroppedSaveError, pendingSaves } from '../lib/pending-saves';
-import { SaveDiscardedError, createSaveQueue } from '../lib/save-queue';
 import type { SectionId } from '../lib/sections';
+import { useAutosave } from './useAutosave';
+import { useLoadAfterSaves } from './useLoadAfterSaves';
 
 /** The revisioned document of a section, as the pending-saves tracker names it. */
 const sourceOf = (section: SectionId) => ({ section, document: section });
-
-const SAVE_DELAY = 600;
 
 export interface RevisionAutosaveOptions<T extends { revision: number }, L> {
   /** The section that owns the document; named when an edit made just before leaving it is lost (#98). */
@@ -65,11 +63,9 @@ export function useRevisionAutosave<T extends { revision: number }, L = T>(optio
   });
 
   const [document, setDocument] = useState<T | null>(null);
-  const [saveState, setSaveState] = useState<SaveState>('idle');
   const [loadError, setLoadError] = useState<string[] | null>(null);
   const knownRevision = useRef(0);
   const reloadCount = useRef(0);
-  const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Edit lock around an apply (#84, #87). Edits are refused while
   // - an apply runs (`applyRunning`), or
@@ -81,28 +77,30 @@ export function useRevisionAutosave<T extends { revision: number }, L = T>(optio
   const [releaseLock, setReleaseLock] = useState(false);
   const [editsLocked, setEditsLocked] = useState(false);
 
-  const [queue] = useState(() =>
-    createSaveQueue<T>(
-      async (next) => {
-        const saved = await current.current.save({ ...next, revision: knownRevision.current });
-        // Never backwards: a reload may already have seen a newer revision than this save's answer, and then the
-        // page already shows that newer server version.
-        if (saved.revision >= knownRevision.current) {
-          knownRevision.current = saved.revision;
-          current.current.onServerDocument?.(saved);
-        }
-        return saved;
-      },
-      () => {
-        setSaveState('saved');
-        // An edit lost earlier after leaving this section is out of date once a later one is stored.
-        pendingSaves.reportSaved(sourceOf(current.current.section));
-        current.current.onSaved?.();
-      },
-      // A conflict drops every edit not yet sent, also those already queued behind it (#92).
-      { discardOn: isConflict },
-    ),
-  );
+  // reload needs the autosave (to drop waiting edits) and the autosave needs reload (after a conflict): the autosave
+  // calls it through this ref, which points to the reload of the last committed render.
+  const reloadRef = useRef<() => Promise<boolean>>(async () => false);
+
+  // The shared autosave (#101): each save is based on the revision this page last saw; a conflict (409) drops every
+  // edit not yet sent, also those already queued behind it (#92), and loads the stored version. useAutosave keeps the
+  // newest of these callbacks itself.
+  const { saveState, flush, discard, schedule } = useAutosave<T>({
+    source: sourceOf(options.section),
+    save: async (next) => {
+      const saved = await options.save({ ...next, revision: knownRevision.current });
+      // Never backwards: a reload may already have seen a newer revision than this save's answer, and then the page
+      // already shows that newer server version.
+      if (saved.revision >= knownRevision.current) {
+        knownRevision.current = saved.revision;
+        options.onServerDocument?.(saved);
+      }
+      return saved;
+    },
+    ...(options.onSaved ? { onSaved: options.onSaved } : {}),
+    discardOn: isConflict,
+    // The caller (upload, generate, apply) goes on once the stored version is loaded.
+    onDropped: () => reloadRef.current(),
+  });
 
   const reload = useCallback(async (): Promise<boolean> => {
     const number = (reloadCount.current += 1);
@@ -115,7 +113,7 @@ export function useRevisionAutosave<T extends { revision: number }, L = T>(optio
       if (next.revision >= knownRevision.current) {
         if (next.revision > knownRevision.current) {
           // The document moved on elsewhere: an edit still waiting is based on the older version and must not be sent.
-          if (queue.discard()) setSaveState('conflict');
+          discard();
           current.current.onChangedElsewhere?.();
         }
         knownRevision.current = next.revision;
@@ -130,68 +128,23 @@ export function useRevisionAutosave<T extends { revision: number }, L = T>(optio
       if (number === reloadCount.current) setLoadError(messagesOf(error));
       return false;
     }
-  }, [queue]);
+  }, [discard]);
 
-  useEffect(() => {
-    // A save started when this section was left a moment ago must land first, or this load shows the older version.
-    let active = true;
-    void pendingSaves.settled().then(() => (active ? reload() : undefined));
-    return () => {
-      active = false;
-    };
+  useLayoutEffect(() => {
+    reloadRef.current = reload;
   }, [reload]);
 
-  /**
-   * Sends pending edits; resolves true when they were dropped because of a conflict. Then the stored version is loaded,
-   * unless the page is being left (`reloadOnConflict` false): nobody would see it.
-   */
-  const send = useCallback(async (reloadOnConflict = true): Promise<boolean> => {
-    if (saveTimer.current) {
-      clearTimeout(saveTimer.current);
-      saveTimer.current = null;
-    }
-    try {
-      await queue.flush();
-      return false;
-    } catch (error) {
-      if (isConflict(error) || error instanceof SaveDiscardedError) {
-        // The queue already dropped everything not yet sent (never retried: it is based on data that changed
-        // elsewhere). Show the current version; the caller (upload, generate, apply) goes on once it is loaded.
-        setSaveState('conflict');
-        if (reloadOnConflict) await reload();
-        return true;
-      }
-      setSaveState('failed');
-      throw error;
-    }
-  }, [queue, reload]);
-  const flush = useCallback(async (): Promise<void> => {
-    await send();
-  }, [send]);
-  // Leaving the section sends a pending edit instead of dropping it. Nobody awaits it any more: it is tracked, so
-  // other pages wait for it and a failed or dropped edit is reported (#98).
-  useEffect(
-    () => () =>
-      pendingSaves.track(
-        sourceOf(current.current.section),
-        send(false).then((dropped) => {
-          if (dropped) throw new DroppedSaveError();
-        }),
-      ),
-    [send],
-  );
+  // A save started when this section was left a moment ago must land first, or this load shows the older version.
+  useLoadAfterSaves(reload);
 
   const update = useCallback(
     (next: T): boolean => {
       if (applyRunning.current || lockedAfter.current !== null) return false;
       setDocument(next);
-      queue.schedule(next);
-      setSaveState('saving');
-      if (saveTimer.current) clearTimeout(saveTimer.current);
-      saveTimer.current = setTimeout(() => void flush().catch(() => undefined), SAVE_DELAY);
+      schedule(next);
       return true;
     },
-    [queue, flush],
+    [schedule],
   );
 
   useEffect(() => {
