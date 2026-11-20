@@ -11,7 +11,7 @@ import {
 } from '../../src/web/lib/locale-selection.js';
 import { fieldError, groupProjectErrors } from '../../src/web/lib/errors.js';
 import { sectionFromHash, sectionHref, targetsNeeding } from '../../src/web/lib/sections.js';
-import { downloadFileName, groupBySpec, isWorseStatus, sortByStatus, summarizeChecklist } from '../../src/web/lib/export.js';
+import { groupBySpec, isWorseStatus, safeFileName, sortByStatus, summarizeChecklist } from '../../src/web/lib/export.js';
 import { allLocaleIds, checklistFactory, enabledTargets, localizedItemsFactory } from '../factories/web.js';
 
 describe('Section routing follows the location hash', () => {
@@ -129,14 +129,14 @@ describe('The Export section summarizes the checklist', () => {
     expect(isWorseStatus('unknown', 'ok')).toBe(false);
   });
 
-  test('takes the download name from the server header', () => {
-    expect(downloadFileName('attachment; filename="Demo-all-2026.zip"', 'export.zip')).toBe('Demo-all-2026.zip');
+  test('takes the download name the server sent', () => {
+    expect(safeFileName('Demo-all-2026.zip', 'export.zip')).toBe('Demo-all-2026.zip');
   });
 
-  test('never uses a path from the header and falls back without one', () => {
-    expect(downloadFileName('attachment; filename="../../evil.zip"', 'export.zip')).toBe('evil.zip');
-    expect(downloadFileName('attachment; filename=".."', 'export.zip')).toBe('export.zip');
-    expect(downloadFileName(null, 'export.zip')).toBe('export.zip');
+  test('never uses a path from the server and falls back without a name', () => {
+    expect(safeFileName('../../evil.zip', 'export.zip')).toBe('evil.zip');
+    expect(safeFileName('..', 'export.zip')).toBe('export.zip');
+    expect(safeFileName(null, 'export.zip')).toBe('export.zip');
   });
 });
 

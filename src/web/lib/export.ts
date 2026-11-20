@@ -77,11 +77,10 @@ export function isWorseStatus(next: string | null, shown: CheckStatus): boolean 
 }
 
 /**
- * File name from a `content-disposition` header (`attachment; filename="x.zip"`). Falls back to `fallback` when the
- * header is missing or names a path; only the base name is ever used.
+ * A file name to save a download under: only the base name of what the server sent, `fallback` when that is missing or
+ * names no file.
  */
-export function downloadFileName(header: string | null, fallback: string): string {
-  const match = header ? /filename="([^"]+)"/.exec(header) : null;
-  const name = match?.[1]?.split(/[\\/]/).pop()?.trim();
-  return name && name !== '.' && name !== '..' ? name : fallback;
+export function safeFileName(name: string | null | undefined, fallback: string): string {
+  const base = name?.split(/[\\/]/).pop()?.trim();
+  return base && base !== '.' && base !== '..' ? base : fallback;
 }

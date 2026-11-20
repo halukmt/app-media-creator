@@ -1,10 +1,11 @@
+import { randomBytes } from 'node:crypto';
 import { createReadStream } from 'node:fs';
-import { readFile, stat } from 'node:fs/promises';
+import { readFile, rm, stat } from 'node:fs/promises';
 import path from 'node:path';
 import { Readable } from 'node:stream';
-import { Hono } from 'hono';
+import { Hono, type Context } from 'hono';
 import sharp from 'sharp';
-import { ExportError, createExport, exportChecklist, locateOutputFile, readManifest } from '../core/export/index.js';
+import { ExportError, createExport, exportChecklist, locateOutputFile, readManifest, type ExportResult } from '../core/export/index.js';
 import { ProjectFileError, type Workspace } from '../core/workspace/index.js';
 import { readOptionalJsonObject } from './json-body.js';
 
@@ -46,8 +47,42 @@ function errorResponse(error: unknown): { body: Record<string, unknown>; status:
   throw error;
 }
 
+/** How long a prepared download waits for the browser to fetch it. */
+const DOWNLOAD_TTL = 10 * 60_000;
+
+/**
+ * Prepared downloads: a random token (192 bits) per built ZIP, the only way to fetch it. It stays valid for
+ * DOWNLOAD_TTL, so a browser's download manager can retry; then it is dropped, and a ZIP that was never fetched is
+ * removed from `exports/` (fetched ones stay, like every other export).
+ */
+export function downloadTokens(now: () => number = Date.now, remove: (file: string) => Promise<unknown> = (file) => rm(file, { force: true })) {
+  const pending = new Map<string, { file: string; fileName: string; expires: number; fetched: boolean }>();
+  const sweep = () => {
+    for (const [token, entry] of pending) {
+      if (entry.expires > now()) continue;
+      pending.delete(token);
+      if (!entry.fetched) void remove(entry.file).catch(() => undefined);
+    }
+  };
+  return {
+    issue(file: string, fileName: string): string {
+      sweep();
+      const token = randomBytes(24).toString('hex');
+      pending.set(token, { file, fileName, expires: now() + DOWNLOAD_TTL, fetched: false });
+      return token;
+    },
+    take(token: string): { file: string; fileName: string } | undefined {
+      sweep();
+      const entry = pending.get(token);
+      if (!entry) return undefined;
+      entry.fetched = true;
+      return { file: entry.file, fileName: entry.fileName };
+    },
+  };
+}
+
 /** Routes for the export checklist and the ZIP download, mounted under /api. */
-export function exportRoutes(workspace: Workspace): Hono {
+export function exportRoutes(workspace: Workspace, downloads = downloadTokens()): Hono {
   const api = new Hono();
 
   api.get('/export/checklist', async (c) => {
@@ -103,29 +138,63 @@ export function exportRoutes(workspace: Workspace): Hono {
     });
   });
 
-  api.post('/export', async (c) => {
+  /** Builds the ZIP for the request body's locales; stops when the requester is gone (#47). */
+  async function buildExport(c: Context): Promise<{ result: ExportResult } | { response: Response }> {
+    // An empty body means "all locales"; anything else must be JSON with a string or string list.
+    const parsed = await readOptionalJsonObject(c);
+    if (!parsed.ok) return { response: c.json({ error: parsed.error }, 400) };
+    const body = parsed.body as { locales?: unknown };
     let locales: string | string[] | undefined;
-    try {
-      // An empty body means "all locales"; anything else must be JSON with a string or string list.
-      const parsed = await readOptionalJsonObject(c);
-      if (!parsed.ok) return c.json({ error: parsed.error }, 400);
-      const body = parsed.body as { locales?: unknown };
-      if (typeof body.locales === 'string') locales = body.locales;
-      else if (Array.isArray(body.locales) && body.locales.every((l) => typeof l === 'string')) locales = body.locales;
-      else if (body.locales !== undefined) {
-        return c.json({ error: 'locales must be "all", a locale id or a list of locale ids' }, 400);
-      }
-      const result = await createExport(workspace, locales !== undefined ? { locales } : {});
-      const stream = Readable.toWeb(createReadStream(result.file)) as ReadableStream;
-      return c.body(stream, 200, {
-        'content-type': 'application/zip',
-        'content-disposition': `attachment; filename="${result.fileName}"`,
-        'x-export-status': result.checklist.status,
-      });
-    } catch (error) {
-      const { body, status } = errorResponse(error);
-      return c.json(body, status);
+    if (typeof body.locales === 'string') locales = body.locales;
+    else if (Array.isArray(body.locales) && body.locales.every((l) => typeof l === 'string')) locales = body.locales;
+    else if (body.locales !== undefined) {
+      return { response: c.json({ error: 'locales must be "all", a locale id or a list of locale ids' }, 400) };
     }
+    try {
+      return { result: await createExport(workspace, { ...(locales !== undefined ? { locales } : {}), signal: c.req.raw.signal }) };
+    } catch (error) {
+      // The requester is gone (only the abort itself, not another failure at the same time): the partial ZIP is removed.
+      if (c.req.raw.signal.aborted && error === c.req.raw.signal.reason) return { response: c.json({ error: 'The export was cancelled' }, 400) };
+      const { body: errorBody, status } = errorResponse(error);
+      return { response: c.json(errorBody, status) };
+    }
+  }
+
+  // Builds the ZIP and answers with it (API and skill clients).
+  api.post('/export', async (c) => {
+    const built = await buildExport(c);
+    if ('response' in built) return built.response;
+    const { result } = built;
+    return c.body(Readable.toWeb(createReadStream(result.file)) as ReadableStream, 200, {
+      'content-type': 'application/zip',
+      'content-disposition': `attachment; filename="${result.fileName}"`,
+      'x-export-status': result.checklist.status,
+    });
+  });
+
+  // The UI's download in two steps (#47): this builds the ZIP and answers with its status and a one-time token; the
+  // browser then opens /export/download?token=… as a plain download, so the ZIP streams straight to disk instead of
+  // being held in memory.
+  api.post('/export/prepare', async (c) => {
+    const built = await buildExport(c);
+    if ('response' in built) return built.response;
+    const { result } = built;
+    return c.json({ token: downloads.issue(result.file, result.fileName), fileName: result.fileName, status: result.checklist.status });
+  });
+
+  api.get('/export/download', async (c) => {
+    const download = downloads.take(c.req.query('token') ?? '');
+    const expired = { error: 'This download link has expired. Start the download again.' };
+    if (!download) return c.json(expired, 404);
+    const size = await stat(download.file).then((info) => info.size, () => null);
+    if (size === null) return c.json(expired, 404);
+    return c.body(Readable.toWeb(createReadStream(download.file)) as ReadableStream, 200, {
+      'content-type': 'application/zip',
+      'content-length': String(size),
+      'content-disposition': `attachment; filename="${download.fileName}"`,
+      'cache-control': 'no-store',
+      'x-content-type-options': 'nosniff',
+    });
   });
 
   return api;

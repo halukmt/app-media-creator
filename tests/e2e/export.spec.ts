@@ -115,7 +115,7 @@ test.describe('The export of the running tool', () => {
     const names = Object.keys(unzipSync(new Uint8Array(readFileSync(await download.path()))));
     expect(names).toEqual(expect.arrayContaining(['CHECKLIST.md', 'apple/de-DE/iphone-6.3/01-start.png']));
     expect(names.some((name) => name.includes('/tr-TR/'))).toBe(false);
-    await expect(page.getByRole('status').filter({ hasText: 'downloaded' })).toBeVisible();
+    await expect(page.getByRole('status').filter({ hasText: 'download of' })).toBeVisible();
   });
 
   test('drops a running download when the languages change and lets a new one start (#48)', async ({ page }) => {
@@ -124,8 +124,8 @@ test.describe('The export of the running tool', () => {
     let requests = 0;
     let release!: () => void;
     const gate = new Promise<void>((resolve) => (release = resolve));
-    // Hold the first export request back until the selection has changed, then let it through.
-    await page.route('**/api/export', async (route) => {
+    // Hold the first export (the prepare step that builds the ZIP) back until the selection has changed.
+    await page.route('**/api/export/prepare', async (route) => {
       requests += 1;
       if (requests === 1) await gate;
       await route.continue().catch(() => undefined);
@@ -143,14 +143,14 @@ test.describe('The export of the running tool', () => {
     await expect.poll(() => requests).toBe(1);
 
     // Changing the languages aborts the held request in the browser.
-    const aborted = page.waitForEvent('requestfailed', (request) => request.url().endsWith('/api/export'));
+    const aborted = page.waitForEvent('requestfailed', (request) => request.url().endsWith('/api/export/prepare'));
     await page.getByRole('group', { name: /Languages for this section/ }).locator('label', { hasText: 'Turkish' }).click();
     await aborted;
     release();
     const button = page.getByRole('button', { name: 'Download ZIP' });
     await expect(button).toBeVisible();
     expect(downloads).toBe(0);
-    await expect(page.getByRole('status').filter({ hasText: 'downloaded' })).toHaveCount(0);
+    await expect(page.getByRole('status').filter({ hasText: 'download of' })).toHaveCount(0);
     await expect(page.getByRole('alert').filter({ hasText: 'could not' })).toHaveCount(0);
 
     // The slot is free again: a new download for the new selection sends a new request.
@@ -159,7 +159,7 @@ test.describe('The export of the running tool', () => {
     await page.getByRole('dialog').getByRole('button', { name: 'Download anyway' }).click();
     await downloading;
     expect(requests).toBe(2);
-    await expect(page.getByRole('status').filter({ hasText: 'downloaded' })).toBeVisible();
+    await expect(page.getByRole('status').filter({ hasText: 'download of' })).toBeVisible();
   });
 
   for (const width of viewportWidths()) {

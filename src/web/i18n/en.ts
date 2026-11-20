@@ -135,7 +135,7 @@ export const en = {
     downloadHeading: 'Download',
     download: 'Download ZIP',
     downloading: 'Building ZIP…',
-    downloaded: (fileName: string) => `${fileName} downloaded.`,
+    downloaded: (fileName: string) => `The download of ${fileName} has started. Your browser saves it to your downloads folder.`,
     downloadFailed: 'The ZIP could not be created.',
     missingHint: 'Stores reject uploads without the required files. You can still download the ZIP; CHECKLIST.md in it lists what is missing.',
     confirmTitle: 'Download with errors?',

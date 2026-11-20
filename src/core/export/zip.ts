@@ -37,6 +37,8 @@ export interface ExportOptions {
   locate?: LocateFile;
   /** Clock for the file name; injectable for tests. */
   now?: Date;
+  /** Stops building the ZIP (and removes the partial file) when the requester is gone, e.g. a closed download (#47). */
+  signal?: AbortSignal;
 }
 
 export interface ExportResult {
@@ -90,6 +92,7 @@ export async function exportChecklist(workspace: Workspace, options: ExportOptio
  */
 export async function createExport(workspace: Workspace, options: ExportOptions = {}): Promise<ExportResult> {
   const { project, locales, manifest, checklist, storeTexts } = await prepare(workspace, options);
+  options.signal?.throwIfAborted();
 
   const allLocales = locales.length === project.locales.length;
   const stamp = (options.now ?? new Date()).toISOString().replace(/[:.]/g, '-').slice(0, 19);
@@ -118,7 +121,9 @@ export async function createExport(workspace: Workspace, options: ExportOptions 
   try {
     const failIfBroken = () => {
       if (streamError) throw streamError;
+      options.signal?.throwIfAborted();
     };
+    failIfBroken();
     const zip = new Zip((error, chunk, final) => {
       if (error) {
         out.destroy(error);
