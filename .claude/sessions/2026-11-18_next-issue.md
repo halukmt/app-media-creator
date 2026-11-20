@@ -492,3 +492,9 @@
 - `src/core/specs/expo.ts` (Expo docs checked 2026-11-20 via web-fetch: keys, 1024, opaque square iOS icon; dark,
   tinted and Android layers unverified), `generateExpoIcons`, logo pack `expo` (opt-in), `docs/expo-icons.md`.
 - Code review 8 (7 fixed), design-critic 2 (applied). Shared `renderIosAppearances` with the App Store pack.
+
+## #47 Stream the Export ZIP to disk — done (PR #114)
+
+- `POST /api/export/prepare` + `GET /api/export/download?token=` (192-bit tokens, valid 10 min for retries, never
+  fetched ZIPs removed on expiry); `createExport` honours an AbortSignal (closes the #48 follow-up).
+- Code review 8 (all fixed), security clean. CI: `apt-get install ffmpeg` took 10 min on this PR → #115 (P2 S, Ready).
