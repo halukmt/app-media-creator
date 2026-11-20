@@ -486,3 +486,9 @@
 
 - `videoRequestBody` keeps only the requested languages' texts; result cards read `videoWidth` / `videoHeight`.
   Code review: no findings.
+
+## #42 Expo / React Native icons — done (PR #113)
+
+- `src/core/specs/expo.ts` (Expo docs checked 2026-11-20 via web-fetch: keys, 1024, opaque square iOS icon; dark,
+  tinted and Android layers unverified), `generateExpoIcons`, logo pack `expo` (opt-in), `docs/expo-icons.md`.
+- Code review 8 (7 fixed), design-critic 2 (applied). Shared `renderIosAppearances` with the App Store pack.
