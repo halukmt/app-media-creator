@@ -189,25 +189,21 @@ export function fetchChecklist(locales: readonly string[], signal?: AbortSignal)
 }
 
 /**
- * Builds the ZIP for the given locales. Returns it with the `content-disposition` header (file name chosen by the
- * server) and the checklist status the server computed while building it.
+ * Builds the ZIP for the locales on the server; answers with its file name, checklist status and a download token.
+ * Aborting the signal stops the build (#47).
  */
-export async function downloadExport(
-  locales: readonly string[],
-  signal?: AbortSignal,
-): Promise<{ blob: Blob; header: string | null; status: string | null }> {
-  const response = await fetch('/api/export', {
+export function prepareExport(locales: readonly string[], signal?: AbortSignal): Promise<{ token: string; fileName: string; status: string }> {
+  return request<{ token: string; fileName: string; status: string }>('/api/export/prepare', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ locales }),
     ...(signal ? { signal } : {}),
   });
-  if (!response.ok) throw await apiError(response);
-  return {
-    blob: await response.blob(),
-    header: response.headers.get('content-disposition'),
-    status: response.headers.get('x-export-status'),
-  };
+}
+
+/** URL of a prepared ZIP: opened as a plain download, the browser streams it straight to disk. */
+export function exportDownloadUrl(token: string): string {
+  return `/api/export/download?token=${encodeURIComponent(token)}`;
 }
 
 export function saveProject(project: ProjectSettings): Promise<ProjectSettings> {

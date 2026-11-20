@@ -45,6 +45,8 @@ entries left under `[Unreleased]` is rejected by `npm run check:release`.
 
 ### Changed
 
+- The Export download streams the ZIP straight to disk instead of holding it in the browser's memory, and a cancelled
+  export stops building on the server. (#47)
 - Logo settings, header image settings, screenshot sets and store texts share one autosave core that saves pending
   edits when leaving a section and waits for them before loading; nothing visible changes. (#101)
 - The Screenshots and Store texts sections share one hook for following AI jobs and one for the revision-checked

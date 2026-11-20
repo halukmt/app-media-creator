@@ -1,8 +1,10 @@
 // conventions: RULE-TESTING-3301
+import { existsSync, readdirSync } from 'node:fs';
 import { unzipSync } from 'fflate';
 import { describe, expect, test } from 'vitest';
-import { registerOutput } from '../../src/core/export/index.js';
+import { createExport, registerOutput } from '../../src/core/export/index.js';
 import { createApp } from '../../src/server/app.js';
+import { downloadTokens } from '../../src/server/export-routes.js';
 import { packageInfoFactory } from '../factories/package-info.js';
 import { pngBytes, workspaceFactory } from '../factories/workspace.js';
 
@@ -66,5 +68,59 @@ describe('The export API returns the checklist and the ZIP', () => {
     const app = await appFactory();
     const response = await app.request(`${BASE}/api/export`, { method: 'POST', headers: { origin: 'https://evil.example' } });
     expect(response.status).toBe(403);
+  });
+});
+
+describe('The UI download is prepared, then streamed with a one-time token (#47)', () => {
+  const prepare = (app: Awaited<ReturnType<typeof appFactory>>, locales: string[]) =>
+    app.request(`${BASE}/api/export/prepare`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ locales }) });
+
+  test('answers with name, status and a token whose download is the ZIP as an attachment', async () => {
+    const app = await appFactory();
+    const prepared = await prepare(app, ['de-DE']);
+    expect(prepared.status).toBe(200);
+    const body = (await prepared.json()) as { token: string; fileName: string; status: string };
+    expect(body.fileName).toMatch(/^demo-repo-de-DE-.*\.zip$/);
+    expect(body.status).toBe('error');
+    expect(body.token).toMatch(/^[0-9a-f]{48}$/);
+    const download = await app.request(`${BASE}/api/export/download?token=${body.token}`);
+    expect(download.status).toBe(200);
+    expect(download.headers.get('content-disposition')).toBe(`attachment; filename="${body.fileName}"`);
+    expect(Object.keys(unzipSync(new Uint8Array(await download.arrayBuffer())))).toContain('CHECKLIST.md');
+  });
+
+  test('serves a token again for a retry, refuses unknown tokens and a wrong locale before anything is built', async () => {
+    const app = await appFactory();
+    const { token } = (await (await prepare(app, ['de-DE'])).json()) as { token: string };
+    await app.request(`${BASE}/api/export/download?token=${token}`);
+    // A download manager may retry the same link.
+    expect((await app.request(`${BASE}/api/export/download?token=${token}`)).status).toBe(200);
+    expect((await app.request(`${BASE}/api/export/download?token=nope`)).status).toBe(404);
+    expect((await prepare(app, ['pt-BR'])).status).toBe(400);
+  });
+
+  test('drops tokens after ten minutes and removes a ZIP that was never fetched', () => {
+    let now = 0;
+    const removed: string[] = [];
+    const tokens = downloadTokens(
+      () => now,
+      async (file) => removed.push(file),
+    );
+    const never = tokens.issue('/never.zip', 'never.zip');
+    const fetched = tokens.issue('/fetched.zip', 'fetched.zip');
+    expect(tokens.take(fetched)).toEqual({ file: '/fetched.zip', fileName: 'fetched.zip' });
+    now = 11 * 60_000;
+    expect(tokens.take(never)).toBeUndefined();
+    expect(tokens.take(fetched)).toBeUndefined();
+    expect(removed).toEqual(['/never.zip']);
+  });
+
+  test('stops building the ZIP when the requester is gone and leaves no partial file', async () => {
+    const workspace = await workspaceFactory();
+    await registerOutput(workspace, { specId: 'apple.icon', order: 1, name: 'app-icon', extension: 'png', bytes: await pngBytes() });
+    const controller = new AbortController();
+    controller.abort();
+    await expect(createExport(workspace, { signal: controller.signal })).rejects.toThrow();
+    expect(existsSync(workspace.exportsDir) ? readdirSync(workspace.exportsDir) : []).toEqual([]);
   });
 });

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { downloadExport, fetchChecklist, messagesOf, type CatalogueLocale, type Checklist, type ProjectSettings } from '../api';
+import { exportDownloadUrl, fetchChecklist, messagesOf, prepareExport, type CatalogueLocale, type Checklist, type ProjectSettings } from '../api';
 import { BusyButton } from '../components/BusyButton';
 import { ChecklistCard } from '../components/ChecklistCard';
 import { ConfirmDialog } from '../components/ConfirmDialog';
@@ -8,7 +8,7 @@ import { SectionEmptyState } from '../components/SectionEmptyState';
 import { StatusAlert } from '../components/StatusAlert';
 import { en } from '../i18n/en';
 import { SectionLayout } from '../layouts/SectionLayout';
-import { downloadFileName, isWorseStatus, summarizeChecklist } from '../lib/export';
+import { isWorseStatus, safeFileName, summarizeChecklist } from '../lib/export';
 import { projectLocaleOptions } from '../lib/locale-selection';
 import { pendingSaves } from '../lib/pending-saves';
 
@@ -28,17 +28,17 @@ type Download =
 
 const OVERALL_TONE = { ok: 'success', warning: 'warning', error: 'error' } as const;
 
-/** Saves a blob under a file name through a temporary link; the object URL is released right after. */
-function saveBlob(blob: Blob, fileName: string) {
-  const url = URL.createObjectURL(blob);
+/**
+ * Starts a plain browser download of a prepared ZIP through a temporary link: the browser streams it straight to disk,
+ * nothing is held in memory (#47).
+ */
+function startDownload(url: string, fileName: string) {
   const link = document.createElement('a');
   link.href = url;
   link.download = fileName;
   document.body.append(link);
   link.click();
   link.remove();
-  // Generous delay: some browsers start reading the URL only after the click handler has returned.
-  setTimeout(() => URL.revokeObjectURL(url), 60_000);
 }
 
 /** Export section: checklist per store for the selected languages and the ZIP download. */
@@ -96,11 +96,11 @@ export function ExportPage({ project, locales, selection, onSelectionChange, foc
     setConfirming(false);
     setDownload({ kind: 'busy' });
     try {
-      const result = await downloadExport(exportLocales, controller.signal);
-      // The selection changed while the body was still arriving: drop the ZIP of the old selection.
+      // The server builds the ZIP and answers with a one-time link; an abort (other languages) stops the build.
+      const result = await prepareExport(exportLocales, controller.signal);
       if (controller.signal.aborted) return;
-      const fileName = downloadFileName(result.header, en.export.fallbackFileName);
-      saveBlob(result.blob, fileName);
+      const fileName = safeFileName(result.fileName, en.export.fallbackFileName);
+      startDownload(exportDownloadUrl(result.token), fileName);
       setDownload({ kind: 'done', fileName, changed: isWorseStatus(result.status, checklist.status) });
     } catch (error) {
       if (controller.signal.aborted) return;
