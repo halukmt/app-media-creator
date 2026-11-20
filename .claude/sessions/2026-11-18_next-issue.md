@@ -476,3 +476,13 @@
   twice again → Write / Edit tools only.
 - Under 100 % CPU a full local run timed out twice (render test, logo e2e); green alone and on rerun.
 - M5 is done except #22 (promo reels, Backlog: needs Haluk's decision on the engine).
+
+## Session 2026-11-20: Haluk's go for the small items and #22
+
+- Decisions: #22 engine is brag (HyperFrames); #97 confirmed (Store texts without a step bar), closed.
+- Ready: #42, #47, #64, #77 (S), then #22 (L).
+
+## #111 Video texts of removed languages and real video sizes (Codex on #110) — done (PR #112)
+
+- `videoRequestBody` keeps only the requested languages' texts; result cards read `videoWidth` / `videoHeight`.
+  Code review: no findings.
