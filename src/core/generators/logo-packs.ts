@@ -2,10 +2,12 @@ import path from 'node:path';
 import { readManifest, locateOutputFile, type OutputEntry } from '../export/manifest.js';
 import type { LocaleSelection } from '../locales/index.js';
 import type { CardWarning } from '../screenshots/index.js';
+import { EXPO_SPEC_IDS } from '../specs/expo.js';
 import { getSpec, inspectImage } from '../specs/index.js';
 import { LOGO_PACKS, readLogoSettings, readProject, type LogoPack, type Workspace } from '../workspace/index.js';
 import { generateAndroidIcons } from './android-icons.js';
 import { generateAppStoreIcons } from './app-store-icons.js';
+import { generateExpoIcons } from './expo-icons.js';
 import { GeneratorError } from './logo.js';
 import { generateShareImages } from './share-images.js';
 import { generateWebIcons } from './web-icons.js';
@@ -18,6 +20,8 @@ export interface PackResult {
 /** The logo pack an output belongs to, from its catalogue entry; null for outputs of other sections. */
 export function packOf(specId: string): LogoPack | null {
   const spec = getSpec(specId);
+  // Before the store icons: the Expo entries are icons of both stores and a pack of their own.
+  if (EXPO_SPEC_IDS.has(spec.id)) return 'expo';
   if (spec.target === 'apple' && spec.group === 'icon') return 'app-store';
   if (spec.target === 'google' && spec.group === 'icon') return 'google-play';
   if (spec.target === 'web' && spec.group === 'favicon') return 'web';
@@ -37,6 +41,8 @@ export async function generateLogoPack(workspace: Workspace, pack: string, optio
       return { entries: await generateAppStoreIcons(workspace, { background: settings.background }), warnings: [] };
     case 'google-play':
       return { entries: await generateAndroidIcons(workspace, { background: settings.background }), warnings: [] };
+    case 'expo':
+      return { entries: await generateExpoIcons(workspace, { background: settings.background }), warnings: [] };
     case 'web':
       return { entries: await generateWebIcons(workspace, { background: settings.background }), warnings: [] };
     case 'social': {

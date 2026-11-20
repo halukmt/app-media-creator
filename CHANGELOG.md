@@ -12,6 +12,8 @@ entries left under `[Unreleased]` is rejected by `npm run check:release`.
 
 ### Added
 
+- Expo icons pack in the Logo section: the iOS icon with dark and tinted versions, the Android adaptive layers and the
+  matching `app.json` lines for Expo / React Native projects. (#42)
 - Video section: upload a screen recording per language, choose App Store preview, device video or header and search
   loop, set trim, text cards and formats, make the videos for the selected languages and watch them with their
   validation state. (#23)

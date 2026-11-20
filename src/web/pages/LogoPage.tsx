@@ -47,8 +47,9 @@ interface Props {
 type StepId = 'upload' | 'options' | 'preview' | 'export';
 type Message = { tone: 'success' | 'warning' | 'error'; text: string; details?: string[] } | null;
 
-const PACKS: readonly LogoPack[] = ['app-store', 'google-play', 'web', 'social'];
-const PACK_TARGET: Record<LogoPack, TargetId> = { 'app-store': 'apple', 'google-play': 'google', web: 'web', social: 'web' };
+const PACKS: readonly LogoPack[] = ['app-store', 'google-play', 'expo', 'web', 'social'];
+/** The stores a pack serves; a pack is offered while one of them is on (Expo serves both app stores). */
+const PACK_TARGETS: Record<LogoPack, readonly TargetId[]> = { 'app-store': ['apple'], 'google-play': ['google'], expo: ['apple', 'google'], web: ['web'], social: ['web'] };
 const PREVIEW_WIDTH = 240;
 /** Id of the production icon set in the icon set filter (environment ids never equal it). */
 const PRODUCTION = 'production';
@@ -124,7 +125,7 @@ export function LogoPage({ project, catalogue, selection, onSelectionChange, foc
     }
   }
 
-  const enabledPacks = PACKS.filter((pack) => project.targets[PACK_TARGET[pack]].enabled);
+  const enabledPacks = PACKS.filter((pack) => PACK_TARGETS[pack].some((target) => project.targets[target].enabled));
   const chosen = settings ? settings.packs.filter((pack) => enabledPacks.includes(pack)) : [];
 
   async function generate() {
@@ -276,6 +277,10 @@ export function LogoPage({ project, catalogue, selection, onSelectionChange, foc
               label: en.logo.packs[pack],
               description: en.logo.packHints[pack],
               ...(enabledPacks.includes(pack) ? {} : { disabled: true, note: en.logo.targetOff }),
+              // A pack of several stores with only some on makes only their part: say so at the choice (L5).
+              ...(enabledPacks.includes(pack) && PACK_TARGETS[pack].length > 1 && !PACK_TARGETS[pack].every((target) => project.targets[target].enabled)
+                ? { note: en.logo.onlyFor(PACK_TARGETS[pack].filter((target) => project.targets[target].enabled).map((target) => en.targets[target]).join(', ')) }
+                : {}),
             }))}
             {...(chosen.length === 0 ? { error: en.logo.noPacks } : {})}
           />

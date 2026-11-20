@@ -408,7 +408,7 @@ export function generateFramedScreenshots(locales: readonly string[], frame: str
   });
 }
 
-export type LogoPack = 'app-store' | 'google-play' | 'web' | 'social';
+export type LogoPack = 'app-store' | 'google-play' | 'expo' | 'web' | 'social';
 
 export interface LogoSettings {
   version: 1;
