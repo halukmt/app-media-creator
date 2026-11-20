@@ -1,6 +1,6 @@
 // conventions: RULE-TESTING-3301
 import { describe, expect, test } from 'vitest';
-import { parseSeconds, purposeAvailable, resultSpecs, trimFields, trimFrom } from '../../src/web/lib/video.js';
+import { parseSeconds, purposeAvailable, resultSpecs, trimFields, trimFrom, videoRequestBody } from '../../src/web/lib/video.js';
 
 const MESSAGES = { invalid: 'invalid', order: 'order' };
 
@@ -21,6 +21,27 @@ describe('The Video section reads seconds and the trim from its fields', () => {
     // Beyond what the settings store, and an end of 0 without a start.
     expect(parseSeconds('4000')).toBeNull();
     expect(trimFrom({ start: '', end: '0' }, MESSAGES).errors).toEqual({ end: 'order' });
+  });
+});
+
+describe('A generate request carries only the texts of the requested languages', () => {
+  const settings = {
+    trim: { start: 1 },
+    intro: { 'de-DE': 'Faire Teams', 'fr-FR': 'Équipes justes' },
+    outro: {},
+    cardSeconds: 2,
+    formats: ['vertical'] as const,
+    frame: 'iphone',
+    texts: { 'tr-TR': 'Adil takımlar', 'fr-FR': 'Équipes' },
+  };
+
+  test('drops the saved text of a language removed from the project (#111)', () => {
+    expect(videoRequestBody('store-preview', ['de-DE'], settings)).toEqual({ locales: ['de-DE'], trim: { start: 1 }, intro: { 'de-DE': 'Faire Teams' }, outro: {}, cardSeconds: 2 });
+    expect(videoRequestBody('device-video', ['tr-TR'], settings)).toMatchObject({ texts: { 'tr-TR': 'Adil takımlar' }, formats: ['vertical'] });
+  });
+
+  test('sends no texts and no empty trim for a loop', () => {
+    expect(videoRequestBody('loop', ['de-DE'], { ...settings, trim: {} })).toEqual({ locales: ['de-DE'] });
   });
 });
 

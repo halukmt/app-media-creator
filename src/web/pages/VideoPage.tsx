@@ -68,6 +68,8 @@ export function VideoPage({ project, catalogue, selection, onSelectionChange, fo
   const [uploadMessage, setUploadMessage] = useState<Message>(null);
   const [outputs, setOutputs] = useState<Awaited<ReturnType<typeof fetchOutputs>>>([]);
   const [outputVersion, setOutputVersion] = useState(0);
+  // Pixel size per generated video, read from the player once its metadata has loaded.
+  const [videoSizes, setVideoSizes] = useState<Record<string, { width: number; height: number }>>({});
   const [generateState, setGenerateState] = useState<{ languages: string } | null>(null);
   const [generateMessage, setGenerateMessage] = useState<Message>(null);
 
@@ -446,16 +448,28 @@ export function VideoPage({ project, catalogue, selection, onSelectionChange, fo
                 const name = en.video.specNames[entry.specId] ?? entry.specId;
                 const language = entry.locale ? localeName(entry.locale) : '';
                 const status = statuses.get(entry.path);
+                // The size of the file itself: a landscape recording gives a landscape preview (#111).
+                const measured = videoSizes[entry.path];
                 return (
                   <PreviewCard
                     key={entry.path}
                     title={name}
-                    size={en.video.resultSize(language, sizeText(entry.specId))}
+                    size={measured ? en.video.resultSize(language, en.video.sizeOf(measured.width, measured.height)) : language}
                     messages={status?.messages ?? []}
                     {...(status ? { status: status.status } : {})}
                     media={
                       // #t=1: the first frame is black (fade in); the height keeps name and badge in view on a phone.
-                      <video controls preload="metadata" className="mx-auto max-h-[60svh] w-auto max-w-full rounded" src={`${outputVideoUrl(entry.path, outputVersion)}#t=1`} aria-label={en.video.videoLabel(name, language)}>
+                      <video
+                        controls
+                        preload="metadata"
+                        className="mx-auto max-h-[60svh] w-auto max-w-full rounded"
+                        src={`${outputVideoUrl(entry.path, outputVersion)}#t=1`}
+                        aria-label={en.video.videoLabel(name, language)}
+                        onLoadedMetadata={(event) => {
+                          const { videoWidth: width, videoHeight: height } = event.currentTarget;
+                          setVideoSizes((current) => (current[entry.path]?.width === width && current[entry.path]?.height === height ? current : { ...current, [entry.path]: { width, height } }));
+                        }}
+                      >
                         <track kind="captions" src={NO_SPEECH} srcLang="en" label={en.video.noSpeech} />
                       </video>
                     }
