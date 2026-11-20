@@ -1,10 +1,12 @@
 // conventions: RULE-TESTING-3301
-import { existsSync, readdirSync } from 'node:fs';
+import { existsSync, readdirSync, utimesSync } from 'node:fs';
+import path from 'node:path';
 import { unzipSync } from 'fflate';
 import { describe, expect, test } from 'vitest';
 import { createExport, registerOutput } from '../../src/core/export/index.js';
 import { createApp } from '../../src/server/app.js';
-import { downloadTokens } from '../../src/server/export-routes.js';
+import { preparedDownloads } from '../../src/server/prepared-downloads.js';
+import { preparedFoldersFactory } from '../factories/export.js';
 import { packageInfoFactory } from '../factories/package-info.js';
 import { pngBytes, workspaceFactory } from '../factories/workspace.js';
 
@@ -99,20 +101,47 @@ describe('The UI download is prepared, then streamed with a one-time token (#47)
     expect((await prepare(app, ['pt-BR'])).status).toBe(400);
   });
 
-  test('drops tokens after ten minutes and removes a ZIP that was never fetched', () => {
-    let now = 0;
-    const removed: string[] = [];
-    const tokens = downloadTokens(
-      () => now,
-      async (file) => removed.push(file),
-    );
-    const never = tokens.issue('/never.zip', 'never.zip');
-    const fetched = tokens.issue('/fetched.zip', 'fetched.zip');
-    expect(tokens.take(fetched)).toEqual({ file: '/fetched.zip', fileName: 'fetched.zip' });
-    now = 11 * 60_000;
-    expect(tokens.take(never)).toBeUndefined();
-    expect(tokens.take(fetched)).toBeUndefined();
-    expect(removed).toEqual(['/never.zip']);
+  test('moves a fetched ZIP once, also for parallel fetches, and removes one never fetched on its own timer (#116)', async () => {
+    const { exportsDir, pendingRoot, zip } = preparedFoldersFactory();
+    const timers: (() => Promise<void>)[] = [];
+    const downloads = preparedDownloads({ pendingRoot, doneDir: exportsDir, setTimer: (run) => timers.push(run) });
+    const folder = await downloads.folder();
+    const never = downloads.issue(zip(folder, 'never.zip'), 'never.zip');
+    const fetched = downloads.issue(zip(folder, 'fetched.zip'), 'fetched.zip');
+    // Two fetches at the same time share the one move.
+    const [first, second] = await Promise.all([downloads.take(fetched), downloads.take(fetched)]);
+    expect(first).toEqual({ file: path.join(exportsDir, 'fetched.zip'), fileName: 'fetched.zip' });
+    expect(second?.file).toBe(path.join(exportsDir, 'fetched.zip'));
+
+    // No later request: the timers alone end both tokens.
+    await Promise.all(timers.map((run) => run()));
+    expect(await downloads.take(never)).toBeUndefined();
+    expect(readdirSync(folder)).toEqual([]);
+    expect(existsSync(path.join(exportsDir, 'fetched.zip'))).toBe(true);
+  });
+
+  test('removes old waiting folders of earlier runs at start, never those of runs still alive', async () => {
+    const { exportsDir, pendingRoot, zip } = preparedFoldersFactory();
+    zip(path.join(pendingRoot, 'old-run'), 'left.zip');
+    zip(path.join(pendingRoot, 'live-run'), 'fresh.zip');
+    zip(exportsDir, 'kept.zip');
+    const old = Date.now() - 60 * 60_000;
+    utimesSync(path.join(pendingRoot, 'old-run'), old / 1000, old / 1000);
+    await preparedDownloads({ pendingRoot, doneDir: exportsDir }).cleanUp();
+    expect(readdirSync(pendingRoot)).toEqual(['live-run']);
+    expect(existsSync(path.join(exportsDir, 'kept.zip'))).toBe(true);
+  });
+
+  test('builds a prepared ZIP in the waiting folder and moves it to the exports on download', async () => {
+    const workspace = await workspaceFactory();
+    await registerOutput(workspace, { specId: 'apple.icon', order: 1, name: 'app-icon', extension: 'png', bytes: await pngBytes() });
+    const app = createApp({ webRoot: 'does-not-exist', packageInfo: packageInfoFactory(), workspace });
+    const { token, fileName } = (await (await prepare(app, ['de-DE'])).json()) as { token: string; fileName: string };
+    const [runFolder] = readdirSync(path.join(workspace.exportsDir, 'prepared'));
+    expect(readdirSync(path.join(workspace.exportsDir, 'prepared', runFolder!))).toEqual([fileName]);
+    expect((await app.request(`${BASE}/api/export/download?token=${token}`)).status).toBe(200);
+    expect(existsSync(path.join(workspace.exportsDir, fileName))).toBe(true);
+    expect((await app.request(`${BASE}/api/export/download?token=${token}`)).status).toBe(200);
   });
 
   test('stops building the ZIP when the requester is gone and leaves no partial file', async () => {

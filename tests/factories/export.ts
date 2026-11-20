@@ -1,3 +1,6 @@
+import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
 import type { OutputEntry } from '../../src/core/export/index.js';
 import type { MediaProperties } from '../../src/core/specs/index.js';
 
@@ -31,5 +34,21 @@ export function measureFactory(byPath: Record<string, Partial<MediaProperties>>,
       throw Object.assign(new Error('missing'), { code: 'ENOENT' });
     }
     return { ...fallback, ...(key ? byPath[key] : {}) };
+  };
+}
+
+/** A temporary exports folder with a `prepared/` root and a ZIP stand-in of the given names waiting in `folder`. */
+export function preparedFoldersFactory(): { exportsDir: string; pendingRoot: string; zip: (folder: string, name: string) => string } {
+  const exportsDir = mkdtempSync(path.join(tmpdir(), 'amc-exports-'));
+  const pendingRoot = path.join(exportsDir, 'prepared');
+  return {
+    exportsDir,
+    pendingRoot,
+    zip: (folder, name) => {
+      mkdirSync(folder, { recursive: true });
+      const file = path.join(folder, name);
+      writeFileSync(file, 'zip');
+      return file;
+    },
   };
 }
