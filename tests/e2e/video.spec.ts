@@ -60,6 +60,8 @@ test.describe('The Video section', () => {
     const card = page.getByRole('listitem').filter({ has: page.getByText('App Store preview, iPhone') });
     await expect(card.locator('video')).toHaveAttribute('aria-label', 'App Store preview, iPhone, German');
     await expect(card.getByText('OK')).toBeVisible();
+    // The size comes from the video file itself (#111).
+    await expect(card.getByText('German · 886 × 1920 px')).toBeVisible();
   });
 
   for (const width of viewportWidths()) {

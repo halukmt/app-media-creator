@@ -60,6 +60,32 @@ export function trimFrom(
   return { trim, errors };
 }
 
+/** The saved settings a generate request is built from. */
+export interface VideoRequestSettings {
+  trim: { start?: number; end?: number };
+  intro: Partial<Record<string, string>>;
+  outro: Partial<Record<string, string>>;
+  cardSeconds: number;
+  formats: readonly VideoFormat[];
+  frame: string;
+  texts: Partial<Record<string, string>>;
+}
+
+/** Only the texts of the requested languages: a language removed from the project keeps its saved text (#111). */
+function textsFor(texts: Partial<Record<string, string>>, locales: readonly string[]): Partial<Record<string, string>> {
+  return Object.fromEntries(Object.entries(texts).filter(([locale]) => locales.includes(locale)));
+}
+
+/** The body of a generate request for one purpose and the given languages. */
+export function videoRequestBody(purpose: VideoPurpose, locales: readonly string[], settings: VideoRequestSettings): Record<string, unknown> {
+  const trim = settings.trim.start !== undefined || settings.trim.end !== undefined ? { trim: settings.trim } : {};
+  if (purpose === 'store-preview') {
+    return { locales, ...trim, intro: textsFor(settings.intro, locales), outro: textsFor(settings.outro, locales), cardSeconds: settings.cardSeconds };
+  }
+  if (purpose === 'device-video') return { locales, ...trim, formats: settings.formats, frame: settings.frame, texts: textsFor(settings.texts, locales) };
+  return { locales, ...trim };
+}
+
 /** The trim as the two field texts. */
 export function trimFields(trim: { start?: number; end?: number }): TrimFields {
   return { start: trim.start === undefined ? '' : String(trim.start), end: trim.end === undefined ? '' : String(trim.end) };

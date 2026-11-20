@@ -3,7 +3,7 @@
  * because that code depends on Node modules.
  */
 import type { CheckStatus } from './lib/export';
-import type { VideoFormat, VideoPurpose } from './lib/video';
+import { videoRequestBody, type VideoFormat, type VideoPurpose } from './lib/video';
 import type { CreativePurpose } from './lib/creative';
 import type { TargetId } from './lib/sections';
 
@@ -330,17 +330,10 @@ const VIDEO_ROUTES: Record<VideoPurpose, string> = {
 
 /** Generates the videos of one purpose for the given locales with the saved settings. */
 export function generateVideos(purpose: VideoPurpose, locales: readonly string[], settings: VideoSettings): Promise<VideoGenerationResult> {
-  const trim = settings.trim.start !== undefined || settings.trim.end !== undefined ? { trim: settings.trim } : {};
-  const body =
-    purpose === 'store-preview'
-      ? { locales, ...trim, intro: settings.intro, outro: settings.outro, cardSeconds: settings.cardSeconds }
-      : purpose === 'device-video'
-        ? { locales, ...trim, formats: settings.formats, frame: settings.frame, texts: settings.texts }
-        : { locales, ...trim };
   return request<VideoGenerationResult>(VIDEO_ROUTES[purpose], {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify(body),
+    body: JSON.stringify(videoRequestBody(purpose, locales, settings)),
   });
 }
 

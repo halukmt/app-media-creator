@@ -52,6 +52,8 @@ entries left under `[Unreleased]` is rejected by `npm run check:release`.
 
 ### Fixed
 
+- The Video section makes videos again after a language was removed from the project, and shows the real size of
+  landscape previews. (#111)
 - With an ffmpeg wrapper in `FFMPEG_PATH` whose name does not start with `ffmpeg`, videos are measured with the
   ffprobe on the PATH instead of with the wrapper itself. (#106)
 - Leaving Screenshots, a lost edit of the screenshot sets stays reported when the header image settings were saved
