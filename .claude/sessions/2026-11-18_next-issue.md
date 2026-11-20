@@ -456,3 +456,10 @@
   step (testsrc2 changes every pixel each frame, so "first vs middle" was no baseline). 4K loop renders are slow under
   load: the loop test runs one language (tr-TR), German is covered by the device video test.
 - Next: no Ready issue left; #23 (Video UI) waits for #22 (amc-video skill, Backlog).
+
+## #101 Shared plain autosave — done (PR #109)
+
+- `useAutosave` (core: queue, debounce, flush, discard, tracked save on leaving, reportSaved, discardOn / onDropped)
+  and `useLoadAfterSaves`; `useRevisionAutosave`, Logo settings and creative settings build on them. Circular
+  reload ↔ autosave dependency solved with a ref set in useLayoutEffect. Code review 7 (6 fixed; no hook unit tests
+  without a DOM setup — e2e covers #84–#98). No visible change.
