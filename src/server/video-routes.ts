@@ -5,6 +5,7 @@ import { checkVideoTools } from '../core/video/index.js';
 import { readVideoSettings, saveVideoSettings, type Workspace } from '../core/workspace/index.js';
 import { generatorError, pick } from './generate-routes.js';
 import { readOptionalJsonObject } from './json-body.js';
+import { safeMediaHeaders } from './safe-media.js';
 
 /** Video routes, mounted under /api: tool check, App Store previews, device and loop videos, and preview frames. */
 export function videoRoutes(workspace: Workspace): Hono {
@@ -67,12 +68,7 @@ export function videoRoutes(workspace: Workspace): Hono {
     const seconds = Number(c.req.query('seconds') ?? '5');
     try {
       const png = await renderPreviewFrame(workspace, file, seconds);
-      return c.body(new Uint8Array(png), 200, {
-        'content-type': 'image/png',
-        'x-content-type-options': 'nosniff',
-        'content-security-policy': "sandbox; default-src 'none'",
-        'cache-control': 'no-store',
-      });
+      return c.body(new Uint8Array(png), 200, safeMediaHeaders('image/png'));
     } catch (error) {
       return generatorError(c, error);
     }

@@ -24,6 +24,7 @@ import { ProgressStatus } from '../components/ProgressStatus';
 import { SaveStatus } from '../components/SaveStatus';
 import { SectionEmptyState } from '../components/SectionEmptyState';
 import { StatusAlert } from '../components/StatusAlert';
+import { anyUnverified } from '../lib/logo';
 import { TextField } from '../components/TextField';
 import { useAutosave } from '../hooks/useAutosave';
 import { useLoadAfterSaves } from '../hooks/useLoadAfterSaves';
@@ -443,6 +444,8 @@ export function VideoPage({ project, catalogue, selection, onSelectionChange, fo
             </h3>
             {purpose === 'store-preview' && results.length > 0 ? <p className="max-w-prose text-sm text-base-content/70">{en.video.posterNote}</p> : null}
             {results.length === 0 ? <p className="text-base-content/70">{en.video.noResults}</p> : null}
+            {/* Said once above the videos, not on every card (#64). */}
+            {anyUnverified(results, statuses) ? <p className="max-w-prose text-sm text-base-content/70">{en.video.unverifiedNote}</p> : null}
             <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
               {results.map((entry) => {
                 const name = en.video.specNames[entry.specId] ?? entry.specId;

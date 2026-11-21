@@ -1,6 +1,7 @@
 // conventions: RULE-TESTING-3301
 import { describe, expect, it } from 'vitest';
-import { groupOutputs, groupStatus } from '../../src/web/lib/logo.js';
+import { anyUnverified, groupOutputs, groupStatus } from '../../src/web/lib/logo.js';
+import { cardStatus } from '../../src/web/lib/export.js';
 
 const icon = (density: string, width: number) => ({
   path: `google/shared/mipmap-${density}/ic_launcher.png`,
@@ -48,5 +49,31 @@ describe('groupStatus', () => {
 
   it('is undefined while no file has a status', () => {
     expect(groupStatus([{ path: 'x' }], new Map())).toBeUndefined();
+  });
+});
+
+describe('The third-party note is shown once per pack, not on every card (#64)', () => {
+  const note = { level: 'warning' as const, text: 'Size and limits come from third-party sources, not from the store itself', code: 'unverified-spec' as const };
+
+  it('drops the note from a card and does not leave a warning without a reason', () => {
+    expect(cardStatus({ status: 'warning', messages: [note, { level: 'info', text: 'Only when the app runs on iPad' }] })).toEqual({ status: 'ok', messages: [], unverified: true });
+  });
+
+  it('keeps the real problems of a card next to the note', () => {
+    const card = cardStatus({ status: 'error', messages: [note, { level: 'error', text: 'icon.png: wrong size' }] });
+    expect(card).toEqual({ status: 'error', messages: ['icon.png: wrong size'], unverified: true });
+  });
+
+  it('keeps the checklist state of a card without the note', () => {
+    expect(cardStatus({ status: 'error', messages: [] })).toEqual({ status: 'error', messages: [], unverified: false });
+  });
+
+  it('tells whether one file of a pack has third-party sizes', () => {
+    const statuses = new Map([
+      ['a.png', { unverified: false }],
+      ['b.png', { unverified: true }],
+    ]);
+    expect(anyUnverified([{ path: 'a.png' }, { path: 'b.png' }], statuses)).toBe(true);
+    expect(anyUnverified([{ path: 'a.png' }, { path: 'missing.png' }], statuses)).toBe(false);
   });
 });

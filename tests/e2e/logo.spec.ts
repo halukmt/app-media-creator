@@ -37,6 +37,8 @@ test.describe('The Logo section', () => {
     await page.getByLabel('Logo', { exact: true }).setInputFiles({ name: 'logo.svg', mimeType: 'image/svg+xml', buffer: Buffer.from(svgBytes()) });
     await expect(page.getByText('Logo uploaded.')).toBeVisible();
     await expect(page.getByRole('img', { name: 'Your current logo' })).toBeVisible();
+    // An SVG logo scales without loss: no size warning on the current-logo card (#64).
+    await expect(page.getByText('SVG (vector, scales without loss)')).toBeVisible();
 
     await page.getByRole('button', { name: /Options →/ }).click();
     await page.getByRole('group', { name: /Background colour/ }).locator('label', { hasText: 'Navy' }).click();
@@ -44,7 +46,7 @@ test.describe('The Logo section', () => {
     await expect(page.getByText('Changes saved.')).toBeVisible();
 
     await page.getByRole('button', { name: /Preview →/ }).click();
-    await page.getByRole('button', { name: 'Generate all' }).click();
+    await page.getByRole('button', { name: /^Generate [0-9]+ packs?$/ }).click();
     await expect(page.getByText(/files generated/)).toBeVisible({ timeout: 90_000 });
     await expect(page.getByRole('img', { name: 'Preview of App Store icon' }).first()).toBeVisible();
     // The labelled icons of the preview environment are a second icon set.

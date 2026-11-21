@@ -1,10 +1,11 @@
 import { Hono, type Context } from 'hono';
+import sharp from 'sharp';
 import { generateAndroidIcons, type AndroidIconOptions } from '../core/generators/android-icons.js';
 import { generateAppStoreIcons, type AppStoreIconOptions } from '../core/generators/app-store-icons.js';
 import { generateFramedScreenshots, type FramedScreenshotOptions } from '../core/generators/framed-screenshots.js';
 import { generateScreenshotCards, renderCardPreview, type ScreenshotCardOptions } from '../core/generators/screenshot-cards.js';
 import { generateShareImages, type ShareImageOptions } from '../core/generators/share-images.js';
-import { GeneratorError, loadNewestLogo } from '../core/generators/logo.js';
+import { GeneratorError, describeLogo, loadNewestLogo, loadUploadedLogo, newestLogo } from '../core/generators/logo.js';
 import { generateLogoPack, listLogoOutputs } from '../core/generators/logo-packs.js';
 import { logoPalette, renderLogoSquare } from '../core/generators/render.js';
 import { BACKGROUND_PRESETS, backgroundsFromPalette, type BackgroundPreset } from '../core/screenshots/index.js';
@@ -19,6 +20,8 @@ import {
   type Workspace,
 } from '../core/workspace/index.js';
 import { readOptionalJsonObject } from './json-body.js';
+import { previewCache } from './preview-cache.js';
+import { safeMediaHeaders } from './safe-media.js';
 
 /** Maps known generator errors to JSON responses; rethrows everything else. */
 export function generatorError(c: Context, error: unknown) {
@@ -44,6 +47,7 @@ function iconOptions(body: Record<string, unknown>): { options: Record<string, u
 /** Routes that run generators, mounted under /api. */
 export function generateRoutes(workspace: Workspace): Hono {
   const api = new Hono();
+  const previews = previewCache();
 
   api.post('/generate/web-icons', async (c) => {
     const parsed = await readOptionalJsonObject(c);
@@ -150,13 +154,22 @@ export function generateRoutes(workspace: Workspace): Hono {
   // The newest logo as a small PNG for the UI. SVG logos are rasterized here and never sent to the browser as markup.
   api.get('/inputs/logo-preview', async (c) => {
     try {
-      const png = await renderLogoSquare(await loadNewestLogo(workspace), { size: 256, logoBox: 256 });
-      return c.body(new Uint8Array(png), 200, {
-        'content-type': 'image/png',
-        'x-content-type-options': 'nosniff',
-        'content-security-policy': "sandbox; default-src 'none'",
-        'cache-control': 'no-store',
-      });
+      // Rendered once per logo file (size and change time), not on every visit of the Upload step (#64).
+      const file = await newestLogo(workspace);
+      const png = await previews.get(file, 'logo-256', async () => renderLogoSquare(await loadUploadedLogo(file), { size: 256, logoBox: 256 }));
+      return c.body(new Uint8Array(png), 200, safeMediaHeaders('image/png'));
+    } catch (error) {
+      if (error instanceof GeneratorError) return c.json({ error: error.message }, 404);
+      throw error;
+    }
+  });
+
+  // Size, format and fitness of the newest logo for the icon packs, for the current-logo card in Upload (#64).
+  api.get('/inputs/logo-info', async (c) => {
+    try {
+      const logo = await loadUploadedLogo(await newestLogo(workspace));
+      const { format } = await sharp(logo.bytes).metadata();
+      return c.json(describeLogo(logo, format ?? 'unknown'));
     } catch (error) {
       if (error instanceof GeneratorError) return c.json({ error: error.message }, 404);
       throw error;

@@ -76,6 +76,22 @@ export function isWorseStatus(next: string | null, shown: CheckStatus): boolean 
   return STATUS_ORDER[next] < STATUS_ORDER[shown];
 }
 
+/** Card view of one file: state and messages; `unverified` when its size comes from third-party sources (#64). */
+export type CardStatus = { status: CheckStatus; messages: string[]; unverified: boolean };
+
+/**
+ * The card view of one checklist item: info lines and the third-party note are left out (pages show that note once
+ * per group). The checklist's own state stays; only a warning that came from the note alone is lowered, so a card
+ * never shows a warning without a reason.
+ */
+export function cardStatus(item: { status: CheckStatus; messages: readonly { level: string; text: string; code?: string }[] }): CardStatus {
+  const unverified = item.messages.some((m) => m.code === 'unverified-spec');
+  const shown = item.messages.filter((m) => m.level !== 'info' && m.code !== 'unverified-spec');
+  const fromShown = shown.reduce<CheckStatus>((worst, m) => (isWorseStatus(m.level, worst) ? (m.level as CheckStatus) : worst), 'ok');
+  const status = unverified && item.status === 'warning' ? fromShown : item.status;
+  return { status, messages: shown.map((m) => m.text), unverified };
+}
+
 /**
  * A file name to save a download under: only the base name of what the server sent, `fallback` when that is missing or
  * names no file.

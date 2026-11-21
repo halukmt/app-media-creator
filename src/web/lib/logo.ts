@@ -69,3 +69,11 @@ export function groupStatus(
   const status = found.reduce<CheckStatus>((worst, s) => (isWorseStatus(s.status, worst) ? s.status : worst), 'ok');
   return { status, messages: [...new Set(found.flatMap((s) => s.messages))] };
 }
+
+/** Whether a file of the list has sizes from third-party sources; pages show that note once per pack (#64). */
+export function anyUnverified(files: readonly { path: string }[], statuses: ReadonlyMap<string, { unverified?: boolean }>): boolean {
+  return files.some((f) => statuses.get(f.path)?.unverified === true);
+}
+
+/** Width descriptors for a preview image: the shown width and twice that for HiDPI screens (#64). */
+export const PREVIEW_WIDTHS = [240, 480] as const;

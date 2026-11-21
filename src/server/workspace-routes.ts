@@ -16,6 +16,7 @@ import {
   saveProject,
   type Workspace,
 } from '../core/workspace/index.js';
+import { safeMediaHeaders } from './safe-media.js';
 
 const MULTIPART_OVERHEAD = 1024 * 1024;
 
@@ -60,12 +61,7 @@ export function workspaceRoutes(workspace: Workspace): Hono {
     const input = (await listScreenshots(workspace)).find((s) => s.path === requested);
     if (!input) return c.json({ error: 'Not an uploaded screenshot' }, 404);
     const bytes = await readFile(path.join(workspace.root, input.path));
-    return c.body(new Uint8Array(bytes), 200, {
-      'content-type': `image/${input.format}`,
-      'x-content-type-options': 'nosniff',
-      'content-security-policy': "sandbox; default-src 'none'",
-      'cache-control': 'no-store',
-    });
+    return c.body(new Uint8Array(bytes), 200, safeMediaHeaders(`image/${input.format}`));
   });
 
   api.get('/screenshots', async (c) => c.json(await readScreenshotSets(workspace)));

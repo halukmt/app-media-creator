@@ -8,6 +8,8 @@ import { ExportError, createExport, exportChecklist, locateOutputFile, readManif
 import { ProjectFileError, type Workspace } from '../core/workspace/index.js';
 import { readOptionalJsonObject } from './json-body.js';
 import { preparedDownloads, type PreparedDownloads } from './prepared-downloads.js';
+import { previewCache } from './preview-cache.js';
+import { safeMediaHeaders } from './safe-media.js';
 
 const PREVIEW_TYPES: Record<string, string> = { png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', webp: 'image/webp', mp4: 'video/mp4' };
 
@@ -53,6 +55,7 @@ export function exportRoutes(
   downloads: PreparedDownloads = preparedDownloads({ pendingRoot: path.join(workspace.exportsDir, 'prepared'), doneDir: workspace.exportsDir }),
 ): Hono {
   const api = new Hono();
+  const previews = previewCache();
   // Tokens do not survive a restart: waiting folders of earlier runs are removed once they are older than the TTL (#116).
   void downloads.cleanUp();
 
@@ -81,13 +84,7 @@ export function exportRoutes(
     if (type === 'video/mp4') {
       // Streamed (previews can be tens of megabytes), with byte ranges so a <video> can seek and Safari plays it.
       const size = (await stat(file)).size;
-      const headers = {
-        'content-type': type,
-        'accept-ranges': 'bytes',
-        'x-content-type-options': 'nosniff',
-        'content-security-policy': "sandbox; default-src 'none'",
-        'cache-control': 'no-store',
-      };
+      const headers = { ...safeMediaHeaders(type), 'accept-ranges': 'bytes' };
       const range = byteRange(c.req.header('range'), size);
       if (range === 'invalid') return c.body(null, 416, { 'content-range': `bytes */${size}` });
       if (!range) return c.body(Readable.toWeb(createReadStream(file)) as ReadableStream, 200, { ...headers, 'content-length': String(size) });
@@ -100,13 +97,11 @@ export function exportRoutes(
     // ?width= gives a smaller copy for preview grids (never larger than the file).
     const width = Number(c.req.query('width'));
     const scaled = Number.isInteger(width) && width >= 16 && width <= 1024;
-    const bytes = scaled ? await sharp(file).resize({ width, withoutEnlargement: true }).png().toBuffer() : await readFile(file);
-    return c.body(new Uint8Array(bytes), 200, {
-      'content-type': scaled ? 'image/png' : type,
-      'x-content-type-options': 'nosniff',
-      'content-security-policy': "sandbox; default-src 'none'",
-      'cache-control': 'no-store',
-    });
+    // Resized copies are cached by file size and change time, so a preview grid is not resized again on every request.
+    const bytes = scaled
+      ? await previews.get(file, `w${width}`, () => sharp(file).resize({ width, withoutEnlargement: true }).png().toBuffer())
+      : await readFile(file);
+    return c.body(new Uint8Array(bytes), 200, safeMediaHeaders(scaled ? 'image/png' : type));
   });
 
   /** Builds the ZIP for the request body's locales; stops when the requester is gone (#47). */
