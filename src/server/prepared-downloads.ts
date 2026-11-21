@@ -20,8 +20,10 @@ interface Entry {
   file: string;
   fileName: string;
   expires: number;
-  /** The move out of the waiting folder, shared by fetches that arrive at the same time. */
-  moved?: Promise<string>;
+  /** The move out of the waiting folder, shared by fetches that arrive at the same time; cleared when it fails. */
+  moving?: Promise<string>;
+  /** Set once the move worked: from then on the ZIP is an export like any other and expiry leaves it. */
+  fetched: boolean;
 }
 
 /**
@@ -47,7 +49,16 @@ export function preparedDownloads(options: PreparedDownloadOptions) {
     const entry = pending.get(token);
     if (!entry) return;
     pending.delete(token);
-    if (!entry.moved) await rm(entry.file, { force: true }).catch(() => undefined);
+    if (!entry.fetched) await rm(entry.file, { force: true }).catch(() => undefined);
+  };
+
+  const cleanFolder = async (folder: string): Promise<void> => {
+    if (folder === runDir) return;
+    const info = await stat(folder).catch(() => undefined);
+    if (!info) return;
+    const age = now() - info.mtimeMs;
+    if (age > ttl) await rm(folder, { force: true, recursive: true }).catch(() => undefined);
+    else setTimer(() => cleanFolder(folder), ttl - age + 1000);
   };
 
   return {
@@ -59,7 +70,7 @@ export function preparedDownloads(options: PreparedDownloadOptions) {
 
     issue(file: string, fileName: string): string {
       const token = randomBytes(24).toString('hex');
-      pending.set(token, { file, fileName, expires: now() + ttl });
+      pending.set(token, { file, fileName, expires: now() + ttl, fetched: false });
       // The timer alone ends the token: no later request needed, and a clock change cannot keep it alive.
       setTimer(() => drop(token), ttl);
       return token;
@@ -73,26 +84,28 @@ export function preparedDownloads(options: PreparedDownloadOptions) {
         await drop(token);
         return undefined;
       }
-      entry.moved ??= (async () => {
+      if (entry.fetched) return { file: entry.file, fileName: entry.fileName };
+      entry.moving ??= (async () => {
         const target = path.join(options.doneDir, path.basename(entry.file));
         await mkdir(options.doneDir, { recursive: true });
         await rename(entry.file, target);
+        entry.file = target;
+        entry.fetched = true;
         return target;
-      })();
-      return { file: await entry.moved, fileName: entry.fileName };
+      })().finally(() => {
+        // A failed move (e.g. a file locked by antivirus) can be retried by the next fetch (#118).
+        entry.moving = undefined;
+      });
+      return { file: await entry.moving, fileName: entry.fileName };
     },
 
-    /** Removes the waiting folders earlier runs left, once they are older than the TTL. */
+    /**
+     * Removes the waiting folders earlier runs left once they are older than the TTL. A younger one may belong to
+     * another live instance: it is checked again when it reaches that age (a quick restart, #118).
+     */
     async cleanUp(): Promise<void> {
       const names = await readdir(options.pendingRoot).catch(() => [] as string[]);
-      await Promise.all(
-        names.map(async (name) => {
-          const folder = path.join(options.pendingRoot, name);
-          if (folder === runDir) return;
-          const info = await stat(folder).catch(() => undefined);
-          if (info && now() - info.mtimeMs > ttl) await rm(folder, { force: true, recursive: true }).catch(() => undefined);
-        }),
-      );
+      await Promise.all(names.map((name) => cleanFolder(path.join(options.pendingRoot, name))));
     },
   };
 }

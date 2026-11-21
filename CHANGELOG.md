@@ -56,6 +56,8 @@ entries left under `[Unreleased]` is rejected by `npm run check:release`.
 
 ### Fixed
 
+- Prepared export ZIPs are also removed after a quick restart of the tool, and a download that failed once because
+  the file was locked works on the next try. (#118)
 - Export ZIPs prepared for a download that never started are removed after ten minutes on their own, also after a
   restart of the tool. (#116)
 - The Video section makes videos again after a language was removed from the project, and shows the real size of
