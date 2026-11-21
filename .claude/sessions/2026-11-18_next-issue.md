@@ -515,3 +515,12 @@
 - `drop()` awaits an in-flight move before removing a never-fetched ZIP. Race test fails on the old code.
 - **GitHub Actions budget used up (2026-11-21):** Haluk decided to merge after local checks only. PRs merged without
   CI are listed in #122 (Backlog, re-run CI in December 2026). No release before #122 is done.
+
+## #64 Logo section polish and small server cleanups — done (PR #123, merged without CI)
+
+- Third-party note once per pack (checklist message `code: 'unverified-spec'`, `cardStatus` in `src/web/lib/export.ts`),
+  srcSet 240w/480w, "Generate N packs", current-logo size and checks (`GET /api/inputs/logo-info`, `describeLogo`),
+  `safeMediaHeaders`, in-memory preview cache (`src/server/preview-cache.ts`).
+- Review: code-review found that the card state ignored the checklist state (fixed); security review none; design-critic
+  turned the info alert per pack into a muted line.
+- Note: hooks importing `../api` without `.js` are not resolvable under `tsconfig.test.json`; put testable logic in `src/web/lib/`.
