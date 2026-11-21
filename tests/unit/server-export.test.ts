@@ -155,6 +155,19 @@ describe('The UI download is prepared, then streamed with a one-time token (#47)
     expect(existsSync(abandoned)).toBe(false);
   });
 
+  test('keeps a ZIP whose move is still running when its token expires (#120)', async () => {
+    const { exportsDir, pendingRoot, zip } = preparedFoldersFactory();
+    const timers: (() => Promise<void>)[] = [];
+    const downloads = preparedDownloads({ pendingRoot, doneDir: exportsDir, setTimer: (run) => timers.push(run) });
+    const folder = await downloads.folder();
+    const token = downloads.issue(zip(folder, 'late.zip'), 'late.zip');
+    // The fetch starts, then the expiry timer fires before the move has finished.
+    const fetching = downloads.take(token);
+    await Promise.all(timers.map((run) => run()));
+    expect((await fetching)?.file).toBe(path.join(exportsDir, 'late.zip'));
+    expect(existsSync(path.join(exportsDir, 'late.zip'))).toBe(true);
+  });
+
   test('removes old waiting folders of earlier runs at start, never those of runs still alive', async () => {
     const { exportsDir, pendingRoot, zip } = preparedFoldersFactory();
     zip(path.join(pendingRoot, 'old-run'), 'left.zip');
