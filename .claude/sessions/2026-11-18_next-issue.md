@@ -498,3 +498,9 @@
 - `POST /api/export/prepare` + `GET /api/export/download?token=` (192-bit tokens, valid 10 min for retries, never
   fetched ZIPs removed on expiry); `createExport` honours an AbortSignal (closes the #48 follow-up).
 - Code review 8 (all fixed), security clean. CI: `apt-get install ffmpeg` took 10 min on this PR → #115 (P2 S, Ready).
+
+## #116 Prepared export ZIP cleanup (Codex on #114) — done (PR #117)
+
+- `src/server/prepared-downloads.ts`: per-token timers, per-run waiting folder, move on first fetch (shared by parallel
+  fetches), startup cleanup of old run folders; only ENOENT answers expired. Code review 10, all applied.
+- The machine shut down while waiting for CI; resumed 2026-11-21, CI was green, merged.
