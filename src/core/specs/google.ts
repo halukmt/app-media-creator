@@ -248,4 +248,23 @@ export const GOOGLE_SPECS: readonly SpecEntry[] = [
     sourceUrl: DENSITIES,
     notes: '48 dp at mdpi, hdpi, xhdpi, xxhdpi and xxxhdpi.',
   },
+  {
+    id: 'google.promo-video',
+    target: 'google',
+    group: 'promo',
+    name: 'Promo video for YouTube (Play listing)',
+    kind: 'video',
+    required: false,
+    // Google Play takes a YouTube URL, not a file: this is the file to upload to YouTube, in its standard 16:9 size.
+    dimensions: { kind: 'fixed', sizes: [{ width: 1920, height: 1080 }], rotatable: false },
+    formats: ['mp4'],
+    alpha: 'forbidden',
+    maxCount: 1,
+    video: { minSeconds: 10, maxSeconds: 120, maxFps: 60 },
+    localized: true,
+    verified: false,
+    sourceUrl: LISTING,
+    notes:
+      'Play shows one YouTube URL (public or unlisted, no ads, embeddable); the first 30 s autoplay muted, so the message must work without sound. Size and length are YouTube recommendations, not Play rules.',
+  },
 ];

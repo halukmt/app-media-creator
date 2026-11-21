@@ -14,6 +14,8 @@ import {
   type StoredInput,
   type VideoSettings,
 } from '../api';
+import { AiJobPanel, type AiJobMessage } from '../components/AiJobPanel';
+import { AiResultCard } from '../components/AiResultCard';
 import { BusyButton } from '../components/BusyButton';
 import { FileField } from '../components/FileField';
 import { LocaleSelector } from '../components/LocaleSelector';
@@ -29,13 +31,26 @@ import { TextField } from '../components/TextField';
 import { useAutosave } from '../hooks/useAutosave';
 import { useLoadAfterSaves } from '../hooks/useLoadAfterSaves';
 import { useOutputStatuses } from '../hooks/useOutputStatuses';
+import { usePromoJob } from '../hooks/usePromoJob';
 import { en } from '../i18n/en';
 import { SectionLayout } from '../layouts/SectionLayout';
 import { FRAME_KINDS } from '../lib/frames';
 import { projectLocaleOptions, sourceLocaleFor } from '../lib/locale-selection';
 import { uploadName } from '../lib/screenshots';
 import { sectionHref } from '../lib/sections';
-import { VIDEO_FORMATS, VIDEO_PURPOSES, purposeAvailable, resultSpecs, trimFields, trimFrom, type VideoPurpose } from '../lib/video';
+import {
+  VIDEO_FORMATS,
+  VIDEO_PURPOSES,
+  isWebUrlOrEmpty,
+  needsRecording,
+  promoLocales,
+  purposeAvailable,
+  resultSpecs,
+  toggleFormat,
+  trimFields,
+  trimFrom,
+  type VideoPurpose,
+} from '../lib/video';
 
 interface Props {
   project: ProjectSettings;
@@ -55,7 +70,8 @@ const NO_SPEECH = 'data:text/vtt;charset=utf-8,WEBVTT%0A';
 
 /**
  * The Video section (#23): upload a screen recording per language, choose what the videos are for (App Store preview,
- * device video, header and search loop), set the options, and make the videos for the selected languages.
+ * device video, header and search loop, promo reel), set the options, and make the videos for the selected languages.
+ * Promo reels (#22) are rendered by Claude Code (amc-video with brag) from an AI job and need no recording.
  */
 export function VideoPage({ project, catalogue, selection, onSelectionChange, focusHeading }: Props) {
   const [step, setStep] = useState<StepId>('upload');
@@ -73,6 +89,8 @@ export function VideoPage({ project, catalogue, selection, onSelectionChange, fo
   const [videoSizes, setVideoSizes] = useState<Record<string, { width: number; height: number }>>({});
   const [generateState, setGenerateState] = useState<{ languages: string } | null>(null);
   const [generateMessage, setGenerateMessage] = useState<Message>(null);
+  // The promo source fields as typed; only valid addresses are saved (#22).
+  const [promoUrls, setPromoUrls] = useState({ website: '', repo: '' });
 
   const localeOptions = projectLocaleOptions(catalogue.locales, project.locales);
   const editOptions = localeOptions.filter((locale) => selection.includes(locale.id));
@@ -91,6 +109,7 @@ export function VideoPage({ project, catalogue, selection, onSelectionChange, fo
       setSettings((current) => {
         if (current) return current;
         setTrim(trimFields(nextSettings.trim));
+        setPromoUrls({ website: nextSettings.promo.website ?? '', repo: nextSettings.promo.repo ?? '' });
         return nextSettings;
       });
       setOutputs(nextOutputs);
@@ -114,6 +133,20 @@ export function VideoPage({ project, catalogue, selection, onSelectionChange, fo
     schedule(next);
   }
 
+  const promoJob = usePromoJob(async () => {
+    // A failed reload keeps the outputs shown now.
+    const next = await fetchOutputs().catch(() => null);
+    if (next) setOutputs(next);
+    setOutputVersion((v) => v + 1);
+  });
+
+  function updatePromoUrl(field: 'website' | 'repo', text: string) {
+    setPromoUrls((current) => ({ ...current, [field]: text }));
+    if (!settings || !isWebUrlOrEmpty(text)) return;
+    const { [field]: _old, ...rest } = settings.promo;
+    update({ ...settings, promo: { ...rest, ...(text.trim() ? { [field]: text.trim() } : {}) } });
+  }
+
   const trimResult = trimFrom(trim, { invalid: en.video.trimInvalid, order: en.video.trimOrder });
   function updateTrim(field: 'start' | 'end', text: string) {
     const next = { ...trim, [field]: text };
@@ -132,12 +165,15 @@ export function VideoPage({ project, catalogue, selection, onSelectionChange, fo
   const shownRecordings = recordings.filter((input) => input.locale && (selection.includes(input.locale) || input.locale === project.sourceLocale));
   const hasRecordings = shownRecordings.length > 0;
   const ownRecordings = recordings.filter((input) => input.locale === editLocale);
+  const promoPossible = purposeAvailable('promo', project.targets);
+  // Options and Export need a recording, except for promo reels (#22).
+  const canContinue = hasRecordings || (purpose === 'promo' && promoPossible);
 
   const steps = [
     { id: 'upload', label: en.steps.upload },
-    { id: 'purpose', label: en.steps.purpose, disabled: !hasRecordings },
-    { id: 'preview', label: en.video.optionsHeading, disabled: !hasRecordings },
-    { id: 'export', label: en.steps.export, disabled: !hasRecordings },
+    { id: 'purpose', label: en.steps.purpose, disabled: !hasRecordings && !promoPossible },
+    { id: 'preview', label: en.video.optionsHeading, disabled: !canContinue },
+    { id: 'export', label: en.steps.export, disabled: !canContinue },
   ];
 
   function goTo(next: StepId) {
@@ -162,7 +198,7 @@ export function VideoPage({ project, catalogue, selection, onSelectionChange, fo
   }
 
   async function generate() {
-    if (!settings) return;
+    if (!settings || purpose === 'promo') return;
     setGenerateMessage(null);
     if (trimResult.errors.start || trimResult.errors.end) {
       setGenerateMessage({ tone: 'error', text: en.video.fixOptions });
@@ -206,21 +242,40 @@ export function VideoPage({ project, catalogue, selection, onSelectionChange, fo
     'store-preview': en.video.storePreviewHint([sizeText('apple.preview.iphone'), sizeText('apple.preview.ipad')].filter(Boolean).join(' / '), iphone?.minSeconds ?? 0, iphone?.maxSeconds ?? 0),
     'device-video': en.video.deviceVideoHint,
     loop: en.video.loopHint(loop?.minSeconds ?? 0, loop?.maxSeconds ?? 0),
+    promo: en.video.promoHint,
   };
+  const unavailableNote = (id: VideoPurpose) => (id === 'promo' ? en.video.promoDisabled : id === 'device-video' ? en.video.webDisabled : en.video.appleDisabled);
   // Why the Make button is off, shown next to it (L5).
+
+  const purposeOptions = VIDEO_PURPOSES.map((id) => ({
+    id,
+    label: en.video.purposes[id],
+    description: purposeHints[id],
+    ...(!purposeAvailable(id, project.targets)
+      ? { disabled: true, note: unavailableNote(id) }
+      : needsRecording(id) && !hasRecordings
+        ? { disabled: true, note: en.video.needsRecording }
+        : {}),
+  }));
+
+  // The promo job panel: its last outcome as a message, and the languages of its checked reels.
+  const promoMessage: AiJobMessage | null = promoJob.outcome
+    ? {
+        action: promoJob.outcome.action,
+        tone: 'error',
+        text: promoJob.outcome.result === 'saveFirst' ? en.video.saveFirst : promoJob.outcome.action === 'prepare' ? en.video.promo.prepareFailed : en.video.promo.applyFailed,
+        ...(promoJob.outcome.details ? { details: promoJob.outcome.details } : {}),
+      }
+    : null;
+  const promoJobLocales = promoLocales(promoJob.job?.promoVideos, project.locales);
+  const selectedLocales = project.locales.filter((locale) => selection.includes(locale));
+  const promoUrlsValid = isWebUrlOrEmpty(promoUrls.website) && isWebUrlOrEmpty(promoUrls.repo);
+  // Why Make (or Prepare, for promo reels) is off, shown next to it (L5).
   const blockers = [
     ...(tools && !tools.ffmpeg ? [en.video.noFfmpeg] : []),
-    ...(purposeAvailable(purpose, project.targets) ? [] : [purpose === 'device-video' ? en.video.webDisabled : en.video.appleDisabled]),
-  ];
-
-  const purposeOptions = [
-    ...VIDEO_PURPOSES.map((id) => ({
-      id,
-      label: en.video.purposes[id],
-      description: purposeHints[id],
-      ...(purposeAvailable(id, project.targets) ? {} : { disabled: true, note: id === 'device-video' ? en.video.webDisabled : en.video.appleDisabled }),
-    })),
-    { id: 'promo', label: en.video.purposes.promo, description: en.video.promoHint, disabled: true, note: en.video.comingLater },
+    ...(purposeAvailable(purpose, project.targets) ? [] : [unavailableNote(purpose)]),
+    ...(purpose === 'promo' && !promoUrlsValid ? [en.video.promoUrlsInvalid] : []),
+    ...(purpose === 'promo' && selectedLocales.length === 0 ? [en.video.promoNoLanguage] : []),
   ];
 
   return (
@@ -247,6 +302,20 @@ export function VideoPage({ project, catalogue, selection, onSelectionChange, fo
             {en.steps.upload}
           </h2>
           {!hasRecordings ? <SectionEmptyState section="video" project={project} /> : null}
+          {!hasRecordings && promoPossible && settings ? (
+            <div>
+              <button
+                type="button"
+                className="btn min-h-11"
+                onClick={() => {
+                  update({ ...settings, purpose: 'promo' });
+                  goTo('preview');
+                }}
+              >
+                {en.video.promoWithoutRecording} →
+              </button>
+            </div>
+          ) : null}
           <LocaleSelector label={en.video.uploadLocaleLabel} mode="single" options={editOptions} value={[editLocale]} onChange={([id]) => id && setEditLocale(id)} />
           <FileField label={en.video.uploadLabel} accept="video/mp4,video/quicktime,.mp4,.mov,.m4v" hint={en.video.uploadHint} onFiles={(files) => void upload(files)} disabled={uploading} />
           <div role="status">
@@ -310,10 +379,12 @@ export function VideoPage({ project, catalogue, selection, onSelectionChange, fo
           <h2 id="step-preview" tabIndex={-1} className="text-xl font-semibold focus:outline-none">
             {en.video.optionsHeading}
           </h2>
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            <TextField label={en.video.trimStart} value={trim.start} inputMode="decimal" hint={en.video.trimHint} onChange={(text) => updateTrim('start', text)} {...(trimResult.errors.start ? { error: trimResult.errors.start } : {})} />
-            <TextField label={en.video.trimEnd} value={trim.end} inputMode="decimal" onChange={(text) => updateTrim('end', text)} {...(trimResult.errors.end ? { error: trimResult.errors.end } : {})} />
-          </div>
+          {purpose !== 'promo' ? (
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <TextField label={en.video.trimStart} value={trim.start} inputMode="decimal" hint={en.video.trimHint} onChange={(text) => updateTrim('start', text)} {...(trimResult.errors.start ? { error: trimResult.errors.start } : {})} />
+              <TextField label={en.video.trimEnd} value={trim.end} inputMode="decimal" onChange={(text) => updateTrim('end', text)} {...(trimResult.errors.end ? { error: trimResult.errors.end } : {})} />
+            </div>
+          ) : null}
           {purpose === 'store-preview' ? (
             <>
               <LocaleTextFields
@@ -350,10 +421,9 @@ export function VideoPage({ project, catalogue, selection, onSelectionChange, fo
                 options={VIDEO_FORMATS.map((format) => ({ id: format, label: en.video.formats[format] }))}
                 value={settings.formats}
                 onSelect={(id) => {
-                  const has = settings.formats.includes(id as (typeof VIDEO_FORMATS)[number]);
-                  const formats = has ? settings.formats.filter((format) => format !== id) : [...settings.formats, id as (typeof VIDEO_FORMATS)[number]];
                   // At least one format stays chosen.
-                  if (formats.length > 0) update({ ...settings, formats: VIDEO_FORMATS.filter((format) => formats.includes(format)) });
+                  const formats = toggleFormat(settings.formats, id);
+                  if (formats) update({ ...settings, formats });
                 }}
               />
               <OptionGroup
@@ -370,6 +440,40 @@ export function VideoPage({ project, catalogue, selection, onSelectionChange, fo
                 hint={en.video.textHint(catalogue.maxPhrase)}
                 maxLength={catalogue.maxPhrase}
                 onChange={(locale, text) => update({ ...settings, texts: { ...settings.texts, [locale]: text } })}
+              />
+            </>
+          ) : null}
+          {purpose === 'promo' ? (
+            <>
+              {project.targets.web.enabled ? (
+                <OptionGroup
+                  label={en.video.promoFormatsLabel}
+                  multiple
+                  options={VIDEO_FORMATS.map((format) => ({ id: format, label: en.video.formats[format] }))}
+                  value={settings.promo.formats}
+                  onSelect={(id) => {
+                    const formats = toggleFormat(settings.promo.formats, id);
+                    if (formats) update({ ...settings, promo: { ...settings.promo, formats } });
+                  }}
+                />
+              ) : (
+                // Google Play alone takes only the 16:9 reel (for YouTube).
+                <StatusAlert tone="info" title={en.video.promoPlayOnly} />
+              )}
+              <TextField
+                label={en.video.promoWebsite}
+                value={promoUrls.website}
+                inputMode="url"
+                hint={en.video.promoSourceHint}
+                onChange={(text) => updatePromoUrl('website', text)}
+                {...(isWebUrlOrEmpty(promoUrls.website) ? {} : { error: en.video.urlInvalid })}
+              />
+              <TextField
+                label={en.video.promoRepo}
+                value={promoUrls.repo}
+                inputMode="url"
+                onChange={(text) => updatePromoUrl('repo', text)}
+                {...(isWebUrlOrEmpty(promoUrls.repo) ? {} : { error: en.video.urlInvalid })}
               />
             </>
           ) : null}
@@ -394,7 +498,7 @@ export function VideoPage({ project, catalogue, selection, onSelectionChange, fo
           <h2 id="step-export" tabIndex={-1} className="text-xl font-semibold focus:outline-none">
             {en.video.exportHeading}
           </h2>
-          <p className="max-w-prose">{en.video.generateHint}</p>
+          {purpose !== 'promo' ? <p className="max-w-prose">{en.video.generateHint}</p> : null}
           {blockers.length > 0 ? (
             <StatusAlert announce={false} tone="warning" title={en.video.cannotMake}>
               <ul className="list-disc pl-5">
@@ -409,14 +513,68 @@ export function VideoPage({ project, catalogue, selection, onSelectionChange, fo
               )}
             </StatusAlert>
           ) : null}
-          <div className="flex flex-wrap items-center gap-3">
-            <BusyButton primary busy={generateState !== null} busyLabel={en.video.generatingShort} disabled={blockers.length > 0} onClick={() => void generate()}>
-              {en.video.generate[purpose]}
-            </BusyButton>
-            <a href={sectionHref('export')} className="btn min-h-11">
-              {en.video.toExport}
-            </a>
-          </div>
+          {purpose === 'promo' ? (
+            <>
+              {project.targets.google.enabled ? <StatusAlert announce={false} tone="info" title={en.video.youtubeNote} /> : null}
+              <AiJobPanel
+                job={promoJob.job}
+                text={en.video.promo}
+                resultLocales={promoJobLocales}
+                localeName={localeName}
+                actions={[
+                  {
+                    id: 'apply',
+                    label: en.video.promo.apply,
+                    confirmTitle: en.video.promo.confirmTitle,
+                    confirmBody: en.video.promo.confirmBody(promoJobLocales.map(localeName).join(', ')),
+                  },
+                ]}
+                preparing={promoJob.busy === 'prepare'}
+                prepareDisabled={blockers.length > 0}
+                applying={promoJob.busy === 'apply' ? 'apply' : null}
+                message={promoMessage}
+                onPrepare={() =>
+                  void promoJob.prepare(
+                    selectedLocales,
+                    { formats: project.targets.web.enabled ? settings.promo.formats : ['landscape'], ...(settings.promo.website ? { website: settings.promo.website } : {}), ...(settings.promo.repo ? { repo: settings.promo.repo } : {}) },
+                    flush,
+                  )
+                }
+                onApply={() => void promoJob.apply()}
+              >
+                <p className="text-sm text-base-content/70">{en.video.promo.previewHint}</p>
+                <div className="grid grid-cols-1 gap-3">
+                  {promoJobLocales.map((locale) => (
+                    <AiResultCard
+                      key={locale}
+                      locale={locale}
+                      localeName={localeName(locale)}
+                      rows={(promoJob.job?.promoVideos ?? [])
+                        .filter((reel) => reel.locale === locale)
+                        .map((reel) => ({
+                          title: en.video.formats[reel.format],
+                          texts: [{ main: en.video.promoRow(reel.width, reel.height, Math.round(reel.durationSeconds), (reel.bytes / (1024 * 1024)).toFixed(1)) }],
+                        }))}
+                    />
+                  ))}
+                </div>
+              </AiJobPanel>
+              <div>
+                <a href={sectionHref('export')} className="btn min-h-11">
+                  {en.video.toExport}
+                </a>
+              </div>
+            </>
+          ) : (
+            <div className="flex flex-wrap items-center gap-3">
+              <BusyButton primary busy={generateState !== null} busyLabel={en.video.generatingShort} disabled={blockers.length > 0} onClick={() => void generate()}>
+                {en.video.generate[purpose]}
+              </BusyButton>
+              <a href={sectionHref('export')} className="btn min-h-11">
+                {en.video.toExport}
+              </a>
+            </div>
+          )}
           <div role="status">
             {generateState ? <ProgressStatus label={en.video.generating(generateState.languages)} /> : null}
             {generateMessage && generateMessage.tone !== 'error' ? (

@@ -20,13 +20,31 @@ describe('The video settings are validated and stored', () => {
 
   test('rejects an unknown purpose, an end before the start, no format and a foreign locale; a broken file reads as defaults', async () => {
     const base = defaultVideoSettings();
-    expect(validateVideoSettings({ ...base, purpose: 'promo' }).ok).toBe(false);
+    expect(validateVideoSettings({ ...base, purpose: 'teaser' }).ok).toBe(false);
     expect(validateVideoSettings({ ...base, trim: { start: 5, end: 2 } })).toEqual({ ok: false, errors: ['trim.end: must be after the start'] });
     expect(validateVideoSettings({ ...base, formats: [] }).ok).toBe(false);
     expect(validateVideoSettings({ ...base, texts: { 'pt-BR': 'Olá' } })).toEqual({ ok: false, errors: ['texts.pt-BR: not a supported locale'] });
     const workspace = await workspaceFactory();
     writeFileSync(path.join(workspace.root, 'video.json'), '{ broken');
     expect(await readVideoSettings(workspace)).toEqual(defaultVideoSettings());
+  });
+});
+
+describe('The promo reel settings keep formats and sources (#22)', () => {
+  test('stores the promo purpose, its formats and the website and repository; older files get all formats', async () => {
+    const workspace = await workspaceFactory();
+    const saved = await saveVideoSettings(workspace, { ...defaultVideoSettings(), purpose: 'promo', promo: { formats: ['square', 'landscape'], website: ' https://example.com ', repo: '' } });
+    expect(saved).toMatchObject({ ok: true, settings: { purpose: 'promo', promo: { formats: ['landscape', 'square'], website: 'https://example.com' } } });
+    expect((await readVideoSettings(workspace)).promo).toEqual({ formats: ['landscape', 'square'], website: 'https://example.com' });
+    const { promo: _promo, ...older } = defaultVideoSettings();
+    expect(validateVideoSettings(older)).toMatchObject({ ok: true, settings: { promo: { formats: ['vertical', 'landscape', 'square'] } } });
+  });
+
+  test('rejects addresses that are not http or https, credentials in them and an empty format list', () => {
+    const base = defaultVideoSettings();
+    expect(validateVideoSettings({ ...base, promo: { formats: ['square'], website: 'javascript:alert(1)' } }).ok).toBe(false);
+    expect(validateVideoSettings({ ...base, promo: { formats: ['square'], repo: 'https://me:token@github.com/x/y' } }).ok).toBe(false);
+    expect(validateVideoSettings({ ...base, promo: { formats: [] } }).ok).toBe(false);
   });
 });
 

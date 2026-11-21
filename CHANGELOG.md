@@ -12,6 +12,9 @@ entries left under `[Unreleased]` is rejected by `npm run check:release`.
 
 ### Added
 
+- Promo reels for Google Play, websites and social: the Video section prepares an AI job, the new `amc-video` skill
+  renders 16:9, 9:16 and 1:1 reels per language with brag (HyperFrames), and the tool checks them and adds them to the
+  outputs, the 16:9 reel also as the YouTube file for Google Play. (#22)
 - Expo icons pack in the Logo section: the iOS icon with dark and tinted versions, the Android adaptive layers and the
   matching `app.json` lines for Expo / React Native projects. (#42)
 - Video section: upload a screen recording per language, choose App Store preview, device video or header and search
@@ -61,6 +64,7 @@ entries left under `[Unreleased]` is rejected by `npm run check:release`.
 
 ### Fixed
 
+- The README's store texts install step shows the command again instead of terminal output. (#22)
 - The in-memory preview cache no longer loses capacity when several requests ask for the same new preview at once. (#124)
 - Prepared export ZIPs are also removed after a quick restart of the tool, and a download that failed once because
   the file was locked works on the next try. (#118)

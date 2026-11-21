@@ -1,7 +1,10 @@
 /** Video section helpers (pure, tested in Node). */
 
-export type VideoPurpose = 'store-preview' | 'device-video' | 'loop';
-export const VIDEO_PURPOSES: readonly VideoPurpose[] = ['store-preview', 'device-video', 'loop'];
+export type VideoPurpose = 'store-preview' | 'device-video' | 'loop' | 'promo';
+/** Purposes this tool renders itself with ffmpeg; promo reels come from the amc-video skill (#22). */
+export type MadeVideoPurpose = Exclude<VideoPurpose, 'promo'>;
+export const MADE_VIDEO_PURPOSES: readonly MadeVideoPurpose[] = ['store-preview', 'device-video', 'loop'];
+export const VIDEO_PURPOSES: readonly VideoPurpose[] = [...MADE_VIDEO_PURPOSES, 'promo'];
 export const VIDEO_FORMATS = ['vertical', 'landscape', 'square'] as const;
 export type VideoFormat = (typeof VIDEO_FORMATS)[number];
 
@@ -10,15 +13,28 @@ const RESULT_SPECS: Record<VideoPurpose, readonly string[]> = {
   'store-preview': ['apple.preview.iphone', 'apple.preview.ipad'],
   'device-video': ['web.video.vertical', 'web.video.landscape', 'web.video.square'],
   loop: ['apple.creative.header-video', 'apple.creative.search-video'],
+  promo: ['web.promo.landscape', 'web.promo.vertical', 'web.promo.square', 'google.promo-video'],
 };
 
 export function resultSpecs(purpose: VideoPurpose): readonly string[] {
   return RESULT_SPECS[purpose];
 }
 
-/** A purpose needs its store turned on in Project: App Store previews and loops the App Store, device videos Web. */
-export function purposeAvailable(purpose: VideoPurpose, targets: { apple: { enabled: boolean }; web: { enabled: boolean } }): boolean {
+/**
+ * A purpose needs its store turned on in Project: App Store previews and loops the App Store, device videos Web,
+ * promo reels Google Play or Web.
+ */
+export function purposeAvailable(
+  purpose: VideoPurpose,
+  targets: { apple: { enabled: boolean }; google: { enabled: boolean }; web: { enabled: boolean } },
+): boolean {
+  if (purpose === 'promo') return targets.google.enabled || targets.web.enabled;
   return purpose === 'device-video' ? targets.web.enabled : targets.apple.enabled;
+}
+
+/** Whether a purpose needs a screen recording; promo reels also work from screenshots or a website (#22). */
+export function needsRecording(purpose: VideoPurpose): boolean {
+  return purpose !== 'promo';
 }
 
 /** Largest trim value in seconds; the stored settings accept nothing beyond it. */
@@ -77,7 +93,7 @@ function textsFor(texts: Partial<Record<string, string>>, locales: readonly stri
 }
 
 /** The body of a generate request for one purpose and the given languages. */
-export function videoRequestBody(purpose: VideoPurpose, locales: readonly string[], settings: VideoRequestSettings): Record<string, unknown> {
+export function videoRequestBody(purpose: MadeVideoPurpose, locales: readonly string[], settings: VideoRequestSettings): Record<string, unknown> {
   const trim = settings.trim.start !== undefined || settings.trim.end !== undefined ? { trim: settings.trim } : {};
   if (purpose === 'store-preview') {
     return { locales, ...trim, intro: textsFor(settings.intro, locales), outro: textsFor(settings.outro, locales), cardSeconds: settings.cardSeconds };
@@ -89,4 +105,28 @@ export function videoRequestBody(purpose: VideoPurpose, locales: readonly string
 /** The trim as the two field texts. */
 export function trimFields(trim: { start?: number; end?: number }): TrimFields {
   return { start: trim.start === undefined ? '' : String(trim.start), end: trim.end === undefined ? '' : String(trim.end) };
+}
+
+/** The formats after toggling one, in catalogue order; null when that would leave none (one stays chosen). */
+export function toggleFormat(formats: readonly VideoFormat[], id: string): VideoFormat[] | null {
+  const has = formats.includes(id as VideoFormat);
+  const next = has ? formats.filter((format) => format !== id) : [...formats, id as VideoFormat];
+  return next.length > 0 ? VIDEO_FORMATS.filter((format) => next.includes(format)) : null;
+}
+
+/** An empty text, or an http or https URL without credentials (what the server accepts as a promo source, #22). */
+export function isWebUrlOrEmpty(text: string): boolean {
+  const value = text.trim();
+  if (value === '') return true;
+  try {
+    const url = new URL(value);
+    return (url.protocol === 'https:' || url.protocol === 'http:') && url.username === '' && url.password === '';
+  } catch {
+    return false;
+  }
+}
+
+/** The languages of a promo job's checked reels, in project order. */
+export function promoLocales(videos: readonly { locale: string }[] | undefined, projectLocales: readonly string[]): string[] {
+  return projectLocales.filter((locale) => (videos ?? []).some((video) => video.locale === locale));
 }

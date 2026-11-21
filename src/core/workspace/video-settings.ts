@@ -13,7 +13,7 @@ import { writeJsonAtomic, type Workspace } from './workspace.js';
  * same values as request options; the page saves them so they survive a reload.
  */
 
-export const VIDEO_PURPOSES = ['store-preview', 'device-video', 'loop'] as const;
+export const VIDEO_PURPOSES = ['store-preview', 'device-video', 'loop', 'promo'] as const;
 export type VideoPurpose = (typeof VIDEO_PURPOSES)[number];
 export const VIDEO_FORMATS = ['vertical', 'landscape', 'square'] as const;
 export type VideoFormat = (typeof VIDEO_FORMATS)[number];
@@ -30,6 +30,8 @@ export interface VideoSettings {
   formats: VideoFormat[];
   frame: FrameKind;
   texts: Partial<Record<LocaleId, string>>;
+  /** Promo reels (#22): formats, and the website and repository the amc-video skill takes material from. */
+  promo: { formats: VideoFormat[]; website?: string; repo?: string };
 }
 
 const FILE = 'video.json';
@@ -38,11 +40,25 @@ export const MAX_VIDEO_TEXT = MAX_PHRASE;
 export const CARD_SECONDS_RANGE = { min: 1, max: 5, default: 2 } as const;
 
 export function defaultVideoSettings(): VideoSettings {
-  return { version: 1, purpose: 'store-preview', trim: {}, intro: {}, outro: {}, cardSeconds: CARD_SECONDS_RANGE.default, formats: [...VIDEO_FORMATS], frame: 'iphone', texts: {} };
+  return { version: 1, purpose: 'store-preview', trim: {}, intro: {}, outro: {}, cardSeconds: CARD_SECONDS_RANGE.default, formats: [...VIDEO_FORMATS], frame: 'iphone', texts: {}, promo: { formats: [...VIDEO_FORMATS] } };
 }
 
 const seconds = z.number().finite().min(0).max(3600);
 const texts = z.record(z.string(), z.string().max(MAX_VIDEO_TEXT, `at most ${MAX_VIDEO_TEXT} characters`));
+/** An http or https URL without credentials; empty means none. */
+const webUrl = z
+  .string()
+  .trim()
+  .max(500)
+  .refine((value) => {
+    if (value === '') return true;
+    try {
+      const url = new URL(value);
+      return (url.protocol === 'https:' || url.protocol === 'http:') && url.username === '' && url.password === '';
+    } catch {
+      return false;
+    }
+  }, 'must be an http or https URL');
 const schema = z.object({
   version: z.literal(1).optional(),
   purpose: z.enum(VIDEO_PURPOSES),
@@ -53,6 +69,11 @@ const schema = z.object({
   formats: z.array(z.enum(VIDEO_FORMATS)).min(1, 'pick at least one format'),
   frame: z.custom<FrameKind>(isFrameKind, { message: 'must be a known device frame' }),
   texts,
+  // Older files have no promo sources.
+  promo: z
+    .object({ formats: z.array(z.enum(VIDEO_FORMATS)).min(1, 'pick at least one format').optional(), website: webUrl.optional(), repo: webUrl.optional() })
+    .strict()
+    .optional(),
 });
 
 export type VideoSettingsValidation = { ok: true; settings: VideoSettings } | { ok: false; errors: string[] };
@@ -85,6 +106,11 @@ export function validateVideoSettings(input: unknown): VideoSettingsValidation {
     formats: VIDEO_FORMATS.filter((format) => data.formats.includes(format)),
     frame: data.frame,
     texts: localeTexts('texts', data.texts, errors),
+    promo: {
+      formats: data.promo?.formats ? VIDEO_FORMATS.filter((format) => data.promo!.formats!.includes(format)) : [...VIDEO_FORMATS],
+      ...(data.promo?.website ? { website: data.promo.website } : {}),
+      ...(data.promo?.repo ? { repo: data.promo.repo } : {}),
+    },
   };
   return errors.length > 0 ? { ok: false, errors } : { ok: true, settings };
 }
