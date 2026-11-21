@@ -504,3 +504,8 @@
 - `src/server/prepared-downloads.ts`: per-token timers, per-run waiting folder, move on first fetch (shared by parallel
   fetches), startup cleanup of old run folders; only ENOENT answers expired. Code review 10, all applied.
 - The machine shut down while waiting for CI; resumed 2026-11-21, CI was green, merged.
+
+## #118 Prepared ZIP cleanup misses quick restarts and failed moves (2026-11-21)
+
+- Result: PR #119 squash-merged. Fresh waiting folders of earlier runs get a later check once they reach the TTL; a failed move out of the waiting folder no longer sticks, so the same token works on retry; expiry removes only ZIPs never fetched.
+- Findings: Codex finding on #117; both new tests fail with the old code. Archived as `openspec/changes/archive/2026-11-21-118-prepared-cleanup-retry/`.
