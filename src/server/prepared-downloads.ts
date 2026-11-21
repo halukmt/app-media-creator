@@ -44,11 +44,12 @@ export function preparedDownloads(options: PreparedDownloadOptions) {
   const runDir = path.join(options.pendingRoot, `${Date.now().toString(36)}-${randomBytes(4).toString('hex')}`);
   const pending = new Map<string, Entry>();
 
-  /** Drops the token; removes the ZIP when it was never fetched. */
+  /** Drops the token; removes the ZIP when it was never fetched (after a move in flight has settled, #120). */
   const drop = async (token: string) => {
     const entry = pending.get(token);
     if (!entry) return;
     pending.delete(token);
+    if (entry.moving) await entry.moving.catch(() => undefined);
     if (!entry.fetched) await rm(entry.file, { force: true }).catch(() => undefined);
   };
 
