@@ -528,3 +528,11 @@
 ## #124 Preview cache counts concurrent misses twice (Codex on #123) — done (PR #125, merged without CI)
 
 - Renders in flight are shared per key; replacing a key subtracts the old buffer. Test with 11 overlapping misses.
+
+## #77 Faster unit tests — done (PR #127, merged without CI), target only partly met
+
+- One temp root (`tests/factories/temp.ts`), `AMC_X264_PRESET` / `AMC_FFMPEG_THREADS` (tests: ultrafast, 2),
+  `sharp.concurrency(1)` in `tests/setup.ts`, heaviest video tests in own files. 242 s → ~190–198 s.
+- Measured: 4 workers slower (225 s); sharp default concurrency makes single video tests up to 132 s.
+- The 90 s target is open in #126 (Backlog, P2/M) with the profile data.
+- Codex on #123 led to #124 (preview cache accounting), done in PR #125.
