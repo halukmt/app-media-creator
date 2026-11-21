@@ -6,7 +6,7 @@ import { frameBox, frameOverlaySvg, frameSvg, outerAspect, screenWidthFor, svgNu
 import { textBlockSvg, type TextWarning } from '../screenshots/text-block.js';
 import type { Rect, Size } from '../specs/index.js';
 import { PreviewError } from './preview.js';
-import { FfmpegMissingError, ffmpegBinary, isMissingProgram, programMessage, renderProgram, type RunProgram } from './tools.js';
+import { FfmpegMissingError, ffmpegBinary, isMissingProgram, programMessage, encoderThreadArgs, renderProgram, x264Preset, type RunProgram } from './tools.js';
 
 /**
  * Videos composed of layers (#21): a still plate (background, text, the device with its shadow), the recording scaled
@@ -271,7 +271,8 @@ export function composeArgs(input: ComposeArgsInput): string[] {
     '-c:v',
     'libx264',
     '-preset',
-    'veryfast',
+    x264Preset(),
+    ...encoderThreadArgs(),
     '-crf',
     '20',
     '-pix_fmt',

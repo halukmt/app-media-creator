@@ -37,6 +37,27 @@ export const captureProgram: CaptureProgram = (file, args) =>
     );
   });
 
+/** x264 presets `AMC_X264_PRESET` may choose; faster ones give larger files at the same quality setting. */
+const X264_PRESETS = ['ultrafast', 'superfast', 'veryfast', 'faster', 'fast', 'medium'] as const;
+
+/**
+ * The x264 preset for every encode: `veryfast` by default (a local tool should not keep the user waiting), or
+ * `AMC_X264_PRESET` when it names a known preset. The tests use `ultrafast` (#77); unknown values are ignored.
+ */
+export function x264Preset(env: NodeJS.ProcessEnv = process.env): string {
+  const wanted = env.AMC_X264_PRESET?.trim();
+  return X264_PRESETS.find((preset) => preset === wanted) ?? 'veryfast';
+}
+
+/**
+ * Encoder thread arguments: none by default (ffmpeg uses every core), `-threads N` when `AMC_FFMPEG_THREADS` is a
+ * whole number from 1 to 64. The tests limit it, because many encodes run at the same time there (#77).
+ */
+export function encoderThreadArgs(env: NodeJS.ProcessEnv = process.env): string[] {
+  const threads = Number(env.AMC_FFMPEG_THREADS?.trim());
+  return Number.isInteger(threads) && threads >= 1 && threads <= 64 ? ['-threads', String(threads)] : [];
+}
+
 /** The ffmpeg binary: `FFMPEG_PATH` when set, otherwise `ffmpeg` from the PATH. */
 export function ffmpegBinary(env: NodeJS.ProcessEnv = process.env): string {
   return env.FFMPEG_PATH?.trim() || 'ffmpeg';

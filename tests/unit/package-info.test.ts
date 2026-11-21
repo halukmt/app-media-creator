@@ -1,6 +1,6 @@
 // conventions: RULE-TESTING-3301
-import { mkdtempSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { tempDir } from '../factories/temp.js';
+import { writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { describe, expect, test } from 'vitest';
 import { readPackageInfo } from '../../src/core/package-info.js';
@@ -17,7 +17,7 @@ describe('readPackageInfo reads name and version from package.json', () => {
   });
 
   test('throws when the version is missing', () => {
-    const dir = mkdtempSync(path.join(tmpdir(), 'amc-'));
+    const dir = tempDir('amc-');
     const file = path.join(dir, 'package.json');
     writeFileSync(file, JSON.stringify({ name: 'x' }));
     expect(() => readPackageInfo(file)).toThrow('has no name or version');

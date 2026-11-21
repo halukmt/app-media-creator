@@ -1,6 +1,6 @@
 // conventions: RULE-TESTING-3301
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { tempDir } from '../factories/temp.js';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import sharp from 'sharp';
 import { describe, expect, test } from 'vitest';
@@ -142,7 +142,7 @@ describe('Device frames match the screenshot specs', () => {
   });
 
   test('uses an official bezel from the user frames folder instead of the generic frame', async () => {
-    const dir = mkdtempSync(path.join(tmpdir(), 'amc-frames-'));
+    const dir = tempDir('amc-frames-');
     // A magenta bezel of 100 × 200 with a transparent screen area inside.
     const bezel = await sharp({ create: { width: 100, height: 200, channels: 4, background: '#ff00ff' } })
       .composite([{ input: { create: { width: 80, height: 180, channels: 4, background: { r: 0, g: 0, b: 0, alpha: 1 } } }, left: 10, top: 10, blend: 'dest-out' }])
@@ -167,7 +167,7 @@ describe('Device frames match the screenshot specs', () => {
   });
 
   test('names the file when a user bezel description does not match its PNG', async () => {
-    const dir = mkdtempSync(path.join(tmpdir(), 'amc-frames-'));
+    const dir = tempDir('amc-frames-');
     writeFileSync(path.join(dir, 'ipad.png'), await sharp({ create: { width: 100, height: 140, channels: 4, background: '#ff00ff' } }).png().toBuffer());
     writeFileSync(path.join(dir, 'ipad.json'), JSON.stringify({ width: 300, height: 420, screen: { x: 10, y: 10, width: 80, height: 120 } }));
     await expect(loadUserFrame(dir, 'ipad')).rejects.toThrow(/frames\/user\/ipad\.json says 300×420/);

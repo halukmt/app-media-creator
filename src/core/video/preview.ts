@@ -4,7 +4,7 @@ import sharp from 'sharp';
 import { backgroundSvg, textColorFor, type Background } from '../screenshots/backgrounds.js';
 import { textBlockSvg, type TextWarning } from '../screenshots/text-block.js';
 import type { Size } from '../specs/index.js';
-import { FfmpegMissingError, ffmpegBinary, isMissingProgram, programMessage, renderProgram, type RunProgram } from './tools.js';
+import { FfmpegMissingError, ffmpegBinary, isMissingProgram, programMessage, encoderThreadArgs, renderProgram, x264Preset, type RunProgram } from './tools.js';
 
 /**
  * App Store preview videos (#20): a real screen recording, trimmed, scaled and padded to the store size, with simple
@@ -153,9 +153,10 @@ export function previewArgs(input: PreviewArgsInput): string[] {
     '[a]',
     '-c:v',
     'libx264',
-    // veryfast: a local tool should not keep the user waiting; at a constant 11 Mbps the quality stays high.
+    // veryfast by default (x264Preset): a local tool should not keep the user waiting; at a constant 11 Mbps the quality stays high.
     '-preset',
-    'veryfast',
+    x264Preset(),
+    ...encoderThreadArgs(),
     '-profile:v',
     'high',
     '-level:v',
