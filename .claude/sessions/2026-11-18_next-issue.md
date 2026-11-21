@@ -509,3 +509,9 @@
 
 - Result: PR #119 squash-merged. Fresh waiting folders of earlier runs get a later check once they reach the TTL; a failed move out of the waiting folder no longer sticks, so the same token works on retry; expiry removes only ZIPs never fetched.
 - Findings: Codex finding on #117; both new tests fail with the old code. Archived as `openspec/changes/archive/2026-11-21-118-prepared-cleanup-retry/`.
+
+## #120 Expiry deletes a prepared ZIP while its move is in flight (Codex on #119) — done (PR #121)
+
+- `drop()` awaits an in-flight move before removing a never-fetched ZIP. Race test fails on the old code.
+- **GitHub Actions budget used up (2026-11-21):** Haluk decided to merge after local checks only. PRs merged without
+  CI are listed in #122 (Backlog, re-run CI in December 2026). No release before #122 is done.
