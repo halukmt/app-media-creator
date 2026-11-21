@@ -1,5 +1,5 @@
-import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { tempDir } from './temp.js';
+import { mkdirSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import type { OutputEntry } from '../../src/core/export/index.js';
 import type { MediaProperties } from '../../src/core/specs/index.js';
@@ -39,7 +39,7 @@ export function measureFactory(byPath: Record<string, Partial<MediaProperties>>,
 
 /** A temporary exports folder with a `prepared/` root and a ZIP stand-in of the given names waiting in `folder`. */
 export function preparedFoldersFactory(): { exportsDir: string; pendingRoot: string; zip: (folder: string, name: string) => string } {
-  const exportsDir = mkdtempSync(path.join(tmpdir(), 'amc-exports-'));
+  const exportsDir = tempDir('amc-exports-');
   const pendingRoot = path.join(exportsDir, 'prepared');
   return {
     exportsDir,

@@ -1,12 +1,11 @@
-import { mkdtempSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { tempDir } from './temp.js';
 import path from 'node:path';
 import sharp from 'sharp';
 import { defaultProject, openWorkspace, type ProjectSettings, type Workspace } from '../../src/core/workspace/index.js';
 
 /** A fresh workspace in a new temporary repo folder named `demo-repo`. */
 export async function workspaceFactory(): Promise<Workspace> {
-  const repo = path.join(mkdtempSync(path.join(tmpdir(), 'amc-ws-')), 'demo-repo');
+  const repo = path.join(tempDir('amc-ws-'), 'demo-repo');
   return openWorkspace(path.join(repo, '.app-media'));
 }
 

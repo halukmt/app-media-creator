@@ -116,7 +116,7 @@ npm run dev            # API server on :4790 + UI on http://localhost:5173
 | `npm start` | Run the built CLI (`app-media-creator`) |
 | `npm run check` | TypeScript checks for server, UI and tests |
 | `npm run check:all` | Project checks (component inventory, …) |
-| `npm test` | Unit tests (Vitest) |
+| `npm test` | Unit tests (Vitest); see [docs/testing.md](docs/testing.md) for a faster local run |
 | `npm run test:e2e` | End-to-end tests with accessibility checks (Playwright + axe) |
 | `npm run check:release` | Release gate: CHANGELOG version equals `package.json`, no `[Unreleased]` entries |
 

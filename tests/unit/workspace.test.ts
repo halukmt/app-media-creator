@@ -1,6 +1,6 @@
 // conventions: RULE-TESTING-3301
-import { existsSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { tempDir } from '../factories/temp.js';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { describe, expect, test } from 'vitest';
 import { openWorkspace, readProject, saveProject } from '../../src/core/workspace/index.js';
@@ -53,7 +53,7 @@ describe('saveProject and readProject store the settings', () => {
   });
 
   test('uses a valid default name for a repo folder with a very long name', async () => {
-    const root = path.join(mkdtempSync(path.join(tmpdir(), 'amc-ws-')), 'x'.repeat(150), '.app-media');
+    const root = path.join(tempDir('amc-ws-'), 'x'.repeat(150), '.app-media');
     const workspace = await openWorkspace(root);
     expect((await readProject(workspace)).name).toHaveLength(100);
   });

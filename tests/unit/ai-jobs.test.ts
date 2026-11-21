@@ -1,8 +1,8 @@
 // conventions: RULE-TESTING-3301
+import { tempDir } from '../factories/temp.js';
 import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { describe, expect, test } from 'vitest';
 import { applyHeadlines, createJob, extractFrames, listJobs, readJob, type Brief, type RunProgram } from '../../src/core/jobs/index.js';
@@ -207,7 +207,7 @@ describe('applyHeadlines writes one variant into the screenshot sets', () => {
 
 describe('The jobs folder watcher and API', () => {
   test('reports a changed job once by its id and ignores other folders', async () => {
-    const dir = mkdtempSync(path.join(tmpdir(), 'amc-jobs-'));
+    const dir = tempDir('amc-jobs-');
     const id = '20261119-120000-abcd';
     mkdirSync(path.join(dir, id));
     mkdirSync(path.join(dir, 'notes'));
@@ -244,7 +244,7 @@ const hasFfmpeg = spawnSync(process.env.FFMPEG_PATH || 'ffmpeg', ['-version']).s
 
 describe('extractFrames with the real ffmpeg', () => {
   test.skipIf(!hasFfmpeg)('takes one frame every two seconds from a 5 second video', async () => {
-    const dir = mkdtempSync(path.join(tmpdir(), 'amc-frames-'));
+    const dir = tempDir('amc-frames-');
     const video = path.join(dir, 'clip.mp4');
     const made = spawnSync(process.env.FFMPEG_PATH || 'ffmpeg', ['-hide_banner', '-loglevel', 'error', '-f', 'lavfi', '-i', 'testsrc=duration=5:size=320x640:rate=10', '-pix_fmt', 'yuv420p', video]);
     expect(made.status).toBe(0);
@@ -254,7 +254,7 @@ describe('extractFrames with the real ffmpeg', () => {
   });
 
   test('reports a missing ffmpeg', async () => {
-    const dir = mkdtempSync(path.join(tmpdir(), 'amc-frames-'));
+    const dir = tempDir('amc-frames-');
     await expect(extractFrames(path.join(dir, 'clip.mp4'), path.join(dir, 'f'), fakeFfmpeg('missing'))).rejects.toThrow(/ffmpeg was not found/);
   });
 });

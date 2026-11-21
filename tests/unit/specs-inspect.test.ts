@@ -1,12 +1,12 @@
 // conventions: RULE-TESTING-3301
-import { mkdtempSync, statSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { tempDir } from '../factories/temp.js';
+import { statSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import sharp from 'sharp';
 import { describe, expect, test } from 'vitest';
 import { inspectImage } from '../../src/core/specs/index.js';
 
-const dir = mkdtempSync(path.join(tmpdir(), 'amc-inspect-'));
+const dir = tempDir('amc-inspect-');
 
 describe('inspectImage measures an image file', () => {
   test('measures a 64×32 PNG with an alpha channel', async () => {

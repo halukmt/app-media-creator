@@ -1,7 +1,7 @@
 // conventions: RULE-TESTING-3301
+import { tempDir } from '../factories/temp.js';
 import { spawnSync } from 'node:child_process';
-import { existsSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { describe, expect, test } from 'vitest';
 import { COPY_LIMITS, createJob, readJob, type Brief } from '../../src/core/jobs/index.js';
@@ -122,7 +122,7 @@ describe('The skill\'s check script agrees with the tool', () => {
   });
 
   test('stops with exit code 2 outside a job folder and 1 without a result', async () => {
-    expect(check(mkdtempSync(path.join(tmpdir(), 'amc-nojob-'))).status).toBe(2);
+    expect(check(tempDir('amc-nojob-')).status).toBe(2);
     const { folder } = await jobFolder();
     const run = check(folder);
     expect(run.status).toBe(1);

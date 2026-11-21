@@ -1,7 +1,7 @@
 // conventions: RULE-TESTING-3301
+import { tempDir } from '../factories/temp.js';
 import { spawnSync } from 'node:child_process';
-import { existsSync, mkdtempSync, readFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { describe, expect, test } from 'vitest';
 import { createJob, readJob } from '../../src/core/jobs/index.js';
@@ -63,7 +63,7 @@ describe('The skill\'s check script agrees with the tool', () => {
   });
 
   test('stops with exit code 2 outside a store texts job and 1 before the texts are written', async () => {
-    expect(check(mkdtempSync(path.join(tmpdir(), 'amc-nojob-'))).status).toBe(2);
+    expect(check(tempDir('amc-nojob-')).status).toBe(2);
     const { folder } = await textJob();
     const run = check(folder);
     expect(run.status).toBe(1);

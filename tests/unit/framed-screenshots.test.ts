@@ -1,6 +1,6 @@
 // conventions: RULE-TESTING-3301
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { tempDir } from '../factories/temp.js';
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import sharp from 'sharp';
 import { describe, expect, test } from 'vitest';
@@ -143,7 +143,7 @@ describe('generateFramedScreenshots writes website screenshots per locale', () =
 
 describe('A user bezel gets the same shadow as the generic frames', () => {
   test('keeps semi-transparent bezel pixels as transparent as in the bezel file, apart from the shadow', async () => {
-    const dir = mkdtempSync(path.join(tmpdir(), 'amc-frames-'));
+    const dir = tempDir('amc-frames-');
     // A red ring at 50 % alpha with an empty screen opening.
     const bezel = await sharp({ create: { width: 100, height: 200, channels: 4, background: { r: 255, g: 0, b: 0, alpha: 0.5 } } })
       .composite([{ input: { create: { width: 80, height: 180, channels: 4, background: { r: 0, g: 0, b: 0, alpha: 1 } } }, left: 10, top: 10, blend: 'dest-out' }])
@@ -160,7 +160,7 @@ describe('A user bezel gets the same shadow as the generic frames', () => {
   });
 
   test('draws a shadow below the bezel inside the margin', async () => {
-    const dir = mkdtempSync(path.join(tmpdir(), 'amc-frames-'));
+    const dir = tempDir('amc-frames-');
     const bezel = await sharp({ create: { width: 100, height: 200, channels: 4, background: '#202020' } })
       .composite([{ input: { create: { width: 80, height: 180, channels: 4, background: { r: 0, g: 0, b: 0, alpha: 1 } } }, left: 10, top: 10, blend: 'dest-out' }])
       .png()

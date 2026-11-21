@@ -7,6 +7,7 @@ import { generateStorePreviews, renderPreviewFrame } from '../../src/core/genera
 import { getSpec, inspectImageBytes, validateMedia } from '../../src/core/specs/index.js';
 import {
   PreviewError,
+  encoderThreadArgs,
   ffprobeBinary,
   orientedSize,
   parseProbe,
@@ -14,11 +15,12 @@ import {
   previewArgs,
   probeVideo,
   renderTextCard,
+  x264Preset,
 } from '../../src/core/video/index.js';
 import { saveInput, saveProject, type Workspace } from '../../src/core/workspace/index.js';
 import { createApp } from '../../src/server/app.js';
 import { packageInfoFactory } from '../factories/package-info.js';
-import { hasFfmpeg, probeJsonFactory, recordingBytes } from '../factories/video.js';
+import { hasFfmpeg, previewWorkspace, probeJsonFactory, recordingBytes } from '../factories/video.js';
 import { mp4Bytes, projectInputFactory, workspaceFactory } from '../factories/workspace.js';
 
 const LIMITS = { minSeconds: 15, maxSeconds: 30 };
@@ -53,6 +55,20 @@ describe('The preview keeps the orientation of the recording', () => {
   test('uses the portrait size for a portrait recording and the landscape size for a landscape one', () => {
     expect(orientedSize({ width: 886, height: 1920 }, { width: 590, height: 1278 })).toEqual({ width: 886, height: 1920 });
     expect(orientedSize({ width: 886, height: 1920 }, { width: 1920, height: 1080 })).toEqual({ width: 1920, height: 886 });
+  });
+});
+
+describe('The encoder speed can be tuned per machine (#77)', () => {
+  test('uses veryfast and all cores unless a known preset or a thread count is set', () => {
+    expect(x264Preset({})).toBe('veryfast');
+    expect(x264Preset({ AMC_X264_PRESET: ' ultrafast ' })).toBe('ultrafast');
+    expect(encoderThreadArgs({})).toEqual([]);
+    expect(encoderThreadArgs({ AMC_FFMPEG_THREADS: '2' })).toEqual(['-threads', '2']);
+  });
+
+  test('ignores an unknown preset and a thread count that is not a whole number from 1 to 64', () => {
+    expect(x264Preset({ AMC_X264_PRESET: 'placebo; rm -rf' })).toBe('veryfast');
+    for (const threads of ['0', '65', '1.5', 'four', '']) expect(encoderThreadArgs({ AMC_FFMPEG_THREADS: threads })).toEqual([]);
   });
 });
 
@@ -118,17 +134,6 @@ describe('Text cards are drawn per language', () => {
   });
 });
 
-/** A German and Turkish project with one German recording. */
-async function previewWorkspace(recording: Uint8Array, devices?: string[]): Promise<Workspace> {
-  const workspace = await workspaceFactory();
-  const input = projectInputFactory({ sourceLocale: 'de-DE', locales: ['de-DE', 'tr-TR'] }) as { targets: { apple: { devices: string[] } } };
-  if (devices) input.targets.apple.devices = devices;
-  const saved = await saveProject(workspace, input);
-  if (!saved.ok) throw new Error(saved.errors.join('; '));
-  await saveInput(workspace, 'de-DE', { kind: 'video', locale: 'de-DE', originalName: 'teams.mp4', bytes: recording });
-  return workspace;
-}
-
 describe.skipIf(!FFMPEG)('generateStorePreviews renders App Store previews with ffmpeg', () => {
   test('writes a valid iPhone preview per language with text cards, de-DE and tr-TR (fallback input)', async () => {
     const workspace = await previewWorkspace(recordingBytes({ seconds: 12 }), ['apple.screenshot.iphone-6.9', 'apple.screenshot.iphone-duo-outer']);
@@ -152,21 +157,6 @@ describe.skipIf(!FFMPEG)('generateStorePreviews renders App Store previews with 
     expect(await inspectImageBytes(frame)).toMatchObject({ width: 886, height: 1920 });
     await expect(renderPreviewFrame(workspace, 'apple/de-DE/preview-iphone/01-teams.mp4', 25)).rejects.toThrow(/seconds must be from 0 to below 16/);
     await expect(renderPreviewFrame(workspace, 'apple/de-DE/../../project.json', 1)).rejects.toThrow('There is no generated preview video at this path');
-  }, 300_000);
-
-  test('adds silent stereo audio, an iPad preview in landscape and replaces earlier previews', async () => {
-    const workspace = await previewWorkspace(recordingBytes({ seconds: 16, width: 640, height: 360, audio: false }), ['apple.screenshot.iphone-6.9', 'apple.screenshot.ipad-13']);
-    const first = await generateStorePreviews(workspace, { locales: 'de-DE' });
-    expect(first.entries.map((e) => e.specId).sort()).toEqual(['apple.preview.ipad', 'apple.preview.iphone']);
-    const ipad = await probeVideo(path.join(workspace.outputDir, first.entries.find((e) => e.specId === 'apple.preview.ipad')!.path));
-    expect(ipad).toMatchObject({ width: 1600, height: 1200, audioChannels: 2 });
-    await generateStorePreviews(workspace, { locales: 'de-DE' });
-    expect((await readManifest(workspace)).entries.filter((e) => e.locale === 'de-DE')).toHaveLength(2);
-    // Without an iPad size in the project, the iPad preview goes with the next run.
-    const saved = await saveProject(workspace, projectInputFactory({ sourceLocale: 'de-DE', locales: ['de-DE', 'tr-TR'] }));
-    if (!saved.ok) throw new Error(saved.errors.join('; '));
-    await generateStorePreviews(workspace, { locales: 'de-DE' });
-    expect((await readManifest(workspace)).entries.map((e) => e.specId)).toEqual(['apple.preview.iphone']);
   }, 300_000);
 
   test('explains a recording that is too short before anything is written', async () => {

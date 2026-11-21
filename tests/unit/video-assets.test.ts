@@ -1,6 +1,4 @@
 // conventions: RULE-TESTING-3301
-import { mkdtempSync, readFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
 import path from 'node:path';
 import sharp from 'sharp';
 import { describe, expect, test } from 'vitest';
@@ -8,15 +6,15 @@ import { readManifest } from '../../src/core/export/index.js';
 import { generateEmbedVideos, generateLoopVideos } from '../../src/core/generators/video-assets.js';
 import { frameBox, frameOverlaySvg } from '../../src/core/screenshots/index.js';
 import { getSpec, validateMedia } from '../../src/core/specs/index.js';
-import { composeArgs, deviceScreen, embedLayout, planLoop, probeVideo, renderEmbedLayers, renderFrame, screenPixels } from '../../src/core/video/index.js';
-import { saveCreativeSettings, saveInput, saveProject, type Workspace } from '../../src/core/workspace/index.js';
+import { composeArgs, deviceScreen, embedLayout, planLoop, probeVideo, renderEmbedLayers, screenPixels } from '../../src/core/video/index.js';
+import { saveCreativeSettings, saveProject } from '../../src/core/workspace/index.js';
 import { createApp } from '../../src/server/app.js';
 import { packageInfoFactory } from '../factories/package-info.js';
-import { hasFfmpeg, recordingBytes } from '../factories/video.js';
+import { VIDEO_BACKGROUND, frameAt, hasFfmpeg, recordingBytes, videoWorkspace } from '../factories/video.js';
 import { projectInputFactory, workspaceFactory } from '../factories/workspace.js';
 
 const FFMPEG = hasFfmpeg();
-const BACKGROUND = { kind: 'solid', color: '#1f8def' } as const;
+const BACKGROUND = VIDEO_BACKGROUND;
 
 describe('Device videos are laid out inside their canvas', () => {
   test('keeps text and device inside the canvas for every format, with and without text', () => {
@@ -86,33 +84,9 @@ describe('planLoop joins the end of the recording to its start', () => {
 });
 
 /** A German and Turkish project with one German recording and header phrases. */
-async function videoWorkspace(recording: Uint8Array): Promise<Workspace> {
-  const workspace = await workspaceFactory();
-  const saved = await saveProject(workspace, projectInputFactory({ sourceLocale: 'de-DE', locales: ['de-DE', 'tr-TR'] }));
-  if (!saved.ok) throw new Error(saved.errors.join('; '));
-  const settings = await saveCreativeSettings(workspace, { background: BACKGROUND, phrases: { 'de-DE': 'Faire Teams in Sekunden', 'tr-TR': 'Saniyeler içinde adil takımlar' } });
-  if (!settings.ok) throw new Error(settings.errors.join('; '));
-  await saveInput(workspace, 'de-DE', { kind: 'video', locale: 'de-DE', originalName: 'teams.mp4', bytes: recording });
-  return workspace;
-}
-
-/** Raw RGB of one frame of a video, as sharp reads it. */
-async function frameAt(video: string, seconds: number): Promise<{ data: Buffer; width: number }> {
-  const file = path.join(mkdtempSync(path.join(tmpdir(), 'amc-frame-')), 'frame.png');
-  await renderFrame(video, seconds, file);
-  const { data, info } = await sharp(readFileSync(file)).removeAlpha().raw().toBuffer({ resolveWithObject: true });
-  return { data, width: info.width };
-}
-
 function pixel(frame: { data: Buffer; width: number }, x: number, y: number): [number, number, number] {
   const i = (Math.round(y) * frame.width + Math.round(x)) * 3;
   return [frame.data[i]!, frame.data[i + 1]!, frame.data[i + 2]!];
-}
-
-function meanDifference(a: Buffer, b: Buffer): number {
-  let sum = 0;
-  for (let i = 0; i < a.length; i += 1) sum += Math.abs(a[i]! - b[i]!);
-  return sum / a.length;
 }
 
 describe.skipIf(!FFMPEG)('Device and loop videos are rendered with ffmpeg', () => {
@@ -140,28 +114,6 @@ describe.skipIf(!FFMPEG)('Device and loop videos are rendered with ffmpeg', () =
     const [r, g, b] = [0x1f, 0x8d, 0xef];
     expect(Math.abs(centre[0] - r) + Math.abs(centre[1] - g) + Math.abs(centre[2] - b)).toBeGreaterThan(30);
   }, 300_000);
-
-  test('writes seamless, muted header and search loops with the Turkish phrase from the German recording', async () => {
-    const workspace = await videoWorkspace(recordingBytes({ seconds: 8, audio: true }));
-    // One language keeps the 4K render short; German is covered by the device video test above.
-    const result = await generateLoopVideos(workspace, { locales: 'tr-TR' });
-    expect(result.entries.map((e) => e.path).sort()).toEqual(['apple/tr-TR/creative-header-video/01-header.mp4', 'apple/tr-TR/creative-search-video/01-search.mp4']);
-    expect(result.entries.every((e) => e.fallbackInput)).toBe(true);
-    const header = path.join(workspace.outputDir, 'apple/tr-TR/creative-header-video/01-header.mp4');
-    const props = await probeVideo(header);
-    expect(validateMedia(getSpec('apple.creative.header-video'), props)).toEqual([]);
-    expect(props).toMatchObject({ width: 3840, height: 1646, fps: 30 });
-    expect(props.audioChannels).toBeUndefined();
-    expect(props.durationSeconds).toBeCloseTo(7.5, 0);
-    const search = await probeVideo(path.join(workspace.outputDir, 'apple/tr-TR/creative-search-video/01-search.mp4'));
-    expect(validateMedia(getSpec('apple.creative.search-video'), search)).toEqual([]);
-
-    // Seamless: the jump from the last frame back to the first is no bigger than an ordinary step between two frames.
-    const first = await frameAt(header, 0);
-    const last = await frameAt(header, props.durationSeconds - 1 / 30);
-    const step = meanDifference((await frameAt(header, 2)).data, (await frameAt(header, 2 + 1 / 30)).data);
-    expect(meanDifference(last.data, first.data)).toBeLessThan(step * 1.5);
-  }, 600_000);
 
   test('explains a recording too short for a loop before anything is written', async () => {
     const workspace = await videoWorkspace(recordingBytes({ seconds: 4 }));

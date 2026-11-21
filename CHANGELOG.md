@@ -45,6 +45,8 @@ entries left under `[Unreleased]` is rejected by `npm run check:release`.
 
 ### Changed
 
+- Unit tests run about a fifth faster: one temp folder that can be excluded from antivirus scanning, faster video
+  encoder settings for tests (`AMC_X264_PRESET`, `AMC_FFMPEG_THREADS`) and the heaviest video tests in parallel. (#77)
 - The Logo section shows the size and checks of the current logo, sharper previews on HiDPI screens, a generate button
   that names the number of packs and the third-party sources note once per pack; previews are cached until their file
   changes. (#64)
