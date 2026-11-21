@@ -56,6 +56,8 @@ entries left under `[Unreleased]` is rejected by `npm run check:release`.
 
 ### Fixed
 
+- Export ZIPs prepared for a download that never started are removed after ten minutes on their own, also after a
+  restart of the tool. (#116)
 - The Video section makes videos again after a language was removed from the project, and shows the real size of
   landscape previews. (#111)
 - With an ffmpeg wrapper in `FFMPEG_PATH` whose name does not start with `ffmpeg`, videos are measured with the

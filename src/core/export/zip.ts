@@ -39,10 +39,12 @@ export interface ExportOptions {
   now?: Date;
   /** Stops building the ZIP (and removes the partial file) when the requester is gone, e.g. a closed download (#47). */
   signal?: AbortSignal;
+  /** Existing folder the ZIP is written to; default the workspace `exports/` folder (prepared downloads wait elsewhere, #116). */
+  folder?: string;
 }
 
 export interface ExportResult {
-  /** Absolute path of the ZIP in the workspace `exports/` folder. */
+  /** Absolute path of the ZIP when it was written: `exports/`, or the `folder` option (a prepared download moves later). */
   file: string;
   fileName: string;
   checklist: Checklist;
@@ -87,7 +89,8 @@ export async function exportChecklist(workspace: Workspace, options: ExportOptio
 
 /**
  * Writes a ZIP with the files of the selected locales and all shared files of the enabled targets, the store texts
- * of the selected locales (`<target>/store-texts/<store code>/NN-<field>.txt`), plus CHECKLIST.md, into the workspace `exports/` folder. Files are streamed and stored without compression.
+ * of the selected locales (`<target>/store-texts/<store code>/NN-<field>.txt`), plus CHECKLIST.md, into the workspace
+ * `exports/` folder (or the `folder` option). Files are streamed and stored without compression.
  * A failed export leaves no partial ZIP behind.
  */
 export async function createExport(workspace: Workspace, options: ExportOptions = {}): Promise<ExportResult> {
@@ -98,7 +101,7 @@ export async function createExport(workspace: Workspace, options: ExportOptions 
   const stamp = (options.now ?? new Date()).toISOString().replace(/[:.]/g, '-').slice(0, 19);
   // Random suffix: two exports in the same second never write to the same file.
   const fileName = `${safeBaseName(project.name)}-${allLocales ? 'all' : locales.join('_')}-${stamp}-${randomBytes(2).toString('hex')}.zip`;
-  const file = path.join(workspace.exportsDir, fileName);
+  const file = path.join(options.folder ?? workspace.exportsDir, fileName);
 
   const selected = manifest.entries.filter(
     (entry) =>
