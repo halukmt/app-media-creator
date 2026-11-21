@@ -45,6 +45,9 @@ entries left under `[Unreleased]` is rejected by `npm run check:release`.
 
 ### Changed
 
+- The Logo section shows the size and checks of the current logo, sharper previews on HiDPI screens, a generate button
+  that names the number of packs and the third-party sources note once per pack; previews are cached until their file
+  changes. (#64)
 - The Export download streams the ZIP straight to disk instead of holding it in the browser's memory, and a cancelled
   export stops building on the server. (#47)
 - Logo settings, header image settings, screenshot sets and store texts share one autosave core that saves pending

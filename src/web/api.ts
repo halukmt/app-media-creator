@@ -173,7 +173,8 @@ export interface ChecklistItem {
   locale?: string;
   environment?: string;
   status: CheckStatus;
-  messages: { level: 'error' | 'warning' | 'info'; text: string }[];
+  /** `code: 'unverified-spec'` marks the note that size and limits come from third-party sources (#64). */
+  messages: { level: 'error' | 'warning' | 'info'; text: string; code?: 'unverified-spec' }[];
   files: string[];
 }
 
@@ -433,6 +434,20 @@ export function uploadLogo(file: File): Promise<StoredInput> {
   const form = new FormData();
   form.append('file', file);
   return request<StoredInput>('/api/inputs/logo', { method: 'POST', body: form });
+}
+
+/** Size, format and fitness of the newest logo for the icon packs (#64). */
+export interface LogoInfo {
+  format: string;
+  width: number;
+  height: number;
+  isSvg: boolean;
+  status: 'ok' | 'warning';
+  messages: string[];
+}
+
+export function fetchLogoInfo(): Promise<LogoInfo> {
+  return request<LogoInfo>('/api/inputs/logo-info');
 }
 
 /** URL of the newest logo as a PNG; `version` changes after an upload so the browser loads it again. */

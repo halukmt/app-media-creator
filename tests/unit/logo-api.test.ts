@@ -105,3 +105,38 @@ describe('Logo packs are generated from the saved settings', () => {
     expect(await (await post('app-store')).json()).toEqual({ error: 'Upload a logo first' });
   });
 });
+
+describe('The current logo comes with its size and checks (#64)', () => {
+  test('warns about a raster logo smaller than the App Store icon and not square', async () => {
+    const workspace = await workspaceFactory();
+    await saveInput(workspace, 'en-US', { kind: 'logo', originalName: 'logo.png', bytes: await pngBytes(300, 200) });
+    const info = await (await appFor(workspace).request('/api/inputs/logo-info')).json();
+    expect(info).toMatchObject({ format: 'png', width: 300, height: 200, isSvg: false, status: 'warning' });
+    expect(info.messages).toEqual([
+      'Smaller than the 1024 px App Store icon (200 px); the larger icons are upscaled and may look soft',
+      'Not square; the icons show it centred with space around it',
+    ]);
+  });
+
+  test('accepts a square SVG logo of any declared size and answers 404 without a logo', async () => {
+    const workspace = await workspaceFactory();
+    const app = appFor(workspace);
+    expect((await app.request('/api/inputs/logo-info')).status).toBe(404);
+    await saveInput(workspace, 'en-US', { kind: 'logo', originalName: 'logo.svg', bytes: svgBytes() });
+    expect(await (await app.request('/api/inputs/logo-info')).json()).toEqual({ format: 'svg', width: 64, height: 64, isSvg: true, status: 'ok', messages: [] });
+  });
+});
+
+describe('Resized output previews follow the file on disk (#64)', () => {
+  test('serves a new preview after the generated file was replaced', async () => {
+    const workspace = await workspaceFactory();
+    const entry = await registerOutput(workspace, { specId: 'apple.icon', order: 1, name: 'app-icon', extension: 'png', bytes: await pngBytes(1024, 1024) });
+    const app = appFor(workspace);
+    const previewHeight = async () =>
+      (await sharp(Buffer.from(await (await app.request(`/api/output/file?path=${encodeURIComponent(entry.path)}&width=64`)).arrayBuffer())).metadata()).height;
+    expect(await previewHeight()).toBe(64);
+    expect(await previewHeight()).toBe(64);
+    writeFileSync(path.join(workspace.outputDir, entry.path), await pngBytes(1024, 512));
+    expect(await previewHeight()).toBe(32);
+  });
+});

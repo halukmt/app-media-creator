@@ -2,6 +2,7 @@ import { useCallback, useState } from 'react';
 import {
   fetchBackgrounds,
   fetchInputs,
+  fetchLogoInfo,
   fetchLogoOutputs,
   fetchLogoSettings,
   generateLogoPack,
@@ -12,6 +13,7 @@ import {
   uploadLogo,
   type BackgroundPreset,
   type Catalogue,
+  type LogoInfo,
   type LogoOutput,
   type LogoPack,
   type LogoSettings,
@@ -32,7 +34,7 @@ import { useOutputStatuses } from '../hooks/useOutputStatuses';
 import { en } from '../i18n/en';
 import { SectionLayout } from '../layouts/SectionLayout';
 import { projectLocaleOptions } from '../lib/locale-selection';
-import { groupOutputs, groupStatus, MAX_TAGLINE } from '../lib/logo';
+import { anyUnverified, groupOutputs, groupStatus, MAX_TAGLINE, PREVIEW_WIDTHS } from '../lib/logo';
 import { backgroundChoices, backgroundKey, swatchCss } from '../lib/screenshots';
 import { sectionHref, type TargetId } from '../lib/sections';
 
@@ -50,7 +52,8 @@ type Message = { tone: 'success' | 'warning' | 'error'; text: string; details?: 
 const PACKS: readonly LogoPack[] = ['app-store', 'google-play', 'expo', 'web', 'social'];
 /** The stores a pack serves; a pack is offered while one of them is on (Expo serves both app stores). */
 const PACK_TARGETS: Record<LogoPack, readonly TargetId[]> = { 'app-store': ['apple'], 'google-play': ['google'], expo: ['apple', 'google'], web: ['web'], social: ['web'] };
-const PREVIEW_WIDTH = 240;
+/** Preview cards are 2, 3 or 4 to a row (see the grid below). */
+const PREVIEW_SIZES = '(min-width: 1024px) 25vw, (min-width: 640px) 33vw, 50vw';
 /** Id of the production icon set in the icon set filter (environment ids never equal it). */
 const PRODUCTION = 'production';
 /** The logo settings as the pending-saves tracker names them (#98). */
@@ -60,6 +63,7 @@ const LOGO_SETTINGS = { section: 'logo', document: 'logo-settings' } as const;
 export function LogoPage({ project, catalogue, selection, onSelectionChange, focusHeading }: Props) {
   const [step, setStep] = useState<StepId>('upload');
   const [hasLogo, setHasLogo] = useState(false);
+  const [logoInfo, setLogoInfo] = useState<LogoInfo | null>(null);
   const [logoVersion, setLogoVersion] = useState(0);
   const [settings, setSettings] = useState<LogoSettings | null>(null);
   const [backgrounds, setBackgrounds] = useState<BackgroundPreset[]>([]);
@@ -84,7 +88,10 @@ export function LogoPage({ project, catalogue, selection, onSelectionChange, foc
         fetchBackgrounds(),
         fetchLogoOutputs(),
       ]);
-      setHasLogo(inputs.some((input) => input.kind === 'logo'));
+      const logoUploaded = inputs.some((input) => input.kind === 'logo');
+      setHasLogo(logoUploaded);
+      // Size and checks of the current logo; a logo that cannot be read shows no size rather than failing the page.
+      setLogoInfo(logoUploaded ? await fetchLogoInfo().catch(() => null) : null);
       if (withSettings) setSettings(nextSettings);
       // Icons need one solid colour: gradients are not offered here.
       setBackgrounds([...nextBackgrounds.presets, ...nextBackgrounds.palette].filter((b) => b.background.kind === 'solid'));
@@ -225,7 +232,10 @@ export function LogoPage({ project, catalogue, selection, onSelectionChange, foc
               <PreviewCard
                 media={<img src={logoPreviewUrl(logoVersion)} alt={en.logo.thumbAlt} className="h-auto! w-full rounded object-contain" />}
                 title={en.logo.currentLogo}
-                messages={[]}
+                {...(logoInfo
+                  ? { size: logoInfo.isSvg ? en.logo.logoVector : en.logo.logoSize(logoInfo.width, logoInfo.height, logoInfo.format), status: logoInfo.status }
+                  : {})}
+                messages={logoInfo?.messages ?? []}
               />
             </ul>
           ) : null}
@@ -321,7 +331,7 @@ export function LogoPage({ project, catalogue, selection, onSelectionChange, foc
           </h2>
           <div>
             <BusyButton primary={shownOutputs.length === 0} busy={generateState !== null} busyLabel={en.logo.generatingShort} disabled={chosen.length === 0} onClick={() => void generate()}>
-              {en.logo.generate}
+              {en.logo.generate(chosen.length)}
             </BusyButton>
           </div>
           {chosen.length === 0 ? (
@@ -363,6 +373,8 @@ export function LogoPage({ project, catalogue, selection, onSelectionChange, foc
                 <h3 id={`logo-pack-${pack}`} className="text-lg font-semibold">
                   {en.logo.packs[pack]}
                 </h3>
+                {/* Said once per pack, not on every card (#64). */}
+                {anyUnverified(files, statuses) ? <p className="max-w-prose text-sm text-base-content/70">{en.logo.unverifiedNote}</p> : null}
                 <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4" aria-busy={generateState !== null}>
                   {groupOutputs(files).map((group) => {
                     const checked = groupStatus(group.files, statuses);
@@ -379,7 +391,7 @@ export function LogoPage({ project, catalogue, selection, onSelectionChange, foc
                         key={group.key}
                         checkered
                         {...(group.largest
-                          ? { media: <img src={outputFileUrl(group.largest.path, PREVIEW_WIDTH, outputVersion)} alt={en.logo.previewAlt(group.environment ? `${group.name} (${group.environment})` : group.name)} className="h-auto! w-full rounded object-contain" /> }
+                          ? { media: <img src={outputFileUrl(group.largest.path, PREVIEW_WIDTHS[0], outputVersion)} srcSet={PREVIEW_WIDTHS.map((w) => `${outputFileUrl(group.largest!.path, w, outputVersion)} ${w}w`).join(', ')} sizes={PREVIEW_SIZES} alt={en.logo.previewAlt(group.environment ? `${group.name} (${group.environment})` : group.name)} className="h-auto! w-full rounded object-contain" /> }
                           : {})}
                         title={
                           group.locale

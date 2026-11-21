@@ -13,6 +13,8 @@ export type CheckStatus = 'ok' | 'warning' | 'error';
 export interface CheckMessage {
   level: 'error' | 'warning' | 'info';
   text: string;
+  /** Marks a message the UI shows once per group instead of on every card (#64). */
+  code?: 'unverified-spec';
 }
 
 export interface ChecklistItem {
@@ -135,7 +137,7 @@ async function checkSet(
   }
 
   if (!spec.verified) {
-    messages.push({ level: 'warning', text: 'Size and limits come from third-party sources, not from the store itself' });
+    messages.push({ level: 'warning', text: 'Size and limits come from third-party sources, not from the store itself', code: 'unverified-spec' });
   }
   if (spec.condition && chosen) messages.push({ level: 'info', text: spec.condition });
 
