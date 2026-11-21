@@ -18,7 +18,9 @@ export type AssetGroup =
   /** Variants of the logo itself (monochrome, inverse, square mark). */
   | 'logo'
   /** App videos in a device frame on a background, for websites and social posts (no store requirement). */
-  | 'video';
+  | 'video'
+  /** Promo reels made by the amc-video skill (brag / HyperFrames), for Google Play (YouTube), websites and social. */
+  | 'promo';
 
 /** `document` covers files of an asset set that are not media, e.g. a web app manifest or an HTML snippet. */
 export type MediaKind = 'image' | 'video' | 'document';

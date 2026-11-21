@@ -44,29 +44,12 @@ AI is optional and never needs your credentials inside the tool:
 
 ### Store texts with Claude Code
 
-1. Install the skill once: │
-●   claude-code_2-1-327_agent  Agent detected — installing non-interactively
-[?25l│
-◇  Source: https://github.com/halukmt/app-media-creator.git
-[?25h[?25l│
-◒  Cloning repository…[1G[J◐  Cloning repository…[1G[J◓  Cloning repository…[1G[J◑  Cloning repository…[1G[J◒  Cloning repository…[1G[J◐  Cloning repository…[1G[J◓  Cloning repository…[1G[J◑  Cloning repository…[1G[J◒  Cloning repository….[1G[J◐  Cloning repository….[1G[J◓  Cloning repository….[1G[J◑  Cloning repository….[1G[J◒  Cloning repository….[1G[J◐  Cloning repository….[1G[J◓  Cloning repository….[1G[J◑  Cloning repository….[1G[J◒  Cloning repository…..[1G[J◐  Cloning repository…..[1G[J◓  Cloning repository…..[1G[J◑  Cloning repository…..[1G[J◒  Cloning repository…..[1G[J◐  Cloning repository…..[1G[J◓  Cloning repository…..[1G[J◑  Cloning repository…..[1G[J◒  Cloning repository…...[1G[J◐  Cloning repository…...[1G[J◓  Cloning repository…...[1G[J◑  Cloning repository…...[1G[J◒  Cloning repository…...[1G[J◐  Cloning repository…...[1G[J◓  Cloning repository…...[1G[J◑  Cloning repository…...[1G[J◒  Cloning repository…...[1G[J◐  Cloning repository…[1G[J◓  Cloning repository…[1G[J◑  Cloning repository…[1G[J◒  Cloning repository…[1G[J◐  Cloning repository…[1G[J◓  Cloning repository…[1G[J◑  Cloning repository…[1G[J◒  Cloning repository…[1G[J◐  Cloning repository….[1G[J◓  Cloning repository….[1G[J◑  Cloning repository….[1G[J◒  Cloning repository….[1G[J◐  Cloning repository….[1G[J◓  Cloning repository….[1G[J◑  Cloning repository….[1G[J◒  Cloning repository….[1G[J◐  Cloning repository…..[1G[J◓  Cloning repository…..[1G[J◇  Repository cloned
-[?25h[?25l│
-[1G[J◒  Discovering skills…[1G[J◐  Discovering skills…[1G[J◓  Discovering skills…[1G[J◑  Discovering skills…[1G[J◒  Discovering skills…[1G[J◇  Found 13 skills
-[?25h│
-■  [SKILLS_NO_MATCHING_SKILLS] No matching skills found for: amc-store-texts│  ╰▶ fix: Available skills:
-│    - amc-copy
-│    - next-issue
-│    - openspec-apply-change
-│    - openspec-archive-change
-│    - openspec-explore
-│    - openspec-propose
-│    - openspec-sync-specs
-│    - openspec-update-change
-│    - release
-│    - daisyui-colors
-│    - daisyui-config
-│    - daisyui-install
-│    - daisyui-usage.
+1. Install the skill once in the project that uses app-media-creator:
+
+   ```bash
+   npx skills add halukmt/app-media-creator --skill amc-store-texts
+   ```
+
 2. In the Store texts section, choose the languages and **Prepare AI job**; run the command the page shows in Claude Code.
 3. The skill learns what the app does (screenshots, current texts, your repo's README), writes name, subtitle,
    promotional text, description, keywords and what's new for the App Store and title, short and full description for
@@ -79,6 +62,28 @@ AI is optional and never needs your credentials inside the tool:
 - Node.js ≥ 22.12
 - ffmpeg and ffprobe on `PATH` (or `FFMPEG_PATH` / `FFPROBE_PATH` in `.env`) for video features. Without them
   everything else works; video generation says what is missing, and the export checklist cannot measure videos.
+
+### Promo reels with Claude Code and brag
+
+Promo reels for Google Play, websites and social posts are rendered by the `amc-video` skill with
+[brag](https://github.com/latent-spaces/brag) (HyperFrames), from your screenshots, a screen recording, or the app's
+website or repository; no recording is needed.
+
+1. Install brag and the skill once in the project that uses app-media-creator:
+
+   ```bash
+   npx skills add halukmt/app-media-creator --skill amc-video
+   ```
+
+   and in Claude Code `/plugin marketplace add latent-spaces/brag` and `/plugin install brag@brag`.
+2. In the Video section, choose **Promo reel**, pick the formats (16:9, 9:16, 1:1) and optionally the website or
+   repository, then **Prepare AI job** in Export and run the command the page shows in Claude Code.
+3. The skill plans one story, writes the captions per language (following your `claims`), renders every language
+   and format and saves them as `videos/<locale>/<format>.mp4` in the job folder. It renders without music unless you
+   give it a track you have the rights to.
+4. The page checks every reel against its size (1920×1080, 1080×1920, 1080×1080) and length; add them to the
+   outputs to watch and export them. Google Play takes a YouTube URL: upload the 16:9 reel to YouTube (public or
+   unlisted, no ads, embeddable) and paste the link into the Play listing.
 
 ### App Store preview videos
 
@@ -131,7 +136,7 @@ CLI options: `app-media-creator --port <n> --no-open --version --help`.
 | M2 | Screenshots: card mode, frame-only mode, all devices, per-locale sets |
 | M3 | AI copy: headline storytelling, job folder, Claude Code skill |
 | M4 | App Store header / search result assets, Play feature graphic, in-app event media |
-| M5 | Video: store previews, looping header video, promo reels (HyperFrames or hype-reel) |
+| M5 | Video: store previews, looping header video, promo reels (brag / HyperFrames) |
 | M6 | Store texts for all locales |
 | M7 | First release 0.1.0, npm package, public repo |
 

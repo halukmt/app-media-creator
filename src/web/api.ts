@@ -3,7 +3,7 @@
  * because that code depends on Node modules.
  */
 import type { CheckStatus } from './lib/export';
-import { videoRequestBody, type VideoFormat, type VideoPurpose } from './lib/video';
+import { videoRequestBody, type MadeVideoPurpose, type VideoFormat, type VideoPurpose } from './lib/video';
 import type { CreativePurpose } from './lib/creative';
 import type { TargetId } from './lib/sections';
 
@@ -294,6 +294,8 @@ export interface VideoSettings {
   formats: VideoFormat[];
   frame: string;
   texts: Partial<Record<string, string>>;
+  /** Promo reels (#22): formats, website and repository for the amc-video skill. */
+  promo: { formats: VideoFormat[]; website?: string; repo?: string };
 }
 
 export function fetchVideoSettings(): Promise<VideoSettings> {
@@ -319,14 +321,14 @@ export interface VideoGenerationResult {
   skipped: string[];
 }
 
-const VIDEO_ROUTES: Record<VideoPurpose, string> = {
+const VIDEO_ROUTES: Record<MadeVideoPurpose, string> = {
   'store-preview': '/api/generate/store-previews',
   'device-video': '/api/generate/embed-videos',
   loop: '/api/generate/loop-videos',
 };
 
 /** Generates the videos of one purpose for the given locales with the saved settings. */
-export function generateVideos(purpose: VideoPurpose, locales: readonly string[], settings: VideoSettings): Promise<VideoGenerationResult> {
+export function generateVideos(purpose: MadeVideoPurpose, locales: readonly string[], settings: VideoSettings): Promise<VideoGenerationResult> {
   return request<VideoGenerationResult>(VIDEO_ROUTES[purpose], {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
@@ -539,7 +541,7 @@ export interface CopyText {
 }
 
 /** An AI job folder as the server reports it (mirrors core JobState). */
-export type AiJobTask = 'copy' | 'store-texts';
+export type AiJobTask = 'copy' | 'store-texts' | 'promo-video';
 
 export interface AiJob {
   id: string;
@@ -555,6 +557,8 @@ export interface AiJob {
   headlines?: { version: 1; locales: Partial<Record<string, { slots: { input: string; A: CopyText; B: CopyText }[] }>> };
   /** Store text jobs: the texts the AI wrote, per locale and field. */
   storeTexts?: Partial<Record<string, Partial<Record<StoreTextField, string>>>>;
+  /** Promo video jobs: the rendered videos that passed their spec check (#22). */
+  promoVideos?: { locale: string; format: VideoFormat; path: string; width: number; height: number; durationSeconds: number; bytes: number }[];
   /** When the current result was applied; `variant` for headline jobs. */
   applied?: { variant?: 'A' | 'B'; at: string };
 }
@@ -568,11 +572,18 @@ export function fetchJob(id: string): Promise<AiJob> {
   return request<AiJob>(`/api/jobs/${encodeURIComponent(id)}`);
 }
 
-export function createJob(task: AiJobTask, locales: readonly string[]): Promise<AiJob> {
+/** Options of a promo video job (#22): formats and the website or repository to take material from. */
+export interface PromoJobOptions {
+  formats?: readonly string[];
+  website?: string;
+  repo?: string;
+}
+
+export function createJob(task: AiJobTask, locales: readonly string[], promo?: PromoJobOptions): Promise<AiJob> {
   return request<AiJob>('/api/jobs', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ task, locales }),
+    body: JSON.stringify({ task, locales, ...(promo ? { promo } : {}) }),
   });
 }
 

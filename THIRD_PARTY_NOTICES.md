@@ -68,3 +68,13 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
+
+## Tools the skills call (not bundled)
+
+The `amc-video` skill renders promo videos with tools the user installs into Claude Code; app-media-creator contains
+none of their code or assets.
+
+| Tool | Licence | How it is used |
+|---|---|---|
+| [brag](https://github.com/latent-spaces/brag) | MIT | Claude Code skill (`/plugin marketplace add latent-spaces/brag`) that plans and renders the promo video. Its bundled music is CC BY 4.0; the skill renders with `--no-music` by default and writes `videos/CREDITS.txt` when a bundled track is used. |
+| [HyperFrames](https://github.com/heygen-com/hyperframes) | Apache-2.0 | HTML + GSAP to MP4 renderer that brag runs through `npx hyperframes`. |

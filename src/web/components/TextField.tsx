@@ -24,7 +24,7 @@ interface Props {
   /** Read-only while an operation runs; stays focusable (`aria-disabled`). */
   disabled?: boolean;
   /** Keyboard on touch devices, e.g. `decimal` for seconds; the input stays `type="text"` (no scroll-wheel changes). */
-  inputMode?: 'decimal' | 'numeric' | 'text';
+  inputMode?: 'decimal' | 'numeric' | 'text' | 'url';
 }
 
 /** A labelled text input or textarea with hint, counter, error and check messages, wired for screen readers. */

@@ -177,6 +177,32 @@ export const WEB_SPECS: readonly SpecEntry[] = [
         'Your app video on a styled background for posts and websites; written by this tool. Sizes are common network sizes from third-party guides, not store requirements.',
     }),
   ),
+  ...(
+    [
+      ['landscape', 'Promo video, 16:9 (YouTube, websites)', 1920, 1080],
+      ['vertical', 'Promo video, 9:16 (Reels, Shorts, TikTok, stories)', 1080, 1920],
+      ['square', 'Promo video, 1:1 (feeds)', 1080, 1080],
+    ] as const
+  ).map(
+    ([format, name, width, height]): SpecEntry => ({
+      id: `web.promo.${format}`,
+      target: 'web',
+      group: 'promo',
+      name,
+      kind: 'video',
+      required: false,
+      dimensions: fixed([width, height]),
+      formats: ['mp4'],
+      alpha: 'forbidden',
+      maxCount: 1,
+      // Loose limits: these files are not checked by a store; brag renders 15–25 s at 30 fps.
+      video: { minSeconds: 5, maxSeconds: 60, maxFps: 60 },
+      localized: true,
+      verified: false,
+      sourceUrl: RESEARCH,
+      notes: 'A promo reel made by the amc-video skill with brag (HyperFrames). Sizes are the common network sizes brag renders, not store requirements.',
+    }),
+  ),
   ...(['png', 'webp'] as const).map(
     (format): SpecEntry => ({
       id: format === 'png' ? 'web.framed-screenshot' : 'web.framed-screenshot-webp',

@@ -1,7 +1,7 @@
 import { watch, type FSWatcher } from 'node:fs';
 import { Hono, type Context } from 'hono';
 import { streamSSE } from 'hono/streaming';
-import { JOB_ID, JobError, applyJob, createJob, isJobTask, listJobs, readJob, type CreateJobOptions } from '../core/jobs/index.js';
+import { JOB_ID, JobError, applyJob, createJob, isJobTask, listJobs, promoOptionErrors, readJob, type CreateJobOptions, type PromoOptions } from '../core/jobs/index.js';
 import { ProjectFileError, StoreTextsFileError, type Workspace } from '../core/workspace/index.js';
 import { readOptionalJsonObject } from './json-body.js';
 
@@ -72,20 +72,27 @@ export function jobsRoutes(workspace: Workspace): Hono {
   api.get('/jobs', async (c) => {
     const limit = Number(c.req.query('limit'));
     const task = c.req.query('task');
-    if (task !== undefined && !isJobTask(task)) return c.json({ error: 'task must be copy or store-texts' }, 400);
+    if (task !== undefined && !isJobTask(task)) return c.json({ error: 'task must be copy, store-texts or promo-video' }, 400);
     return c.json(await listJobs(workspace, Number.isInteger(limit) && limit > 0 ? limit : Infinity, task));
   });
 
   api.post('/jobs', async (c) => {
     const parsed = await readOptionalJsonObject(c);
     if (!parsed.ok) return c.json({ error: parsed.error }, 400);
-    const { locales, task } = parsed.body;
-    if (task !== undefined && !isJobTask(task)) return c.json({ error: 'task must be copy or store-texts' }, 400);
+    const { locales, task, promo } = parsed.body;
+    if (task !== undefined && !isJobTask(task)) return c.json({ error: 'task must be copy, store-texts or promo-video' }, 400);
     if (locales !== undefined && typeof locales !== 'string' && !(Array.isArray(locales) && locales.every((l) => typeof l === 'string'))) {
       return c.json({ error: 'locales must be "all", a locale id or a list of locale ids' }, 400);
     }
+    const promoErrors = promoOptionErrors(promo);
+    if (promoErrors.length > 0) return c.json({ error: promoErrors.join('; ') }, 400);
+    if (promo !== undefined && task !== 'promo-video') return c.json({ error: 'promo is only for promo-video jobs' }, 400);
     try {
-      const options: CreateJobOptions = { ...(task !== undefined ? { task } : {}), ...(locales !== undefined ? { locales: locales as CreateJobOptions['locales'] } : {}) };
+      const options: CreateJobOptions = {
+        ...(task !== undefined ? { task } : {}),
+        ...(locales !== undefined ? { locales: locales as CreateJobOptions['locales'] } : {}),
+        ...(promo !== undefined ? { promo: promo as PromoOptions } : {}),
+      };
       return c.json(await createJob(workspace, options), 201);
     } catch (error) {
       return jobError(c, error);

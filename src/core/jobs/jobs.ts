@@ -22,6 +22,7 @@ import {
   type Workspace,
 } from '../workspace/index.js';
 import { FfmpegMissingError, extractFrames, ffmpegBinary, runProgram, type RunProgram } from './frames.js';
+import { briefPromo, inspectPromoVideos, promoTargets, registerPromoVideos, type BriefPromo, type ProbeVideo, type PromoOptions, type PromoVideo } from './promo.js';
 import {
   JOB_VERSION,
   MAX_STORE_TEXT,
@@ -50,9 +51,12 @@ export const COPY_LIMITS: Record<CardLayout, { headline: number; subline: number
   'text-bottom': { headline: 34, subline: 44 },
 };
 
-/** `copy`: screenshot headlines (amc-copy); `store-texts`: store listing texts (amc-store-texts). */
-export type JobTask = 'copy' | 'store-texts';
-export const JOB_TASKS: readonly JobTask[] = ['copy', 'store-texts'];
+/**
+ * `copy`: screenshot headlines (amc-copy); `store-texts`: store listing texts (amc-store-texts); `promo-video`: promo
+ * reels rendered with brag (amc-video, #22).
+ */
+export type JobTask = 'copy' | 'store-texts' | 'promo-video';
+export const JOB_TASKS: readonly JobTask[] = ['copy', 'store-texts', 'promo-video'];
 
 export function isJobTask(value: unknown): value is JobTask {
   return typeof value === 'string' && (JOB_TASKS as readonly string[]).includes(value);
@@ -107,6 +111,8 @@ export interface Brief {
   schemas: { headlines: string; storyboard: string };
   /** Store text jobs: the fields of the enabled stores with their limits, and the current texts per language. */
   storeTexts?: BriefStoreTexts;
+  /** Promo video jobs: engine, formats with their sizes, length, sources and where to save the videos. */
+  promo?: BriefPromo;
 }
 
 export interface BriefStoreTexts {
@@ -131,6 +137,8 @@ export interface JobState {
   headlines?: HeadlinesResult;
   storeTexts?: Partial<Record<LocaleId, Partial<Record<StoreTextField, string>>>>;
   storyboard?: StoryboardResult;
+  /** Promo video jobs: the rendered videos that passed their spec check. */
+  promoVideos?: PromoVideo[];
   /** When the current result was applied; `variant` for headlines. */
   applied?: { variant?: 'A' | 'B'; at: string };
 }
@@ -139,6 +147,8 @@ export interface CreateJobOptions {
   task?: JobTask;
   /** Languages the AI writes for; default all languages of the project. */
   locales?: LocaleSelection;
+  /** Promo video jobs: formats and the website or repository to take material from. */
+  promo?: PromoOptions;
 }
 
 export interface JobDeps {
@@ -156,9 +166,14 @@ const INSTRUCTIONS: Record<JobTask, string> = {
     'Write one file store-texts/<locale>/<field>.md per store text, for the fields and languages of this brief. Follow ' +
     'the rules of the amc-store-texts skill and claims.json: never use a forbidden claim, stay within each field\'s ' +
     'limit. The tool validates the results and applies them only when the user chooses to.',
+  'promo-video':
+    'Render one promo video per language and format of promo.formats with brag (HyperFrames) and save it as ' +
+    'videos/<locale>/<format>.mp4. Captions are written per language and follow claims.json: never use a forbidden ' +
+    'claim. Copy each video into place only when it is fully rendered. The tool checks every video against its spec ' +
+    'and adds it to the outputs only when the user chooses to.',
 };
 
-const SKILLS: Record<JobTask, string> = { copy: 'amc-copy', 'store-texts': 'amc-store-texts' };
+const SKILLS: Record<JobTask, string> = { copy: 'amc-copy', 'store-texts': 'amc-store-texts', 'promo-video': 'amc-video' };
 
 function jobFolder(workspace: Workspace, id: string): string {
   if (!JOB_ID.test(id)) throw new JobError(`${id} is not a job id`, 404);
@@ -188,6 +203,8 @@ export async function createJob(workspace: Workspace, options: CreateJobOptions 
   const project = await readProject(workspace);
   const textTargets = (['apple', 'google'] as const).filter((target) => project.targets[target].enabled);
   if (task === 'store-texts' && textTargets.length === 0) throw new JobError('Turn on the App Store or Google Play in the project first');
+  const promoOn = promoTargets(project);
+  if (task === 'promo-video' && !promoOn.web && !promoOn.google) throw new JobError('Turn on Google Play or Web / social in the project first');
   let locales: LocaleId[];
   try {
     locales = selectProjectLocales(project.locales, options.locales);
@@ -199,6 +216,10 @@ export async function createJob(workspace: Workspace, options: CreateJobOptions 
   const screenshots = inputs.filter((input) => input.kind === 'screenshot');
   // Store texts can be written without screenshots; they only help the AI see the app.
   if (screenshots.length === 0 && task === 'copy') throw new JobError(`Upload screenshots for ${project.sourceLocale} first`);
+  // A promo needs material: screenshots, a screen recording, or a website or repository to take it from.
+  if (task === 'promo-video' && screenshots.length === 0 && !inputs.some((input) => input.kind === 'video') && !options.promo?.website && !options.promo?.repo) {
+    throw new JobError('Upload screenshots or a screen recording, or give the website or repository of the app');
+  }
   const sets = await readScreenshotSets(workspace, screenshots);
 
   const now = deps.now ?? new Date();
@@ -263,6 +284,7 @@ export async function createJob(workspace: Workspace, options: CreateJobOptions 
     storeTextFields: STORE_TEXT_FIELDS,
     schemas: { headlines: 'schemas/headlines.schema.json', storyboard: 'schemas/storyboard.schema.json' },
     ...(task === 'store-texts' ? { storeTexts: briefStoreTexts(textTargets, await readStoreTexts(workspace), locales) } : {}),
+    ...(task === 'promo-video' ? { promo: briefPromo(project, options.promo) } : {}),
   };
   await mkdir(path.join(folder, 'schemas'), { recursive: true });
   for (const [name, schema] of Object.entries(resultJsonSchemas())) await writeJsonAtomic(path.join(folder, 'schemas', name), schema);
@@ -322,8 +344,8 @@ function fingerprint(text: string): string {
 }
 
 /** The state of a job: its brief, and every result file present, validated. Invalid results are reported, not used. */
-export async function readJob(workspace: Workspace, id: string, projectSettings?: ProjectSettings): Promise<JobState> {
-  return (await inspectJob(workspace, id, projectSettings)).state;
+export async function readJob(workspace: Workspace, id: string, projectSettings?: ProjectSettings, probe?: ProbeVideo): Promise<JobState> {
+  return (await inspectJob(workspace, id, projectSettings, probe)).state;
 }
 
 /**
@@ -334,7 +356,8 @@ async function inspectJob(
   workspace: Workspace,
   id: string,
   projectSettings?: ProjectSettings,
-): Promise<{ state: JobState; headlinesHash?: string; storeTextsHash?: string }> {
+  probe?: ProbeVideo,
+): Promise<{ state: JobState; headlinesHash?: string; storeTextsHash?: string; promoHash?: string }> {
   let headlinesHash: string | undefined;
   let storeTextsHash: string | undefined;
   const folder = jobFolder(workspace, id);
@@ -492,6 +515,22 @@ async function inspectJob(
     state.errors.push(`storyboard.json: ${error instanceof SyntaxError ? 'not valid JSON' : (error as Error).message}`);
   }
 
+  // videos/<locale>/<format>.mp4 (promo video jobs)
+  let promoHash: string | undefined;
+  if (brief.task === 'promo-video' && brief.promo) {
+    try {
+      const promo = await inspectPromoVideos(folder, locales, brief.promo, probe);
+      if (promo.found) found = true;
+      state.errors.push(...promo.errors);
+      state.warnings.push(...promo.warnings);
+      if (promo.videos.length > 0) state.promoVideos = promo.videos;
+      promoHash = promo.fingerprint;
+    } catch (error) {
+      found = true;
+      state.errors.push(`videos: ${(error as Error).message}`);
+    }
+  }
+
   if (state.errors.length > 0) {
     state.status = 'invalid';
     // Nothing of an invalid job may be applied.
@@ -500,7 +539,9 @@ async function inspectJob(
     delete state.storeTexts;
     storeTextsHash = undefined;
     delete state.storyboard;
-  } else if (found) state.status = 'ready';
+    delete state.promoVideos;
+    promoHash = undefined;
+  } else if (found) state.status = state.task === 'promo-video' && !state.promoVideos ? 'waiting' : 'ready';
 
   try {
     const applied = JSON.parse(await readFile(path.join(folder, 'applied.json'), 'utf8')) as {
@@ -508,13 +549,16 @@ async function inspectJob(
       at: string;
       headlines?: string;
       storeTexts?: string;
+      promoVideos?: string;
     };
     // A rewritten result (a second AI run in the same folder) is a new result, not the applied one. Each task counts
     // the result it applies.
     const appliedNow =
       state.task === 'store-texts'
         ? applied.storeTexts !== undefined && applied.storeTexts === storeTextsHash
-        : applied.headlines !== undefined && applied.headlines === headlinesHash;
+        : state.task === 'promo-video'
+          ? applied.promoVideos !== undefined && applied.promoVideos === promoHash
+          : applied.headlines !== undefined && applied.headlines === headlinesHash;
     if (state.status === 'ready' && appliedNow) {
       state.applied = { ...(applied.variant && state.task === 'copy' ? { variant: applied.variant } : {}), at: applied.at };
       state.status = 'applied';
@@ -522,7 +566,7 @@ async function inspectJob(
   } catch {
     // Not applied yet.
   }
-  return { state, ...(headlinesHash ? { headlinesHash } : {}), ...(storeTextsHash ? { storeTextsHash } : {}) };
+  return { state, ...(headlinesHash ? { headlinesHash } : {}), ...(storeTextsHash ? { storeTextsHash } : {}), ...(promoHash ? { promoHash } : {}) };
 }
 
 /** Store texts as one string in a fixed order, so the same texts always give the same fingerprint. */
@@ -630,12 +674,30 @@ export async function applyStoreTexts(workspace: Workspace, id: string): Promise
 }
 
 /**
+ * Adds the checked videos of a ready promo job to the outputs (web promo per format, the 16:9 one also as the YouTube
+ * file for Play); earlier promo videos of these languages are replaced (#22).
+ */
+export async function applyPromoVideos(workspace: Workspace, id: string, probe?: ProbeVideo): Promise<{ locales: LocaleId[] }> {
+  const { state, promoHash } = await inspectJob(workspace, id, undefined, probe);
+  if (state.status === 'invalid') throw new JobError(`Job ${id} has invalid results: ${state.errors.join('; ')}`, 409);
+  if (!state.promoVideos) throw new JobError(`Job ${id} has no rendered videos yet`, 409);
+  const project = await readProject(workspace);
+  const locales = await registerPromoVideos(workspace, project, state.folder, state.promoVideos);
+  if (locales.length === 0) {
+    throw new JobError('None of these reels can be added: Google Play takes only the 16:9 reel, the other formats need Web / social on in the project', 409);
+  }
+  await writeJsonAtomic(path.join(state.folder, 'applied.json'), { at: new Date().toISOString(), promoVideos: promoHash });
+  return { locales };
+}
+
+/**
  * Applies a ready job by its task: one variant of a headline job, or all texts of a store texts job (no variant).
  */
 export async function applyJob(workspace: Workspace, id: string, variant?: unknown): Promise<{ locales: LocaleId[] }> {
   const task = await briefTask(jobFolder(workspace, id));
   if (task === undefined) throw new JobError(`Job ${id} does not exist`, 404);
   if (task === 'store-texts') return applyStoreTexts(workspace, id);
+  if (task === 'promo-video') return applyPromoVideos(workspace, id);
   if (variant !== 'A' && variant !== 'B') throw new JobError('variant must be A or B');
   return applyHeadlines(workspace, id, variant);
 }

@@ -1,6 +1,17 @@
 // conventions: RULE-TESTING-3301
 import { describe, expect, test } from 'vitest';
-import { parseSeconds, purposeAvailable, resultSpecs, trimFields, trimFrom, videoRequestBody } from '../../src/web/lib/video.js';
+import {
+  isWebUrlOrEmpty,
+  needsRecording,
+  parseSeconds,
+  promoLocales,
+  purposeAvailable,
+  resultSpecs,
+  toggleFormat,
+  trimFields,
+  trimFrom,
+  videoRequestBody,
+} from '../../src/web/lib/video.js';
 
 const MESSAGES = { invalid: 'invalid', order: 'order' };
 
@@ -47,10 +58,34 @@ describe('A generate request carries only the texts of the requested languages',
 
 describe('Video purposes depend on the stores of the project', () => {
   test('offers App Store purposes only with the App Store and device videos only with Web', () => {
-    const apple = { apple: { enabled: true }, web: { enabled: false } };
+    const apple = { apple: { enabled: true }, google: { enabled: false }, web: { enabled: false } };
     expect(purposeAvailable('store-preview', apple)).toBe(true);
     expect(purposeAvailable('loop', apple)).toBe(true);
     expect(purposeAvailable('device-video', apple)).toBe(false);
     expect(resultSpecs('loop')).toEqual(['apple.creative.header-video', 'apple.creative.search-video']);
+  });
+
+  test('offers promo reels with Google Play or Web, also without a recording (#22)', () => {
+    expect(purposeAvailable('promo', { apple: { enabled: true }, google: { enabled: false }, web: { enabled: false } })).toBe(false);
+    expect(purposeAvailable('promo', { apple: { enabled: false }, google: { enabled: true }, web: { enabled: false } })).toBe(true);
+    expect(needsRecording('promo')).toBe(false);
+    expect(needsRecording('device-video')).toBe(true);
+    expect(resultSpecs('promo')).toEqual(['web.promo.landscape', 'web.promo.vertical', 'web.promo.square', 'google.promo-video']);
+  });
+});
+
+describe('Promo reel options are checked before they are saved (#22)', () => {
+  test('keeps at least one format, in catalogue order', () => {
+    expect(toggleFormat(['vertical'], 'square')).toEqual(['vertical', 'square']);
+    expect(toggleFormat(['landscape', 'vertical'], 'landscape')).toEqual(['vertical']);
+    expect(toggleFormat(['square'], 'square')).toBeNull();
+  });
+
+  test('accepts empty and http(s) addresses only, and lists the languages of the rendered reels', () => {
+    expect(isWebUrlOrEmpty('')).toBe(true);
+    expect(isWebUrlOrEmpty(' https://example.com/app ')).toBe(true);
+    for (const bad of ['example.com', 'ftp://example.com', 'javascript:alert(1)', 'https://user:pw@example.com']) expect(isWebUrlOrEmpty(bad)).toBe(false);
+    expect(promoLocales([{ locale: 'tr-TR' }, { locale: 'de-DE' }, { locale: 'tr-TR' }], ['de-DE', 'en-US', 'tr-TR'])).toEqual(['de-DE', 'tr-TR']);
+    expect(promoLocales(undefined, ['de-DE'])).toEqual([]);
   });
 });
