@@ -59,6 +59,7 @@ entries left under `[Unreleased]` is rejected by `npm run check:release`.
 
 ### Fixed
 
+- The in-memory preview cache no longer loses capacity when several requests ask for the same new preview at once. (#124)
 - Prepared export ZIPs are also removed after a quick restart of the tool, and a download that failed once because
   the file was locked works on the next try. (#118)
 - A prepared Export ZIP is no longer deleted when its link expires while the download is just moving it. (#120)

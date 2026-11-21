@@ -35,6 +35,23 @@ describe('Resized previews are cached until their file changes (#64)', () => {
     expect((await cache.get(file, 'w240', render)).toString()).toBe('preview 2');
   });
 
+  test('renders once for requests that miss the same preview at the same time and counts it once (#124)', async () => {
+    const cache = previewCache(10);
+    const file = await sourceFile('a.png', 'one');
+    let renders = 0;
+    const render = async () => {
+      renders += 1;
+      await new Promise((resolve) => setTimeout(resolve, 5));
+      return Buffer.alloc(4);
+    };
+    await Promise.all(Array.from({ length: 11 }, () => cache.get(file, 'w240', render)));
+    expect(renders).toBe(1);
+    expect(cache.bytes).toBe(4);
+    // The capacity is intact: another preview still fits next to it.
+    await cache.get(file, 'w480', async () => Buffer.alloc(4));
+    expect(cache.size).toBe(2);
+  });
+
   test('drops the oldest previews beyond its byte limit and fails for a missing file', async () => {
     const cache = previewCache(10);
     const file = await sourceFile('a.png', 'one');

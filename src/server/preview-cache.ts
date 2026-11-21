@@ -10,7 +10,25 @@ export const PREVIEW_CACHE_BYTES = 32 * 1024 * 1024;
  */
 export function previewCache(maxBytes = PREVIEW_CACHE_BYTES) {
   const entries = new Map<string, Buffer>();
+  /** Renders in flight: requests that miss the same key at the same time share one render (#124). */
+  const rendering = new Map<string, Promise<Buffer>>();
   let total = 0;
+
+  const store = (key: string, bytes: Buffer) => {
+    if (bytes.length > maxBytes) return;
+    const previous = entries.get(key);
+    if (previous) {
+      entries.delete(key);
+      total -= previous.length;
+    }
+    entries.set(key, bytes);
+    total += bytes.length;
+    for (const [oldKey, oldBytes] of entries) {
+      if (total <= maxBytes) break;
+      entries.delete(oldKey);
+      total -= oldBytes.length;
+    }
+  };
 
   return {
     /** The cached preview of `file` for `variant`, rendered with `render` when missing or the file changed. */
@@ -24,16 +42,21 @@ export function previewCache(maxBytes = PREVIEW_CACHE_BYTES) {
         entries.set(key, hit);
         return hit;
       }
-      const bytes = await render();
-      if (bytes.length > maxBytes) return bytes;
-      entries.set(key, bytes);
-      total += bytes.length;
-      for (const [oldKey, oldBytes] of entries) {
-        if (total <= maxBytes) break;
-        entries.delete(oldKey);
-        total -= oldBytes.length;
+      let pending = rendering.get(key);
+      if (!pending) {
+        pending = render()
+          .then((bytes) => {
+            store(key, bytes);
+            return bytes;
+          })
+          .finally(() => rendering.delete(key));
+        rendering.set(key, pending);
       }
-      return bytes;
+      return pending;
+    },
+    /** Sum of the cached bytes (for tests). */
+    get bytes(): number {
+      return total;
     },
     get size(): number {
       return entries.size;
