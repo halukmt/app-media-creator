@@ -536,3 +536,13 @@
 - Measured: 4 workers slower (225 s); sharp default concurrency makes single video tests up to 132 s.
 - The 90 s target is open in #126 (Backlog, P2/M) with the profile data.
 - Codex on #123 led to #124 (preview cache accounting), done in PR #125.
+
+## #22 amc-video promo reels with brag — done (PR #128, merged without CI)
+
+- Specs `web.promo.*`, `google.promo-video`; job task `promo-video` (`src/core/jobs/promo.ts`), ffprobe checks with a
+  probe cache, apply into outputs; skill `skills/amc-video`; Video section purpose "Promo reel" without a recording.
+- code-review 7 findings (CREDITS.txt rejected, Play spec not checked, ffprobe on every list, …), all fixed;
+  security review none; design-critic 4, all fixed.
+- README had terminal output of `npx skills add` in the store texts install step (from #24); fixed.
+- Real brag render + YouTube upload: #129 (task-haluk). #115 moved back to Backlog (CI changes need Actions minutes; #122).
+- Ready queue empty after this run.
