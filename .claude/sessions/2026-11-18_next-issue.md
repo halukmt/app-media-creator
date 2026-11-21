@@ -524,3 +524,7 @@
 - Review: code-review found that the card state ignored the checklist state (fixed); security review none; design-critic
   turned the info alert per pack into a muted line.
 - Note: hooks importing `../api` without `.js` are not resolvable under `tsconfig.test.json`; put testable logic in `src/web/lib/`.
+
+## #124 Preview cache counts concurrent misses twice (Codex on #123) — done (PR #125, merged without CI)
+
+- Renders in flight are shared per key; replacing a key subtracts the old buffer. Test with 11 overlapping misses.
