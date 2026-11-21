@@ -1,5 +1,5 @@
 // conventions: RULE-TESTING-3301
-import { existsSync, readdirSync, utimesSync } from 'node:fs';
+import { existsSync, readdirSync, rmSync, utimesSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { unzipSync } from 'fflate';
 import { describe, expect, test } from 'vitest';
@@ -118,6 +118,41 @@ describe('The UI download is prepared, then streamed with a one-time token (#47)
     expect(await downloads.take(never)).toBeUndefined();
     expect(readdirSync(folder)).toEqual([]);
     expect(existsSync(path.join(exportsDir, 'fetched.zip'))).toBe(true);
+  });
+
+  test('checks a fresh waiting folder again once it is old, so a quick restart leaves nothing behind (#118)', async () => {
+    const { exportsDir, pendingRoot, zip } = preparedFoldersFactory();
+    zip(path.join(pendingRoot, 'previous-run'), 'left.zip');
+    let now = Date.now();
+    const timers: (() => Promise<void>)[] = [];
+    await preparedDownloads({ pendingRoot, doneDir: exportsDir, now: () => now, setTimer: (run) => timers.push(run) }).cleanUp();
+    // Fresh at start: kept, with a later check.
+    expect(readdirSync(pendingRoot)).toEqual(['previous-run']);
+    expect(timers).toHaveLength(1);
+    now += 11 * 60_000;
+    await timers[0]!();
+    expect(readdirSync(pendingRoot)).toEqual([]);
+  });
+
+  test('lets the same link work once a failed move can succeed, and removes a ZIP nobody got (#118)', async () => {
+    const { exportsDir, pendingRoot, zip } = preparedFoldersFactory();
+    const timers: (() => Promise<void>)[] = [];
+    // The exports target is a file at first, so the move fails like a locked file would.
+    const target = path.join(exportsDir, 'done');
+    writeFileSync(target, 'not a folder');
+    const downloads = preparedDownloads({ pendingRoot, doneDir: target, setTimer: (run) => timers.push(run) });
+    const folder = await downloads.folder();
+    const retried = downloads.issue(zip(folder, 'retry.zip'), 'retry.zip');
+    const abandoned = zip(folder, 'abandoned.zip');
+    downloads.issue(abandoned, 'abandoned.zip');
+    await expect(downloads.take(retried)).rejects.toThrow();
+    // The blocker is gone: the same token works now.
+    rmSync(target);
+    expect((await downloads.take(retried))?.file).toBe(path.join(target, 'retry.zip'));
+    // Expiry keeps the fetched ZIP and removes the one never fetched.
+    await Promise.all(timers.map((run) => run()));
+    expect(existsSync(path.join(target, 'retry.zip'))).toBe(true);
+    expect(existsSync(abandoned)).toBe(false);
   });
 
   test('removes old waiting folders of earlier runs at start, never those of runs still alive', async () => {
